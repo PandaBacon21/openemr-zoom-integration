@@ -1,0 +1,27 @@
+# Secrets & keys
+.env
+*.pem
+*.key
+server/keys/
+
+# Python
+__pycache__/
+*.py[oc]
+
+.venv/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# uv / packaging
+build/
+dist/
+wheels/
+*.egg-info/
+
+openemr/branding/
