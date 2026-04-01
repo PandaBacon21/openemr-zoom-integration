@@ -15,7 +15,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _configure_logging(app)
     _init_extensions(app)
     _register_blueprints(app)
-    _register_health_check(app)
+    _register_app_routes(app) 
 
     app.logger.info(f"Zoomly server started in '{config_name}' mode")
     return app
@@ -42,7 +42,7 @@ def _init_extensions(app: Flask) -> None:
 
     with app.app_context():
         from . import models
-        
+
         db.create_all()
 
 
@@ -60,7 +60,14 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(config_bp)
 
 
-def _register_health_check(app: Flask) -> None:
+def _register_app_routes(app: Flask) -> None:
+    from .auth.jwks import build_jwks
+
     @app.route("/health")
     def health():
         return {"status": "ok", "env": app.config.get("ENV", "development")}
+
+    @app.route("/.well-known/jwks.json")
+    def jwks():
+        key_path = app.config["JWKS_KEY_PATH"]
+        return build_jwks(key_path)
