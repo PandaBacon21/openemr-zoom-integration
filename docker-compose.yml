@@ -40,6 +40,17 @@ services:
       # Enable REST and FHIR APIs
       OPENEMR_SETTING_rest_api: 1
       OPENEMR_SETTING_rest_fhir_api: 1
+      OPENEMR_SETTING_rest_system_scopes_api: 1
+      OPENEMR_DISABLE_TELEMETRY: 1
+      # Branding / Login Page
+      OPENEMR_SETTING_login_tagline_text: "Zoom into workflows that actually work"
+      OPENEMR_SETTING_primary_logo_width: "100%"
+      OPENEMR_SETTING_show_primary_logo: 1
+      OPENEMR_SETTING_login_page_layout: "login/layouts/vertical_band.html.twig"
+      # Branding Main Menu
+      OPENEMR_SETTING_main_menu_logo_link: "https://www.zoom.com"
+      OPENEMR_SETTING_main_menu_logo_title: "Zoom"
+
       # Public HTTPS URL of OpenEMR
       OPENEMR_SETTING_site_addr_oath: ${OPENEMR_PUBLIC_URL}
     volumes:
@@ -48,7 +59,7 @@ services:
       - openemr_sites:/var/www/localhost/htdocs/openemr/sites
       - openemr_logs:/var/log
       # Zoomly branding — read-only mount overwrites default OpenEMR logos.
-      - ./openemr/branding:/var/www/localhost/htdocs/openemr/public/images/logos
+      - ./openemr/branding:/var/www/localhost/htdocs/openemr/sites/default/images/logos
     networks:
       - integration_net
 
