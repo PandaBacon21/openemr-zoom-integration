@@ -23,4 +23,5 @@ server/instance/
 build/
 dist/
 wheels/
-*.egg-info/
+*.egg-info/.DS_Store
+**/.DS_Store
