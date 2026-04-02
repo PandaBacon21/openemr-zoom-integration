@@ -1,0 +1,99 @@
+services:
+  # ─── MariaDB ─────────────────────────────────────────────────────────────────
+  # OpenEMR requires a relational database companion.
+  mariadb:
+    image: mariadb:11.4
+    container_name: mariadb-emr
+    restart: unless-stopped
+    command: ["mariadbd", "--character-set-server=utf8mb4"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - integration_net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 1m
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # ─── OpenEMR ─────────────────────────────────────────────────────────────────
+  # TLS is handled upstream by Nginx Proxy Manager.
+  openemr:
+    image: openemr/openemr:8.0.0
+    container_name: openemr
+    restart: unless-stopped
+    ports:
+      - "8300:80"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_ROOT_PASS: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${OPENEMR_DB_USER:-openemr}
+      MYSQL_PASS: ${OPENEMR_DB_PASS:-openemr}
+      OE_USER: ${OPENEMR_ADMIN_USER:-admin}
+      OE_PASS: ${OPENEMR_ADMIN_PASS:-pass}
+      # Enable REST and FHIR APIs
+      OPENEMR_SETTING_rest_api: 1
+      OPENEMR_SETTING_rest_fhir_api: 1
+      # Public HTTPS URL of OpenEMR
+      OPENEMR_SETTING_site_addr_oath: ${OPENEMR_PUBLIC_URL}
+    volumes:
+      # Persist site data — includes SMART app registrations, uploaded files.
+      # Backup this volume before any OpenEMR upgrade.
+      - openemr_sites:/var/www/localhost/htdocs/openemr/sites
+      - openemr_logs:/var/log
+      # Zoomly branding — read-only mount overwrites default OpenEMR logos.
+      - ./openemr/branding:/var/www/localhost/htdocs/openemr/public/images/logos
+    networks:
+      - integration_net
+
+  # ─── Flask Integration Server ─────────────────────────────────────────────────
+  # Built from server/ directory. Reaches OpenEMR by container name on the
+  # internal network
+  app:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: zoom-bridge
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - openemr
+    env_file:
+      - .env
+    environment:
+      # Internal container-to-container URLs
+      # These override anything set in .env for these two keys specifically.
+      OPENEMR_BASE_URL: http://openemr:80
+      OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
+    volumes:
+      - sqlite_data:/app/instance
+      # RSA keys mounted from host — never baked into the image.
+      - ./keys:/app/keys:ro
+      # Persist logs on the host so they survive container restarts.
+      - ./server/logs:/app/logs
+    networks:
+      - integration_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  db_data:
+  openemr_sites:
+  openemr_logs:
+  sqlite_data:
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  integration_net:
+    driver: bridge

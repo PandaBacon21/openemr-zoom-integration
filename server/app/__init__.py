@@ -1,5 +1,6 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from flask import Flask
 from .extensions import db
 from config import config_by_name
@@ -27,14 +28,17 @@ def _configure_logging(app: Flask) -> None:
 
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file),
-        ]
-    )
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=3)
+    file_handler.setFormatter(formatter)
+
+    app.logger.setLevel(log_level)
+    app.logger.addHandler(stream_handler)
+    app.logger.addHandler(file_handler)
 
 
 def _init_extensions(app: Flask) -> None:
@@ -69,5 +73,5 @@ def _register_app_routes(app: Flask) -> None:
 
     @app.route("/.well-known/jwks.json")
     def jwks():
-        key_path = app.config["JWKS_KEY_PATH"]
+        key_path = app.config["JWKS_PRIVATE_PATH"]
         return build_jwks(key_path)

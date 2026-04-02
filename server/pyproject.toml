@@ -5,6 +5,7 @@ description = "Zoom / OpenEMR integration Backend"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.18.4",
     "authlib>=1.6.9",
     "cryptography>=46.0.6",
     "flask>=3.1.3",
