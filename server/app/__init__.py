@@ -74,4 +74,5 @@ def _register_app_routes(app: Flask) -> None:
     @app.route("/.well-known/jwks.json")
     def jwks():
         key_path = app.config["JWKS_PRIVATE_PATH"]
-        return build_jwks(key_path)
+        key_id = app.config["KEY_ID"]
+        return build_jwks(key_path, key_id)

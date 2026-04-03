@@ -26,7 +26,6 @@ class Config:
 
     # SMART / JWKS
     JWKS_PRIVATE_PATH = os.environ.get("JWKS_PRIVATE_PATH", "./keys/private.pem")
-    JWKS_PUBLIC_PATH = os.environ.get("JWKS_PUBLIC_PATH", "./keys/public.pem")
     KEY_ID = os.environ.get("KEY_ID", "openemr-integration-key-1")
 
     # Integration Service Public URL
