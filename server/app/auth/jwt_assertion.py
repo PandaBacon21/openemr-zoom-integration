@@ -17,7 +17,7 @@ def build_client_assertion(
     client_id: str,
     token_endpoint: str,
     key_path: str,
-    key_id: str = "zoomly-key-1"
+    key_id: str 
 ) -> str:
     """
     Build and sign a JWT client assertion for SMART Backend Services.
@@ -51,13 +51,14 @@ def exchange_assertion_for_token(
     client_id: str,
     token_endpoint: str,
     scopes: list[str],
-    key_path: str
+    key_path: str, 
+    key_id: str
 ) -> tuple[str, int] :
     """
     POST the signed client assertion to OpenEMR's token endpoint.
     Returns the access token string.
     """
-    assertion = build_client_assertion(client_id, token_endpoint, key_path)
+    assertion = build_client_assertion(client_id, token_endpoint, key_path, key_id)
 
     response = requests.post(
         token_endpoint,
@@ -94,6 +95,7 @@ def get_openemr_token(force_refresh: bool = False) -> str:
     # Need a fresh token
     client_id = current_app.config["OPENEMR_CLIENT_ID"]
     key_path = current_app.config["JWKS_KEY_PATH"]
+    key_id = current_app.config["KEY_ID"]
     base_url = current_app.config["OPENEMR_BASE_URL"]
     token_endpoint = f"{base_url}/oauth2/default/token"
 
@@ -106,7 +108,7 @@ def get_openemr_token(force_refresh: bool = False) -> str:
     ]
 
     access_token, expires_in = exchange_assertion_for_token(
-        client_id, token_endpoint, scopes, key_path
+        client_id, token_endpoint, scopes, key_path, key_id
     )
 
     # Cache it

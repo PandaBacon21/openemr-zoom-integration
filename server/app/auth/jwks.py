@@ -38,7 +38,7 @@ def load_private_key(key_path: str):
         )
 
 
-def build_jwks(key_path: str, key_id: str = "zoomly-key-1") -> dict:
+def build_jwks(key_path: str, key_id: str) -> dict:
     """
     Build the JWKS response using authlib.
     OpenEMR fetches this from /.well-known/jwks.json to verify our JWT signatures.
