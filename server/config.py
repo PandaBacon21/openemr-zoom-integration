@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    # Security 
+    KEYS_BASE_DIR = os.environ.get("KEYS_BASE_DIR", "/app/keys")
+    ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+
     # Flask
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
     DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
@@ -13,6 +17,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Zoom
+    ZOOM_TOKEN_URL = os.environ.get("ZOOM_TOKEN_URL")
+    ZOOM_API_BASE_URL = os.environ.get("ZOOM_API_BASE_URL")
+    
     ZOOM_ACCOUNT_ID = os.environ.get("ZOOM_ACCOUNT_ID")
     ZOOM_CLIENT_ID = os.environ.get("ZOOM_CLIENT_ID")
     ZOOM_CLIENT_SECRET = os.environ.get("ZOOM_CLIENT_SECRET")

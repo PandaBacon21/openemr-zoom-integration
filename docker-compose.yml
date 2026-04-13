@@ -58,8 +58,52 @@ services:
       # Backup this volume before any OpenEMR upgrade.
       - openemr_sites:/var/www/localhost/htdocs/openemr/sites
       - openemr_logs:/var/log
-      # Zoomly branding — read-only mount overwrites default OpenEMR logos.
-      - ./openemr/branding:/var/www/localhost/htdocs/openemr/sites/default/images/logos
+      - openemr_public:/var/www/localhost/htdocs/openemr/public/images/logos
+    networks:
+      - integration_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      start_period: 3m
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ─── Branding Init ────────────────────────────────────────────────────────────
+  # Runs once after OpenEMR is healthy and copies branding files in.
+  # This avoids the permission conflict with OpenEMR's startup chmod sweep —
+  # by the time this container runs, OpenEMR has finished its setup and Apache
+  # is serving. The files land with correct ownership (www/apache) via docker cp
+  # semantics through the shared volume.
+  branding:
+    image: alpine:latest
+    container_name: zoomly-branding
+    restart: "no"
+    depends_on:
+      openemr:
+        condition: service_healthy
+    volumes:
+      - ./openemr/branding:/branding:ro
+      - openemr_public:/openemr_public
+    command: >
+      sh -c "
+        echo 'Setting permissions...' &&
+        chmod -R 755 /openemr_public/core/login/primary &&
+        chmod -R 755 /openemr_public/core/menu/primary &&
+        chmod -R 755 /openemr_public/core/favicon &&
+        echo 'Clearing default OpenEMR logos...' &&
+        rm -f /openemr_public/core/login/primary/* &&
+        rm -f /openemr_public/core/menu/primary/* &&
+        rm -f /openemr_public/core/favicon/* &&
+        echo 'Copying branding files...' &&
+        cp /branding/core/login/primary/logo.png /openemr_public/core/login/primary/logo.png &&
+        cp /branding/core/menu/primary/logo.png /openemr_public/core/menu/primary/logo.png &&
+        cp /branding/core/favicon/favicon.ico /openemr_public/core/favicon/favicon.ico &&
+        echo 'Setting file permissions...' &&
+        chmod 644 /openemr_public/core/login/primary/logo.png &&
+        chmod 644 /openemr_public/core/menu/primary/logo.png &&
+        chmod 644 /openemr_public/core/favicon/favicon.ico &&
+        echo 'Branding complete.'
+      "
     networks:
       - integration_net
 
@@ -79,16 +123,15 @@ services:
     env_file:
       - .env
     environment:
-      # Internal container-to-container URLs
-      # These override anything set in .env for these two keys specifically.
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
     volumes:
       - sqlite_data:/app/instance
-      # RSA keys mounted from host — never baked into the image.
       - ./keys:/app/keys:ro
-      # Persist logs on the host so they survive container restarts.
       - ./server/logs:/app/logs
+
+      # for dev only
+      - ./server/app:/app/app
     networks:
       - integration_net
     healthcheck:
@@ -102,6 +145,7 @@ volumes:
   db_data:
   openemr_sites:
   openemr_logs:
+  openemr_public:
   sqlite_data:
 
 # ─── Networks ─────────────────────────────────────────────────────────────────

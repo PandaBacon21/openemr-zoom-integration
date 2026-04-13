@@ -71,8 +71,25 @@ def _register_app_routes(app: Flask) -> None:
     def health():
         return {"status": "ok", "env": app.config.get("ENV", "development")}
 
+    # @app.route("/.well-known/jwks.json")
+    # def jwks():
+    #     key_path = app.config["JWKS_PRIVATE_PATH"]
+    #     key_id = app.config["KEY_ID"]
+    #     return build_jwks(key_path, key_id)
+    
     @app.route("/.well-known/jwks.json")
-    def jwks():
-        key_path = app.config["JWKS_PRIVATE_PATH"]
-        key_id = app.config["KEY_ID"]
-        return build_jwks(key_path, key_id)
+    def jwks(): 
+        from app.services.keys import build_jwks_for_accounts
+        from app.models import ZoomAccount
+        accounts = ZoomAccount.query.filter_by(is_active=True).all()
+        return build_jwks_for_accounts(accounts), 200
+
+    # Testing openemr token auth
+    @app.route("/test/openemr-token")
+    def test_openemr_token():
+        from app.auth.jwt_assertion import get_openemr_token
+        try:
+            token = get_openemr_token(force_refresh=True)
+            return {"status": "ok", "token_preview": token[:20] + "..."}, 200
+        except Exception as e:
+            return {"status": "error", "message": str(e)}, 500

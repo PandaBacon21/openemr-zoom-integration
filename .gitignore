@@ -8,6 +8,9 @@
 **__pycache__/
 *.py[oc]
 
+# Pytest
+**.pytest_cache/
+
 .venv/
 
 # Database
@@ -24,4 +27,5 @@ build/
 dist/
 wheels/
 *.egg-info/.DS_Store
+**/.uv-cache/
 **/.DS_Store

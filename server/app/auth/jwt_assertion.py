@@ -15,7 +15,7 @@ _token_cache = {
 
 def build_client_assertion(
     client_id: str,
-    token_endpoint: str,
+    audience: str,
     key_path: str,
     key_id: str 
 ) -> str:
@@ -31,7 +31,7 @@ def build_client_assertion(
     payload = {
         "iss": client_id,       # Issuer — who we are (our client ID in OpenEMR)
         "sub": client_id,       # Subject — same as issuer for backend services
-        "aud": token_endpoint,  # Audience — the token endpoint we're calling
+        "aud": audience,  # Audience — the token endpoint we're calling
         "jti": str(uuid.uuid4()),  # Unique ID — prevents replay attacks
         "iat": now,             # Issued at
         "exp": now + 300,       # Expires in 5 minutes
@@ -40,7 +40,7 @@ def build_client_assertion(
     token = jwt.encode(
         payload,
         private_key,
-        algorithm="RS256",
+        algorithm="RS384",
         headers={"kid": key_id}  # Tells OpenEMR which key in our JWKS to use
     )
 
@@ -50,6 +50,7 @@ def build_client_assertion(
 def exchange_assertion_for_token(
     client_id: str,
     token_endpoint: str,
+    audience: str,
     scopes: list[str],
     key_path: str, 
     key_id: str
@@ -58,7 +59,7 @@ def exchange_assertion_for_token(
     POST the signed client assertion to OpenEMR's token endpoint.
     Returns the access token string.
     """
-    assertion = build_client_assertion(client_id, token_endpoint, key_path, key_id)
+    assertion = build_client_assertion(client_id, audience, key_path, key_id)
 
     response = requests.post(
         token_endpoint,
@@ -77,7 +78,6 @@ def exchange_assertion_for_token(
 
     return data["access_token"], data.get("expires_in", 300)
 
-
 def get_openemr_token(force_refresh: bool = False) -> str:
     """
     Get a valid OpenEMR access token, using the cache if available.
@@ -94,10 +94,13 @@ def get_openemr_token(force_refresh: bool = False) -> str:
 
     # Need a fresh token
     client_id = current_app.config["OPENEMR_CLIENT_ID"]
-    key_path = current_app.config["JWKS_KEY_PATH"]
+    key_path = current_app.config["JWKS_PRIVATE_PATH"]
     key_id = current_app.config["KEY_ID"]
     base_url = current_app.config["OPENEMR_BASE_URL"]
+    public_url = current_app.config["OPENEMR_PUBLIC_URL"]
+
     token_endpoint = f"{base_url}/oauth2/default/token"
+    audience = f"{public_url}/oauth2/default/token"
 
     scopes = [
         "system/Patient.read",
@@ -108,7 +111,7 @@ def get_openemr_token(force_refresh: bool = False) -> str:
     ]
 
     access_token, expires_in = exchange_assertion_for_token(
-        client_id, token_endpoint, scopes, key_path, key_id
+        client_id, token_endpoint, audience, scopes, key_path, key_id
     )
 
     # Cache it
