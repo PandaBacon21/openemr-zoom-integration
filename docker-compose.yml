@@ -59,6 +59,10 @@ services:
       - openemr_sites:/var/www/localhost/htdocs/openemr/sites
       - openemr_logs:/var/log
       - openemr_public:/var/www/localhost/htdocs/openemr/public/images/logos
+
+      # Patch for bug and added delete method in OpenEMR Registration/De-Registration flow
+      - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
+      - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
     networks:
       - integration_net
     healthcheck:
