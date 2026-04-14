@@ -72,7 +72,8 @@ def _register_app_routes(app: Flask) -> None:
         return {"status": "ok", "env": app.config.get("ENV", "development")}
 
     @app.route("/.well-known/jwks.json")
-    def jwks():
-        key_path = app.config["JWKS_PRIVATE_PATH"]
-        key_id = app.config["KEY_ID"]
-        return build_jwks(key_path, key_id)
+    def jwks(): 
+        from app.services.keys import build_jwks_for_accounts
+        from app.models import ZoomAccount
+        accounts = ZoomAccount.query.filter_by(is_active=True).all()
+        return build_jwks_for_accounts(accounts), 200
