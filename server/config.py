@@ -19,11 +19,6 @@ class Config:
     # Zoom
     ZOOM_TOKEN_URL = os.environ.get("ZOOM_TOKEN_URL")
     ZOOM_API_BASE_URL = os.environ.get("ZOOM_API_BASE_URL")
-    
-    ZOOM_ACCOUNT_ID = os.environ.get("ZOOM_ACCOUNT_ID")
-    ZOOM_CLIENT_ID = os.environ.get("ZOOM_CLIENT_ID")
-    ZOOM_CLIENT_SECRET = os.environ.get("ZOOM_CLIENT_SECRET")
-    ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get("ZOOM_WEBHOOK_SECRET_TOKEN")
 
     # OpenEMR
     OPENEMR_BASE_URL = os.environ.get("OPENEMR_BASE_URL", "http://localhost:8300")
@@ -32,8 +27,7 @@ class Config:
     OPENEMR_PUBLIC_URL = os.environ.get("OPENEMR_PUBLIC_URL")
 
     # SMART / JWKS
-    JWKS_PRIVATE_PATH = os.environ.get("JWKS_PRIVATE_PATH", "./keys/private.pem")
-    KEY_ID = os.environ.get("KEY_ID", "openemr-integration-key-1")
+    KEYS_BASE_DIR = os.environ.get("KEYS_BASE_DIR", "/app/keys")
 
     # Integration Service Public URL
     APP_PUBLIC_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:5000")

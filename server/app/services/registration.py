@@ -42,8 +42,10 @@ def _register_with_openemr(
     Raises: requests.HTTPError if registration fails.
     """
     openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
+    openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
     app_public_url = current_app.config["APP_PUBLIC_URL"]
-    registration_endpoint = f"{openemr_public_url}/oauth2/default/registration"
+
+    registration_endpoint = f"{openemr_base_url}/oauth2/default/registration"
     jwks_uri = f"{app_public_url}/.well-known/jwks.json"
 
     payload = {

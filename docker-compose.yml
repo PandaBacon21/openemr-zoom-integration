@@ -126,8 +126,8 @@ services:
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
     volumes:
-      - sqlite_data:/app/instance
-      - ./keys:/app/keys:ro
+      - ./server/instance:/app/instance
+      - ./keys:/app/keys
       - ./server/logs:/app/logs
 
       # for dev only
@@ -146,7 +146,6 @@ volumes:
   openemr_sites:
   openemr_logs:
   openemr_public:
-  sqlite_data:
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:

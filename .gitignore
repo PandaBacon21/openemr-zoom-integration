@@ -29,3 +29,6 @@ wheels/
 *.egg-info/.DS_Store
 **/.uv-cache/
 **/.DS_Store
+
+# dev
+*.temp
