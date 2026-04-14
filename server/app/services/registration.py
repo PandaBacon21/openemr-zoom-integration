@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 OPENEMR_SCOPES = " ".join([
     "system/Patient.read",
     "system/Appointment.read",
+    "system/Practitioner.read",
     "system/Encounter.read",
     "system/Encounter.rs",
     "system/DocumentReference.read",
