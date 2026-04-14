@@ -41,7 +41,7 @@ def _register_with_openemr(
     Returns the full registration response dict from OpenEMR.
     Raises: requests.HTTPError if registration fails.
     """
-    openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
+    # openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
     openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
     app_public_url = current_app.config["APP_PUBLIC_URL"]
 
@@ -176,6 +176,19 @@ def register_zoom_account(
 
     # ── Step 5: Persist to DB ─────────────────────────────────────────────────
     try:
+        # Normalize registration_client_uri to use internal Docker URL.
+        # OpenEMR returns this with the public URL, but all API calls
+        # go internally so we override with the internal version from the start.
+        registration_client_uri = openemr_response.get("registration_client_uri", "")
+        if registration_client_uri:
+            openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
+            openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
+            print(openemr_base_url)
+            print(openemr_public_url)
+            registration_client_uri = (
+                openemr_response.get("registration_client_uri", "")
+                .replace(openemr_public_url, openemr_base_url)
+            )
         account = ZoomAccount(
             account_id=zoom_account_id,
             client_id=zoom_client_id,
@@ -186,9 +199,7 @@ def register_zoom_account(
             openemr_registration_access_token=openemr_response.get(
                 "registration_access_token"
             ),
-            openemr_registration_client_uri=openemr_response.get(
-                "registration_client_uri"
-            ),
+            openemr_registration_client_uri=registration_client_uri,
             private_key_path=private_key_path,
             kid=kid,
             is_active=True,
