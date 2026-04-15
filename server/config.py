@@ -26,6 +26,7 @@ class Config:
     OPENEMR_CLIENT_ID = os.environ.get("OPENEMR_CLIENT_ID")
     OPENEMR_PUBLIC_URL = os.environ.get("OPENEMR_PUBLIC_URL")
 
+    OPENEMR_SCOPES = os.environ.get("OPENEMR_SCOPES", "").split()
     # SMART / JWKS
     KEYS_BASE_DIR = os.environ.get("KEYS_BASE_DIR", "/app/keys")
 

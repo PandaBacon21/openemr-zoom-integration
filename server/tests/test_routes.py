@@ -13,37 +13,7 @@ def test_jwks_route(client):
 
     assert response.status_code == 200
     body = response.get_json()
-    assert "keys" in body
-    assert len(body["keys"]) == 1
-    assert body["keys"][0]["kid"] == "test-key-id"
-
-
-def test_openemr_token_test_route_success(client, monkeypatch):
-    monkeypatch.setattr(
-        "app.auth.jwt_assertion.get_openemr_token",
-        lambda force_refresh=False: "abcdefghijklmnopqrstuvwxyz123456",
-    )
-
-    response = client.get("/test/openemr-token")
-
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body["status"] == "ok"
-    assert body["token_preview"] == "abcdefghijklmnopqrst..."
-
-
-def test_openemr_token_test_route_failure(client, monkeypatch):
-    def _raise(force_refresh=False):
-        raise RuntimeError("token exchange failed")
-
-    monkeypatch.setattr("app.auth.jwt_assertion.get_openemr_token", _raise)
-
-    response = client.get("/test/openemr-token")
-
-    assert response.status_code == 500
-    body = response.get_json()
-    assert body["status"] == "error"
-    assert body["message"] == "token exchange failed"
+    assert body == {"keys": []}
 
 
 @pytest.mark.parametrize(

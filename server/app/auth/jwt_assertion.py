@@ -12,6 +12,9 @@ _token_cache = {
     "expires_at": 0
 }
 
+def _retrieve_scopes() -> list[str]: 
+    return current_app.config["OPENEMR_SCOPES"]
+
 
 def build_client_assertion(
     client_id: str,
@@ -102,13 +105,14 @@ def get_openemr_token(force_refresh: bool = False) -> str:
     token_endpoint = f"{base_url}/oauth2/default/token"
     audience = f"{public_url}/oauth2/default/token"
 
-    scopes = [
-        "system/Patient.read",
-        "system/Appointment.read",
-        "system/Appointment.write",
-        "system/Encounter.read",
-        "system/Encounter.write",
-    ]
+    # scopes = [
+    #     "system/Patient.read",
+    #     "system/Appointment.read",
+    #     "system/Appointment.write",
+    #     "system/Encounter.read",
+    #     "system/Encounter.write",
+    # ]
+    scopes = _retrieve_scopes()
 
     access_token, expires_in = exchange_assertion_for_token(
         client_id, token_endpoint, audience, scopes, key_path, key_id
