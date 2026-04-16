@@ -143,3 +143,24 @@ def list_registrations():
             for a in accounts
         ]
     }), 200
+
+@config_bp.route("/register/<zoom_account_id>/verify", methods=["POST"])
+def verify_registration(zoom_account_id: str):
+    from app.models import ZoomAccount
+    from app.services.reg_verification import verify_openemr_token_for_account
+
+    account = ZoomAccount.query.filter_by(
+        account_id=zoom_account_id, is_active=True
+    ).first()
+
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+
+    success = verify_openemr_token_for_account(account)
+
+    return jsonify({
+        "zoom_account_id": zoom_account_id,
+        "openemr_verified": success,
+        "message": "OpenEMR token verified successfully" if success
+                   else "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again"
+    }), 200

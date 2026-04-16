@@ -30,7 +30,6 @@ def _register_with_openemr(
     Returns the full registration response dict from OpenEMR.
     Raises: requests.HTTPError if registration fails.
     """
-    # openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
     openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
     app_public_url = current_app.config["APP_PUBLIC_URL"]
 
@@ -101,38 +100,22 @@ def register_zoom_account(
     """
     Full registration flow for a Zoom account.
 
-    Step 1: Validate Zoom credentials by attempting to fetch a token.
-            If this fails, the credentials are wrong — abort immediately.
-
-    Step 2: Check for existing registration — don't allow duplicates.
-
-    Step 3: Generate a per-account RSA keypair and store it in keys/{account_id}/.
-            The kid is derived from the account ID so it's traceable.
-
-    Step 4: Register with OpenEMR dynamic client registration.
-            This call goes to the public OpenEMR URL since it's an external
-            HTTP request (not container-to-container).
-
-    Step 5: Persist everything to the DB in a single transaction.
-            If the DB write fails, attempt to clean up the keypair files.
+    Step 1: Check for existing registration — don't allow duplicates.
+    Step 2: Generate a per-account RSA keypair.
+    Step 3: Register with OpenEMR dynamic client registration.
+    Step 4: Persist ZoomAccount to DB.
+    Step 5: Validate Zoom credentials and cache token.
+            If this fails, roll back DB, keypair, and OpenEMR registration.
+    Step 6: Trigger OpenEMR verification scheduler.
 
     Returns: The newly created ZoomAccount ORM object.
     Raises:
-        ValueError: If credentials are invalid or account already exists.
+        ValueError: If account already exists or Zoom credentials are invalid.
         requests.HTTPError: If OpenEMR registration fails.
-        Exception: If DB persistence fails (keypair cleanup attempted).
+        Exception: If DB persistence fails.
     """
 
-    # ── Step 1: Validate Zoom credentials ────────────────────────────────────
-    logger.info(f"Validating Zoom credentials for account {zoom_account_id}")
-    if not validate_zoom_credentials(zoom_account_id, zoom_client_id, zoom_client_secret):
-        raise ValueError(
-            f"Zoom credential validation failed for account {zoom_account_id}. "
-            "Verify account_id, client_id, and client_secret are correct and "
-            "the app is activated in the Zoom Marketplace."
-        )
-
-    # ── Step 2: Check for duplicate registration ──────────────────────────────
+    # ── Step 1: Check for duplicate registration ──────────────────────────────
     existing = ZoomAccount.query.filter_by(account_id=zoom_account_id).first()
     if existing:
         if existing.is_active:
@@ -141,43 +124,35 @@ def register_zoom_account(
                 "Deregister it first before re-registering."
             )
         else:
-            # Inactive record exists — clean it up before re-registering
             logger.info(
                 f"Found inactive registration for {zoom_account_id}, removing before re-register"
             )
             db.session.delete(existing)
             db.session.commit()
 
-    # ── Step 3: Generate RSA keypair ──────────────────────────────────────────
+    # ── Step 2: Generate RSA keypair ──────────────────────────────────────────
     logger.info(f"Generating RSA keypair for account {zoom_account_id}")
     private_key_path, kid = generate_keypair(zoom_account_id)
 
-    # ── Step 4: Register with OpenEMR ─────────────────────────────────────────
-    # Note: this must happen AFTER keypair generation because the JWKS endpoint
-    # needs to serve the new public key before OpenEMR fetches it at token time.
+    # ── Step 3: Register with OpenEMR ─────────────────────────────────────────
     try:
         openemr_response = _register_with_openemr(zoom_account_id, contact_email)
     except Exception as e:
-        # OpenEMR registration failed — clean up the keypair we just generated
         logger.error(f"OpenEMR registration failed, cleaning up keypair: {e}")
         delete_keypair(zoom_account_id)
         raise
 
-    # ── Step 5: Persist to DB ─────────────────────────────────────────────────
+    # ── Step 4: Persist to DB ─────────────────────────────────────────────────
     try:
-        # Normalize registration_client_uri to use internal Docker URL.
-        # OpenEMR returns this with the public URL, but all API calls
-        # go internally so we override with the internal version from the start.
         registration_client_uri = openemr_response.get("registration_client_uri", "")
         if registration_client_uri:
             openemr_public_url = current_app.config["OPENEMR_PUBLIC_URL"]
             openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
-            print(openemr_base_url)
-            print(openemr_public_url)
             registration_client_uri = (
                 openemr_response.get("registration_client_uri", "")
                 .replace(openemr_public_url, openemr_base_url)
             )
+
         account = ZoomAccount(
             account_id=zoom_account_id,
             client_id=zoom_client_id,
@@ -197,18 +172,44 @@ def register_zoom_account(
         db.session.add(account)
         db.session.commit()
 
-        logger.info(
-            f"Registration complete for account {zoom_account_id}, "
-            f"OpenEMR client_id: {openemr_response['client_id']}"
-        )
-        return account
-
     except Exception as e:
         db.session.rollback()
-        # DB failed — clean up keypair to avoid orphaned files
-        logger.error(f"DB persistence failed, cleaning up keypair: {e}")
+        logger.error(f"DB persistence failed, cleaning up: {e}")
         delete_keypair(zoom_account_id)
         raise
+
+    # ── Step 5: Validate Zoom credentials and cache token ─────────────────────
+    # Account exists in DB now so _fetch_zoom_token() can write to it.
+    # If this fails, roll back everything — DB record, keypair, OpenEMR registration.
+    logger.info(f"Validating Zoom credentials for account {zoom_account_id}")
+    if not validate_zoom_credentials(account):
+        logger.error(
+            f"Zoom credential validation failed for account {zoom_account_id}, "
+            "rolling back registration"
+        )
+        # Clean up in reverse order
+        _deregister_from_openemr(
+            account.openemr_registration_client_uri,
+            account.openemr_registration_access_token
+        )
+        db.session.delete(account)
+        db.session.commit()
+        delete_keypair(zoom_account_id)
+        raise ValueError(
+            f"Zoom credential validation failed for account {zoom_account_id}. "
+            "Verify account_id, client_id, and client_secret are correct and "
+            "the app is activated in the Zoom Marketplace."
+        )
+
+    # ── Step 6: Trigger OpenEMR verification scheduler ────────────────────────
+    from .reg_verification import trigger_verification_scheduler
+    trigger_verification_scheduler(current_app._get_current_object())  # type: ignore[attr-defined]
+
+    logger.info(
+        f"Registration complete for account {zoom_account_id}, "
+        f"OpenEMR client_id: {openemr_response['client_id']}"
+    )
+    return account
 
 
 def deregister_zoom_account(zoom_account_id: str) -> None:

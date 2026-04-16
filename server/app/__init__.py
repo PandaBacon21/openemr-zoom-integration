@@ -17,10 +17,10 @@ def create_app(config_name: str | None = None) -> Flask:
     _init_extensions(app)
     _register_blueprints(app)
     _register_app_routes(app) 
+    _init_scheduler(app)
 
     app.logger.info(f"Zoomly server started in '{config_name}' mode")
     return app
-
 
 def _configure_logging(app: Flask) -> None:
     log_level = getattr(logging, app.config.get("LOG_LEVEL", "DEBUG").upper(), logging.DEBUG)
@@ -48,6 +48,18 @@ def _init_extensions(app: Flask) -> None:
         from . import models
 
         db.create_all()
+
+def _init_scheduler(app: Flask) -> None:
+    import os
+    from .extensions import scheduler
+
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        if not scheduler.running:
+            scheduler.start()
+            app.logger.info("APScheduler started")
+
+        import atexit
+        atexit.register(lambda: scheduler.shutdown(wait=False))
 
 
 def _register_blueprints(app: Flask) -> None:
