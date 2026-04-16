@@ -23,41 +23,46 @@ def _build_basic_auth_header(client_id: str, client_secret: str) -> str:
     encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
     return f"Basic {encoded}"
 
-
-def fetch_zoom_token(
-    account_id: str,
-    client_id: str,
-    client_secret: str
-) -> tuple[str, int, str]:
+def _fetch_zoom_token(zoom_account: ZoomAccount, refresh: bool = False) -> tuple[str, int, str]:
     """
-    Fetch a fresh Zoom Server-to-Server OAuth access token.
-
-    Returns: (access_token, expires_in_seconds, scope_string)
-    Raises: requests.HTTPError if credentials are invalid
+    Fetch a fresh Zoom token and store it on the account record.
+    Internal only — callers should use get_zoom_token()
     """
     response = requests.post(
         ZOOM_TOKEN_URL,
         params={
             "grant_type": "account_credentials",
-            "account_id": account_id,
+            "account_id": zoom_account.account_id,
         },
         headers={
-            "Authorization": _build_basic_auth_header(client_id, client_secret),
+            "Authorization": _build_basic_auth_header(zoom_account.client_id, zoom_account.client_secret),
             "Content-Type": "application/x-www-form-urlencoded",
         },
         timeout=10
     )
-
     response.raise_for_status()
     data = response.json()
+    
+    access_token = data["access_token"]
+    expires_in = data.get("expires_in", 3600)
+    scope = data.get("scope", "")
 
-    return data["access_token"], data.get("expires_in", 3600), data.get("scope", "")
+    zoom_account.zoom_access_token = access_token
+    zoom_account.zoom_token_expires_at = datetime.fromtimestamp(time.time() + expires_in, tz=timezone.utc)
+    
+    refreshed = "refreshed" if refresh else "fetched"
 
+    db.session.commit()
+    logger.info(
+        f"Zoom token {refreshed} and cached for account {zoom_account.account_id}, "
+        f"expires in {expires_in}s, scopes: {scope}"
+    )
+
+    return access_token, expires_in, scope
+    
 
 def validate_zoom_credentials(
-    account_id: str,
-    client_id: str,
-    client_secret: str
+    zoom_account: ZoomAccount
 ) -> bool:
     """
     Validate Zoom S2S credentials by attempting to fetch a token.
@@ -66,15 +71,15 @@ def validate_zoom_credentials(
     Returns True if credentials are valid, False otherwise.
     """
     try:
-        token, expires_in, scope = fetch_zoom_token(account_id, client_id, client_secret)
+        _, _, scope = _fetch_zoom_token(zoom_account)
         logger.info(
-            f"Zoom credentials validated for account {account_id}, "
+            f"Zoom credentials validated for account {zoom_account.account_id}, "
             f"scopes: {scope}"
         )
         return True
     except requests.HTTPError as e:
         logger.warning(
-            f"Zoom credential validation failed for account {account_id}: {e}"
+            f"Zoom credential validation failed for account {zoom_account.account_id}: {e}"
         )
         return False
     except requests.RequestException as e:
@@ -119,23 +124,7 @@ def get_zoom_token(zoom_account: ZoomAccount, force_refresh: bool = False) -> st
     # Fetch fresh token
     logger.info(f"Fetching fresh Zoom token for account {zoom_account.account_id}")
 
-    access_token, expires_in, scope = fetch_zoom_token(
-        zoom_account.account_id,
-        zoom_account.client_id,
-        zoom_account.client_secret
-    )
-
-    # Update cache in DB
-    zoom_account.zoom_access_token = access_token
-    zoom_account.zoom_token_expires_at = datetime.fromtimestamp(
-        time.time() + expires_in, tz=timezone.utc
-    )
-    db.session.commit()
-
-    logger.info(
-        f"Zoom token refreshed for account {zoom_account.account_id}, "
-        f"expires in {expires_in}s, scopes: {scope}"
-    )
+    access_token, _, _  = _fetch_zoom_token(zoom_account)
 
     return access_token
 
