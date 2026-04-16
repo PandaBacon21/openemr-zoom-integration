@@ -163,3 +163,53 @@ def make_zoom_api_request(
 
     response.raise_for_status()
     return response.json()
+
+
+def get_zoom_users(
+    zoom_account: ZoomAccount,
+    search: str | None = None
+) -> list[dict]:
+    """
+    Fetch users from the Zoom account.
+    Used to populate the provider mapping dropdown in the React config page.
+
+    Args:
+        zoom_account: ZoomAccount to authenticate with
+        search: Optional email or name search string
+
+    Returns: List of simplified user dicts
+    """
+    token = get_zoom_token(zoom_account)
+
+    params = {
+        "page_size": 100,
+        "status": "active"
+    }
+    if search:
+        params["search_key"] = search
+
+    response = requests.get(
+        f"{ZOOM_API_BASE_URL}/users",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        },
+        params=params,
+        timeout=10
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    return [
+        {
+            "zoom_user_id": user.get("id"),
+            "email": user.get("email"),
+            "first_name": user.get("first_name"),
+            "last_name": user.get("last_name"),
+            "full_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+            "display_name": user.get("display_name"),
+            "type": user.get("type"),
+            "status": user.get("status"),
+        }
+        for user in data.get("users", [])
+    ]

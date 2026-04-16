@@ -101,13 +101,13 @@ def get_openemr_token(zoom_account, force_refresh: bool = False) -> str:
         if expires_at.tzinfo is None: 
             expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-            seconds_remaining = (expires_at - now).total_seconds()
-            if seconds_remaining > 30:
-                logger.debug(
-                f"Using cached OpenEMR token for account {zoom_account.account_id} "
-                f"({int(seconds_remaining)}s remaining)"
-                )
-                return zoom_account.openemr_access_token
+        seconds_remaining = (expires_at - now).total_seconds()
+        if seconds_remaining > 30:
+            logger.debug(
+            f"Using cached OpenEMR token for account {zoom_account.account_id} "
+            f"({int(seconds_remaining)}s remaining)"
+            )
+            return zoom_account.openemr_access_token
 
     # Need a fresh token
     logger.info(f"Fetching fresh OpenEMR token for account {zoom_account.account_id}")

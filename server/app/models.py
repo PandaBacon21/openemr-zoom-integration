@@ -88,21 +88,38 @@ class ProviderMapping(db.Model):
     )
 
     # OpenEMR side
-    openemr_provider_id = db.Column(db.String(128), nullable=False)
-    openemr_provider_name = db.Column(db.String(256), nullable=True)
+    openemr_fhir_id = db.Column(db.String(128), nullable=False)
+    openemr_provider_npi = db.Column(db.String(10), nullable=False)
+    openemr_provider_name = db.Column(db.String(256), nullable=True)    
 
     # Zoom side
     zoom_user_email = db.Column(db.String(256), nullable=False)
+    zoom_user_name = db.Column(db.String(256), nullable=True)
     zoom_user_id = db.Column(db.String(128), nullable=True)
+    zoom_user_type = db.Column(db.Integer, nullable=True)
 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            zoom_account_id: int | None = ...,
+            openemr_fhir_id: str | None = ...,
+            openemr_provider_npi: str | None = ...,
+            openemr_provider_name: str | None = ...,
+            zoom_user_id: str | None = ...,
+            zoom_user_email: str | None = ...,
+            zoom_user_name: str | None = ...,
+            zoom_user_type: int | None = ...,
+            is_active: bool | None = ...,
+        ) -> None: ...
 
     def __repr__(self):
-        return f"<ProviderMapping {self.openemr_provider_id} → {self.zoom_user_email}>"
+        return f"<ProviderMapping {self.openemr_provider_npi} → {self.zoom_user_email}>"
 
 
 class AppointmentTypeFilter(db.Model):

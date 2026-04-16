@@ -144,6 +144,7 @@ def list_registrations():
         ]
     }), 200
 
+
 @config_bp.route("/register/<zoom_account_id>/verify", methods=["POST"])
 def verify_registration(zoom_account_id: str):
     from app.models import ZoomAccount
@@ -164,3 +165,91 @@ def verify_registration(zoom_account_id: str):
         "message": "OpenEMR token verified successfully" if success
                    else "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again"
     }), 200
+
+
+@config_bp.route("/providers", methods=["POST"])
+def create_provider_mapping():
+    from app.services.providers import create_provider_mapping
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+
+    required = ["zoom_account_id", "openemr_fhir_id", "openemr_provider_npi",
+                "zoom_user_id", "zoom_user_email", "zoom_user_type"]
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    try:
+        mapping = create_provider_mapping(
+            zoom_account_id=data["zoom_account_id"],
+            openemr_fhir_id=data["openemr_fhir_id"],
+            openemr_provider_npi=data["openemr_provider_npi"],
+            openemr_provider_name=data.get("openemr_provider_name"),
+            zoom_user_id=data["zoom_user_id"],
+            zoom_user_email=data["zoom_user_email"],
+            zoom_user_name=data.get("zoom_user_name"),
+            zoom_user_type=data.get("zoom_user_type")
+        )
+        return jsonify({
+            "id": mapping.id,
+            "openemr_provider_npi": mapping.openemr_provider_npi,
+            "openemr_provider_name": mapping.openemr_provider_name,
+            "zoom_user_email": mapping.zoom_user_email,
+            "zoom_user_name": mapping.zoom_user_name,
+            "created_at": mapping.created_at.isoformat()
+        }), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@config_bp.route("/providers", methods=["GET"])
+def list_provider_mappings():
+    from app.services.providers import get_provider_mappings
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    try:
+        mappings = get_provider_mappings(zoom_account_id)
+        return jsonify({
+            "count": len(mappings),
+            "providers": [
+                {
+                    "id": m.id,
+                    "openemr_fhir_id": m.openemr_fhir_id,
+                    "openemr_provider_npi": m.openemr_provider_npi,
+                    "openemr_provider_name": m.openemr_provider_name,
+                    "zoom_user_id": m.zoom_user_id,
+                    "zoom_user_email": m.zoom_user_email,
+                    "zoom_user_name": m.zoom_user_name,
+                    "created_at": m.created_at.isoformat()
+                }
+                for m in mappings
+            ]
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@config_bp.route("/providers/<int:mapping_id>", methods=["DELETE"])
+def delete_provider_mapping(mapping_id: int):
+    from app.services.providers import delete_provider_mapping
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    try:
+        delete_provider_mapping(zoom_account_id, mapping_id)
+        return jsonify({
+            "status": "deleted",
+            "id": mapping_id
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
