@@ -50,7 +50,7 @@ def _fetch_zoom_token(zoom_account: ZoomAccount, refresh: bool = False) -> tuple
     zoom_account.zoom_access_token = access_token
     zoom_account.zoom_token_expires_at = datetime.fromtimestamp(time.time() + expires_in, tz=timezone.utc)
     
-    refreshed = "refreshed" if refresh else "fetched"
+    refreshed = "force refreshed" if refresh else "fetched"
 
     db.session.commit()
     logger.info(
@@ -124,7 +124,7 @@ def get_zoom_token(zoom_account: ZoomAccount, force_refresh: bool = False) -> st
     # Fetch fresh token
     logger.info(f"Fetching fresh Zoom token for account {zoom_account.account_id}")
 
-    access_token, _, _  = _fetch_zoom_token(zoom_account)
+    access_token, _, _  = _fetch_zoom_token(zoom_account, refresh=force_refresh)
 
     return access_token
 
