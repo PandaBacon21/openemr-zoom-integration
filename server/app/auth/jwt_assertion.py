@@ -105,13 +105,6 @@ def get_openemr_token(force_refresh: bool = False) -> str:
     token_endpoint = f"{base_url}/oauth2/default/token"
     audience = f"{public_url}/oauth2/default/token"
 
-    # scopes = [
-    #     "system/Patient.read",
-    #     "system/Appointment.read",
-    #     "system/Appointment.write",
-    #     "system/Encounter.read",
-    #     "system/Encounter.write",
-    # ]
     scopes = _retrieve_scopes()
 
     access_token, expires_in = exchange_assertion_for_token(

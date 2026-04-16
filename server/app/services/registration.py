@@ -10,24 +10,9 @@ from app.services.keys import generate_keypair, delete_keypair
 
 logger = logging.getLogger(__name__)
 
-# Scopes we request from OpenEMR for every registration.
-# These are the system-level FHIR scopes needed for backend services auth.
-# May need to update these and/or move them to .env/config to make it easier to udpate later
-OPENEMR_SCOPES = " ".join([
-    "system/Patient.read",
-    "system/Appointment.read",
-    "system/Practitioner.read",
-    "system/Encounter.read",
-    "system/Encounter.rs",
-    "system/DocumentReference.read",
-    "system/DocumentReference.write",
-    "system/DocumentReference.rs",
-    "system/DocumentReference.$docref",
-])
 
 def _retrieve_scopes() -> list[str]: 
     return current_app.config["OPENEMR_SCOPES"]
-
 
 def _register_with_openemr(
     zoom_account_id: str,

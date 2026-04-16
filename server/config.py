@@ -8,6 +8,9 @@ class Config:
     KEYS_BASE_DIR = os.environ.get("KEYS_BASE_DIR", "/app/keys")
     ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
 
+    # Protected Endpoints
+    API_KEY = os.environ.get("API_KEY")
+
     # Flask
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
     DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
