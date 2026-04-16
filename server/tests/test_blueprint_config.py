@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from app.extensions import db
 from app.models import ZoomAccount
 
+API_HEADERS = {"X-API-Key": "test-api-key"}
+
 
 def test_register_endpoint_requires_json_body(client):
-    response = client.post("/config/register")
+    response = client.post("/config/register", headers=API_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "Request body must be JSON"}
 
@@ -14,6 +16,7 @@ def test_register_endpoint_requires_json_body(client):
 def test_register_endpoint_requires_all_fields(client):
     response = client.post(
         "/config/register",
+        headers=API_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -37,6 +40,7 @@ def test_register_endpoint_success(client, monkeypatch):
 
     response = client.post(
         "/config/register",
+        headers=API_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -63,6 +67,7 @@ def test_register_endpoint_maps_value_error_to_400(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.register_zoom_account", _raise)
     response = client.post(
         "/config/register",
+        headers=API_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -83,6 +88,7 @@ def test_register_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.register_zoom_account", _raise)
     response = client.post(
         "/config/register",
+        headers=API_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -98,7 +104,7 @@ def test_register_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
 
 def test_deregister_endpoint_success(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.deregister_zoom_account", lambda account_id: None)
-    response = client.delete("/config/register/acct-1")
+    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
     assert response.status_code == 200
     assert response.get_json() == {"status": "deregistered", "zoom_account_id": "acct-1"}
 
@@ -108,7 +114,7 @@ def test_deregister_endpoint_maps_not_found_to_404(client, monkeypatch):
         raise ValueError("not found")
 
     monkeypatch.setattr("app.blueprints.config.deregister_zoom_account", _raise)
-    response = client.delete("/config/register/acct-1")
+    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
     assert response.status_code == 404
     assert response.get_json() == {"error": "not found"}
 
@@ -118,7 +124,7 @@ def test_deregister_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr("app.blueprints.config.deregister_zoom_account", _raise)
-    response = client.delete("/config/register/acct-1")
+    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
     assert response.status_code == 500
     assert response.get_json() == {"error": "Deregistration failed", "detail": "db down"}
 
@@ -153,7 +159,7 @@ def test_list_registrations_returns_summary(client, app):
         )
         db.session.commit()
 
-    response = client.get("/config/registrations")
+    response = client.get("/config/registrations", headers=API_HEADERS)
 
     assert response.status_code == 200
     body = response.get_json()

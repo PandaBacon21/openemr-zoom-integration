@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_health_route(client):
     response = client.get("/health")
 
@@ -16,19 +13,17 @@ def test_jwks_route(client):
     assert body == {"keys": []}
 
 
-@pytest.mark.parametrize(
-    ("path", "blueprint_name"),
-    [
-        ("/auth/", "auth"),
-        ("/openemr/", "openemr"),
-        ("/webhooks/", "webhooks"),
-        ("/zoom/", "zoom"),
-        ("/config/", "config"),
-    ],
-)
-def test_blueprint_index_routes(client, path, blueprint_name):
-    response = client.get(path)
+def test_openemr_root_route_not_defined(client):
+    response = client.get("/openemr/")
+    assert response.status_code == 404
 
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body["blueprint"] == blueprint_name
+
+def test_zoom_root_route_not_defined(client):
+    response = client.get("/zoom/")
+    assert response.status_code == 404
+
+
+def test_config_root_requires_api_key(client):
+    response = client.get("/config/")
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Invalid or missing API key"}

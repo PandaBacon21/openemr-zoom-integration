@@ -1,9 +1,22 @@
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 import uuid
 
 import jwt
 
 from app.auth import jwt_assertion
 from app.auth.jwks import load_private_key
+
+
+def _make_account(**overrides):
+    return SimpleNamespace(
+        account_id=overrides.get("account_id", "acct-1"),
+        openemr_access_token=overrides.get("openemr_access_token"),
+        openemr_token_expires_at=overrides.get("openemr_token_expires_at"),
+        openemr_client_id=overrides.get("openemr_client_id", "openemr-client-id"),
+        private_key_path=overrides.get("private_key_path", "/tmp/key.pem"),
+        kid=overrides.get("kid", "zoomly-acct-1"),
+    )
 
 
 def test_build_client_assertion_claims_and_header(tmp_path):
@@ -102,25 +115,44 @@ def test_exchange_assertion_for_token_default_expiry(monkeypatch):
     assert expires_in == 300
 
 
-def test_get_openemr_token_returns_cached_token(app, monkeypatch):
+def test_get_openemr_token_returns_cached_token_when_tzaware_valid(app, monkeypatch):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    account = _make_account(
+        openemr_access_token="cached-token",
+        openemr_token_expires_at=now + timedelta(seconds=120),
+    )
+
+    monkeypatch.setattr(jwt_assertion, "datetime", SimpleNamespace(
+        now=lambda tz=None: now,
+        fromtimestamp=datetime.fromtimestamp,
+    ))
+    monkeypatch.setattr(
+        jwt_assertion,
+        "exchange_assertion_for_token",
+        lambda *_: (_ for _ in ()).throw(AssertionError("network call not expected")),
+    )
+
+    from app.extensions import db
+    monkeypatch.setattr(
+        db.session,
+        "commit",
+        lambda: (_ for _ in ()).throw(AssertionError("db commit not expected")),
+    )
+
     with app.app_context():
-        jwt_assertion._token_cache["access_token"] = "cached-token"
-        jwt_assertion._token_cache["expires_at"] = 1000
-
-        monkeypatch.setattr(jwt_assertion.time, "time", lambda: 950)
-        monkeypatch.setattr(
-            jwt_assertion,
-            "exchange_assertion_for_token",
-            lambda *_: (_ for _ in ()).throw(AssertionError("network call not expected")),
-        )
-
-        token = jwt_assertion.get_openemr_token()
+        token = jwt_assertion.get_openemr_token(account)
 
     assert token == "cached-token"
 
 
-def test_get_openemr_token_refreshes_and_caches(app, monkeypatch):
+def test_get_openemr_token_force_refresh_bypasses_cache_and_persists(app, monkeypatch):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    account = _make_account(
+        openemr_access_token="cached-token",
+        openemr_token_expires_at=now + timedelta(hours=1),
+    )
     captured = {}
+    committed = {"called": False}
 
     def fake_exchange(client_id, token_endpoint, audience, scopes, key_path, key_id):
         captured["client_id"] = client_id
@@ -131,24 +163,49 @@ def test_get_openemr_token_refreshes_and_caches(app, monkeypatch):
         captured["key_id"] = key_id
         return "fresh-token", 120
 
-    monkeypatch.setattr(jwt_assertion.time, "time", lambda: 1000)
     monkeypatch.setattr(jwt_assertion, "exchange_assertion_for_token", fake_exchange)
+    monkeypatch.setattr(jwt_assertion.time, "time", lambda: 1000)
+    monkeypatch.setattr(jwt_assertion, "datetime", SimpleNamespace(
+        now=lambda tz=None: now,
+        fromtimestamp=datetime.fromtimestamp,
+    ))
+
+    from app.extensions import db
+    monkeypatch.setattr(db.session, "commit", lambda: committed.__setitem__("called", True))
 
     with app.app_context():
-        token = jwt_assertion.get_openemr_token(force_refresh=True)
+        token = jwt_assertion.get_openemr_token(account, force_refresh=True)
 
     assert token == "fresh-token"
-    assert jwt_assertion._token_cache["access_token"] == "fresh-token"
-    assert jwt_assertion._token_cache["expires_at"] == 1120
-    assert captured["client_id"] == app.config["OPENEMR_CLIENT_ID"]
+    assert account.openemr_access_token == "fresh-token"
+    assert int(account.openemr_token_expires_at.timestamp()) == 1120
+    assert committed["called"] is True
+    assert captured["client_id"] == account.openemr_client_id
     assert captured["token_endpoint"] == "http://openemr.internal/oauth2/default/token"
     assert captured["audience"] == "https://openemr.public/oauth2/default/token"
-    assert captured["scopes"] == [
-        "system/Patient.read",
-        "system/Appointment.read",
-        "system/Appointment.write",
-        "system/Encounter.read",
-        "system/Encounter.write",
-    ]
-    assert captured["key_path"] == app.config["JWKS_PRIVATE_PATH"]
-    assert captured["key_id"] == app.config["KEY_ID"]
+    assert captured["scopes"] == app.config["OPENEMR_SCOPES"]
+    assert captured["key_path"] == account.private_key_path
+    assert captured["key_id"] == account.kid
+
+
+def test_get_openemr_token_handles_naive_expiry_as_utc(app, monkeypatch):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    account = _make_account(
+        openemr_access_token="cached-token",
+        openemr_token_expires_at=datetime(2026, 1, 1, 0, 10, 0),  # naive datetime
+    )
+
+    monkeypatch.setattr(jwt_assertion, "datetime", SimpleNamespace(
+        now=lambda tz=None: now,
+        fromtimestamp=datetime.fromtimestamp,
+    ))
+    monkeypatch.setattr(
+        jwt_assertion,
+        "exchange_assertion_for_token",
+        lambda *_: (_ for _ in ()).throw(AssertionError("network call not expected")),
+    )
+
+    with app.app_context():
+        token = jwt_assertion.get_openemr_token(account)
+
+    assert token == "cached-token"
