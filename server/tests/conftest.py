@@ -12,6 +12,7 @@ os.environ["ENCRYPTION_KEY"] = "0123456789abcdef0123456789abcdef"
 os.environ["KEYS_BASE_DIR"] = "/tmp/zoomly-test-keys"
 os.environ["ZOOM_TOKEN_URL"] = "https://zoom.us/oauth/token"
 os.environ["ZOOM_API_BASE_URL"] = "https://api.zoom.us/v2"
+os.environ["API_KEY"] = "test-api-key"
 
 
 @pytest.fixture()
@@ -28,6 +29,7 @@ def app(tmp_path: Path):
         OPENEMR_CLIENT_ID="test-client-id",
         OPENEMR_BASE_URL="http://openemr.internal",
         OPENEMR_PUBLIC_URL="https://openemr.public",
+        OPENEMR_FHIR_BASE_URL="http://openemr.internal/apis/default/fhir",
         APP_PUBLIC_URL="http://localhost:5000",
         JWKS_PRIVATE_PATH=str(tmp_path / "keys" / "private.pem"),
         KEY_ID="test-key-id",
@@ -49,8 +51,10 @@ def client(app):
 def reset_openemr_token_cache():
     from app.auth import jwt_assertion
 
-    jwt_assertion._token_cache["access_token"] = None
-    jwt_assertion._token_cache["expires_at"] = 0
+    token_cache = getattr(jwt_assertion, "_token_cache", None)
+    if isinstance(token_cache, dict):
+        token_cache["access_token"] = None
+        token_cache["expires_at"] = 0
 
 
 @pytest.fixture(autouse=True)

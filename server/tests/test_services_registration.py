@@ -68,7 +68,30 @@ def test_deregister_from_openemr_swallows_errors(monkeypatch):
 
 
 def test_register_zoom_account_rejects_invalid_zoom_credentials(app, monkeypatch):
-    monkeypatch.setattr(registration, "validate_zoom_credentials", lambda *args: False)
+    cleanup_called = {}
+    deregister_called = {}
+
+    monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: False)
+    monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+    monkeypatch.setattr(
+        registration,
+        "_register_with_openemr",
+        lambda account_id, contact_email: {
+            "client_id": "openemr-client-id",
+            "registration_access_token": "registration-token",
+            "registration_client_uri": "https://openemr.public/oauth2/default/client/abc",
+        },
+    )
+    monkeypatch.setattr(
+        registration,
+        "_deregister_from_openemr",
+        lambda uri, token: deregister_called.__setitem__("call", (uri, token)),
+    )
+    monkeypatch.setattr(
+        registration,
+        "delete_keypair",
+        lambda account_id: cleanup_called.__setitem__("account_id", account_id),
+    )
 
     with app.app_context():
         with pytest.raises(ValueError, match="Zoom credential validation failed"):
@@ -79,6 +102,14 @@ def test_register_zoom_account_rejects_invalid_zoom_credentials(app, monkeypatch
                 "webhook-secret",
                 "admin@example.com",
             )
+        record = ZoomAccount.query.filter_by(account_id="acct-invalid").first()
+
+    assert cleanup_called["account_id"] == "acct-invalid"
+    assert deregister_called["call"] == (
+        "http://openemr.internal/oauth2/default/client/abc",
+        "registration-token",
+    )
+    assert record is None
 
 
 def test_register_zoom_account_rejects_duplicate_active(app, monkeypatch):
@@ -99,8 +130,9 @@ def test_register_zoom_account_rejects_duplicate_active(app, monkeypatch):
 def test_register_zoom_account_replaces_inactive_record(app, monkeypatch):
     with app.app_context():
         _create_account("acct-inactive", is_active=False)
-        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda *args: True)
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -130,7 +162,7 @@ def test_register_zoom_account_cleans_up_keys_when_openemr_registration_fails(ap
     cleanup_called = {}
 
     with app.app_context():
-        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda *args: True)
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
         monkeypatch.setattr(registration, "_register_with_openemr", lambda *args: (_ for _ in ()).throw(requests.HTTPError("bad request")))
         monkeypatch.setattr(registration, "delete_keypair", lambda account_id: cleanup_called.__setitem__("account_id", account_id))
@@ -155,7 +187,7 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
     rollback_called = {"called": False}
 
     with app.app_context():
-        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda *args: True)
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
         monkeypatch.setattr(
             registration,
@@ -185,8 +217,9 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
 
 def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, monkeypatch):
     with app.app_context():
-        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda *args: True)
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",

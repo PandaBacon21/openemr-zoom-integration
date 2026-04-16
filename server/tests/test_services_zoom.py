@@ -7,13 +7,25 @@ import requests
 from app.services import zoom
 
 
+def _make_account(**overrides):
+    return SimpleNamespace(
+        account_id=overrides.get("account_id", "acct-1"),
+        client_id=overrides.get("client_id", "cid"),
+        client_secret=overrides.get("client_secret", "sec"),
+        zoom_access_token=overrides.get("zoom_access_token"),
+        zoom_token_expires_at=overrides.get("zoom_token_expires_at"),
+    )
+
+
 def test_build_basic_auth_header():
     header = zoom._build_basic_auth_header("client", "secret")
     assert header == "Basic Y2xpZW50OnNlY3JldA=="
 
 
-def test_fetch_zoom_token_posts_expected_request(monkeypatch):
+def test_fetch_zoom_token_posts_expected_request_and_persists(monkeypatch):
     captured = {}
+    committed = {"called": False}
+    account = _make_account(account_id="acct-1", client_id="client-id", client_secret="client-secret")
 
     class DummyResponse:
         def raise_for_status(self):
@@ -31,8 +43,10 @@ def test_fetch_zoom_token_posts_expected_request(monkeypatch):
 
     monkeypatch.setattr(zoom.requests, "post", fake_post)
     monkeypatch.setattr(zoom, "ZOOM_TOKEN_URL", "https://zoom.example/token")
+    monkeypatch.setattr(zoom.time, "time", lambda: 1000)
+    monkeypatch.setattr(zoom.db.session, "commit", lambda: committed.__setitem__("called", True))
 
-    token, expires_in, scope = zoom.fetch_zoom_token("acct-1", "cid", "csecret")
+    token, expires_in, scope = zoom._fetch_zoom_token(account)
 
     assert token == "zoom-token"
     assert expires_in == 1200
@@ -42,9 +56,14 @@ def test_fetch_zoom_token_posts_expected_request(monkeypatch):
     assert captured["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
     assert captured["headers"]["Authorization"].startswith("Basic ")
     assert captured["timeout"] == 10
+    assert account.zoom_access_token == "zoom-token"
+    assert int(account.zoom_token_expires_at.timestamp()) == 2200
+    assert committed["called"] is True
 
 
 def test_fetch_zoom_token_defaults(monkeypatch):
+    account = _make_account()
+
     class DummyResponse:
         def raise_for_status(self):
             return None
@@ -53,46 +72,48 @@ def test_fetch_zoom_token_defaults(monkeypatch):
             return {"access_token": "zoom-token"}
 
     monkeypatch.setattr(zoom.requests, "post", lambda *args, **kwargs: DummyResponse())
-    token, expires_in, scope = zoom.fetch_zoom_token("acct-1", "cid", "csecret")
+    monkeypatch.setattr(zoom.time, "time", lambda: 2000)
+    monkeypatch.setattr(zoom.db.session, "commit", lambda: None)
+
+    token, expires_in, scope = zoom._fetch_zoom_token(account)
+
     assert token == "zoom-token"
     assert expires_in == 3600
     assert scope == ""
+    assert int(account.zoom_token_expires_at.timestamp()) == 5600
 
 
 def test_validate_zoom_credentials_true(monkeypatch):
-    monkeypatch.setattr(zoom, "fetch_zoom_token", lambda *args: ("tok", 3600, "scope"))
-    assert zoom.validate_zoom_credentials("acct-1", "cid", "sec") is True
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", lambda account: ("tok", 3600, "scope"))
+    assert zoom.validate_zoom_credentials(_make_account()) is True
 
 
 def test_validate_zoom_credentials_false_on_http_error(monkeypatch):
     def _raise(*args):
         raise requests.HTTPError("bad credentials")
 
-    monkeypatch.setattr(zoom, "fetch_zoom_token", _raise)
-    assert zoom.validate_zoom_credentials("acct-1", "cid", "sec") is False
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", _raise)
+    assert zoom.validate_zoom_credentials(_make_account()) is False
 
 
 def test_validate_zoom_credentials_raises_on_network_error(monkeypatch):
     def _raise(*args):
         raise requests.ConnectionError("network down")
 
-    monkeypatch.setattr(zoom, "fetch_zoom_token", _raise)
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", _raise)
 
     with pytest.raises(requests.ConnectionError):
-        zoom.validate_zoom_credentials("acct-1", "cid", "sec")
+        zoom.validate_zoom_credentials(_make_account())
 
 
 def test_get_zoom_token_uses_cache_if_more_than_5_minutes_left(app, monkeypatch):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    account = SimpleNamespace(
-        account_id="acct-1",
-        client_id="cid",
-        client_secret="sec",
+    account = _make_account(
         zoom_access_token="cached-token",
         zoom_token_expires_at=now + timedelta(seconds=301),
     )
 
-    monkeypatch.setattr(zoom, "fetch_zoom_token", lambda *args: (_ for _ in ()).throw(AssertionError("no refresh expected")))
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no refresh expected")))
     monkeypatch.setattr(zoom, "datetime", SimpleNamespace(now=lambda tz=None: now, fromtimestamp=datetime.fromtimestamp))
 
     with app.app_context():
@@ -103,40 +124,35 @@ def test_get_zoom_token_uses_cache_if_more_than_5_minutes_left(app, monkeypatch)
 
 def test_get_zoom_token_refreshes_when_threshold_reached(app, monkeypatch):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    account = SimpleNamespace(
+    account = _make_account(
         account_id="acct-2",
-        client_id="cid",
-        client_secret="sec",
         zoom_access_token="cached-token",
         zoom_token_expires_at=now + timedelta(seconds=300),
     )
-    committed = {"called": False}
+    captured = {}
 
-    monkeypatch.setattr(zoom, "fetch_zoom_token", lambda *args: ("fresh-token", 900, "meeting:read"))
-    monkeypatch.setattr(zoom.time, "time", lambda: 1000)
+    def fake_fetch(acct, refresh=False):
+        captured["refresh"] = refresh
+        return "fresh-token", 900, "meeting:read"
+
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", fake_fetch)
     monkeypatch.setattr(zoom, "datetime", SimpleNamespace(now=lambda tz=None: now, fromtimestamp=datetime.fromtimestamp))
 
     with app.app_context():
-        monkeypatch.setattr(zoom.db.session, "commit", lambda: committed.__setitem__("called", True))
         token = zoom.get_zoom_token(account)
 
     assert token == "fresh-token"
-    assert account.zoom_access_token == "fresh-token"
-    assert int(account.zoom_token_expires_at.timestamp()) == 1900
-    assert committed["called"] is True
+    assert captured["refresh"] is False
 
 
 def test_get_zoom_token_handles_naive_expiry(app, monkeypatch):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    account = SimpleNamespace(
-        account_id="acct-3",
-        client_id="cid",
-        client_secret="sec",
+    account = _make_account(
         zoom_access_token="cached-token",
         zoom_token_expires_at=datetime(2026, 1, 1, 0, 10, 0),  # naive datetime
     )
 
-    monkeypatch.setattr(zoom, "fetch_zoom_token", lambda *args: (_ for _ in ()).throw(AssertionError("no refresh expected")))
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no refresh expected")))
     monkeypatch.setattr(zoom, "datetime", SimpleNamespace(now=lambda tz=None: now, fromtimestamp=datetime.fromtimestamp))
 
     with app.app_context():
@@ -145,24 +161,27 @@ def test_get_zoom_token_handles_naive_expiry(app, monkeypatch):
     assert token == "cached-token"
 
 
-def test_get_zoom_token_force_refresh(app, monkeypatch):
+def test_get_zoom_token_force_refresh_propagates_refresh_flag(app, monkeypatch):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    account = SimpleNamespace(
+    account = _make_account(
         account_id="acct-4",
-        client_id="cid",
-        client_secret="sec",
         zoom_access_token="cached-token",
         zoom_token_expires_at=now + timedelta(hours=1),
     )
-    monkeypatch.setattr(zoom, "fetch_zoom_token", lambda *args: ("forced-token", 60, "scope"))
-    monkeypatch.setattr(zoom.time, "time", lambda: 5000)
+    captured = {}
+
+    def fake_fetch(acct, refresh=False):
+        captured["refresh"] = refresh
+        return "forced-token", 60, "scope"
+
+    monkeypatch.setattr(zoom, "_fetch_zoom_token", fake_fetch)
     monkeypatch.setattr(zoom, "datetime", SimpleNamespace(now=lambda tz=None: now, fromtimestamp=datetime.fromtimestamp))
 
     with app.app_context():
-        monkeypatch.setattr(zoom.db.session, "commit", lambda: None)
         token = zoom.get_zoom_token(account, force_refresh=True)
 
     assert token == "forced-token"
+    assert captured["refresh"] is True
 
 
 def test_make_zoom_api_request_adds_authorization(monkeypatch):
@@ -187,7 +206,7 @@ def test_make_zoom_api_request_adds_authorization(monkeypatch):
     monkeypatch.setattr(zoom.requests, "request", fake_request)
     monkeypatch.setattr(zoom, "ZOOM_API_BASE_URL", "https://api.zoom.test/v2")
 
-    account = SimpleNamespace(account_id="acct")
+    account = _make_account(account_id="acct")
     response = zoom.make_zoom_api_request("get", "/users/me", account, params={"page_size": 30})
 
     assert response == {"ok": True}
