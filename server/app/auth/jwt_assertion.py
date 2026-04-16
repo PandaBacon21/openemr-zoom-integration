@@ -96,7 +96,7 @@ def get_openemr_token(zoom_account, force_refresh: bool = False) -> str:
     now = datetime.now(timezone.utc)
 
     # Return cached token if still valid (with 30 second buffer)
-    if not force_refresh and zoom_account.openerm_account_token and zoom_account.openemr_token_expires_at:
+    if not force_refresh and zoom_account.openemr_access_token and zoom_account.openemr_token_expires_at:
         expires_at = zoom_account.openemr_token_expires_at
         if expires_at.tzinfo is None: 
             expires_at = expires_at.replace(tzinfo=timezone.utc)

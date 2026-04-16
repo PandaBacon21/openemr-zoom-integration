@@ -52,23 +52,23 @@ INSERT INTO `users` (
     `id`, `uuid`, `username`, `password`, `authorized`, `active`,
     `fname`, `lname`, `title`, `specialty`, `email`, `email_direct`,
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
-    `main_menu_role`, `patient_menu_role`, `physician_type`
+    `main_menu_role`, `patient_menu_role`, `physician_type`, `npi`
 ) VALUES
 (10, UNHEX(REPLACE(UUID(), '-', '')), 'moconnor', '', 1, 1,
  'Michael', 'OConnor', 'Dr.', 'Internal Medicine', 'josh.aiken@zoomineer.com', 'josh.aiken@zoomineer.com',
- 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD'),
+ 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567890'),
 
 (11, UNHEX(REPLACE(UUID(), '-', '')), 'erodriguez', '', 1, 1,
  'Elena', 'Rodriguez', 'Dr.', 'Family Medicine', 'josh.aiken@zoomineer.com', 'josh.aiken@zoomineer.com',
- 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD'),
+ 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567891'),
 
 (12, UNHEX(REPLACE(UUID(), '-', '')), 'amiller', '', 1, 1,
  'Amelia', 'Miller', 'Dr.', 'Psychiatry', 'josh.aiken@zoomineer.com', 'josh.aiken@zoomineer.com',
- 1, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD'),
+ 1, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567892'),
 
 (13, UNHEX(REPLACE(UUID(), '-', '')), 'mthompson', '', 1, 1,
  'Marcus', 'Thompson', 'Dr.', 'Cardiology', 'josh.aiken@zoomineer.com', 'josh.aiken@zoomineer.com',
- 1, 1, 'physician', '207RC0000X', 'standard', 'standard', 'MD');
+ 1, 1, 'physician', '207RC0000X', 'standard', 'standard', 'MD', '1234567893');
 
 -- =============================================================================
 -- NURSES
