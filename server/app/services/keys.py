@@ -32,7 +32,7 @@ def get_public_key_path(zoom_account_id: str) -> str:
     return os.path.join(get_key_dir(zoom_account_id), "public.pem")
 
 
-def generate_keypair(zoom_account_id: str) -> tuple[str, str, str]:
+def generate_keypair(zoom_account_id: str) -> tuple[str, str]:
     """
     Generate a new RSA-2048 keypair for a Zoom account and save to disk.
 
@@ -88,7 +88,7 @@ def generate_keypair(zoom_account_id: str) -> tuple[str, str, str]:
 
     logger.info(f"Generated RSA keypair for account {zoom_account_id}, kid={kid}")
 
-    return private_key_path, public_key_path, kid
+    return private_key_path, kid
 
 
 def delete_keypair(zoom_account_id: str) -> None:

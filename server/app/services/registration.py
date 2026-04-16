@@ -10,25 +10,13 @@ from app.services.keys import generate_keypair, delete_keypair
 
 logger = logging.getLogger(__name__)
 
-# Scopes we request from OpenEMR for every registration.
-# These are the system-level FHIR scopes needed for backend services auth.
-# May need to update these and/or move them to .env/config to make it easier to udpate later
-OPENEMR_SCOPES = " ".join([
-    "system/Patient.read",
-    "system/Appointment.read",
-    "system/Practitioner.read",
-    "system/Encounter.read",
-    "system/Encounter.rs",
-    "system/DocumentReference.read",
-    "system/DocumentReference.write",
-    "system/DocumentReference.rs",
-    "system/DocumentReference.$docref",
-])
 
+def _retrieve_scopes() -> list[str]: 
+    return current_app.config["OPENEMR_SCOPES"]
 
 def _register_with_openemr(
     zoom_account_id: str,
-    kid: str,
+    # kid: str,
     contact_email: str
 ) -> dict:
     """
@@ -54,7 +42,7 @@ def _register_with_openemr(
         "client_name": f"Zoomly Bridge - {zoom_account_id}",
         "contacts": [contact_email],
         "token_endpoint_auth_method": "private_key_jwt",
-        "scope": OPENEMR_SCOPES,
+        "scope": " ".join(_retrieve_scopes()),
         "redirect_uris": [f"{app_public_url}/callback"],
         "jwks_uri": jwks_uri,
         "dsi_type": "none",
@@ -162,13 +150,13 @@ def register_zoom_account(
 
     # ── Step 3: Generate RSA keypair ──────────────────────────────────────────
     logger.info(f"Generating RSA keypair for account {zoom_account_id}")
-    private_key_path, public_key_path, kid = generate_keypair(zoom_account_id)
+    private_key_path, kid = generate_keypair(zoom_account_id)
 
     # ── Step 4: Register with OpenEMR ─────────────────────────────────────────
     # Note: this must happen AFTER keypair generation because the JWKS endpoint
     # needs to serve the new public key before OpenEMR fetches it at token time.
     try:
-        openemr_response = _register_with_openemr(zoom_account_id, kid, contact_email)
+        openemr_response = _register_with_openemr(zoom_account_id, contact_email)
     except Exception as e:
         # OpenEMR registration failed — clean up the keypair we just generated
         logger.error(f"OpenEMR registration failed, cleaning up keypair: {e}")

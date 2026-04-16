@@ -32,3 +32,5 @@ wheels/
 
 # dev
 *.temp
+
+*docx

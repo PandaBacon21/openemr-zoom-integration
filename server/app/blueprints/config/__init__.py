@@ -5,11 +5,15 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models import ZoomAccount
 from app.services.registration import register_zoom_account, deregister_zoom_account
+from app.auth.api_key import protect_with_api_key
 
 logger = logging.getLogger(__name__)
 
 config_bp = Blueprint("config", __name__, url_prefix="/config")
 
+@config_bp.before_request
+def protect():
+    return protect_with_api_key()
 
 @config_bp.route("/")
 def index():
