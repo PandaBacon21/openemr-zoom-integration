@@ -31,10 +31,11 @@ def _register_with_openemr(
     Raises: requests.HTTPError if registration fails.
     """
     openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
-    app_public_url = current_app.config["APP_PUBLIC_URL"]
+    # app_public_url = current_app.config["APP_PUBLIC_URL"]
+    app_internal_url = current_app.config.get("APP_INTERNAL_URL", "http://zoom-bridge:5000")
 
     registration_endpoint = f"{openemr_base_url}/oauth2/default/registration"
-    jwks_uri = f"{app_public_url}/.well-known/jwks.json"
+    jwks_uri = f"{app_internal_url}/.well-known/jwks.json"
 
     payload = {
         "application_type": "private",
@@ -42,7 +43,7 @@ def _register_with_openemr(
         "contacts": [contact_email],
         "token_endpoint_auth_method": "private_key_jwt",
         "scope": " ".join(_retrieve_scopes()),
-        "redirect_uris": [f"{app_public_url}/callback"],
+        "redirect_uris": [f"{app_internal_url}/callback"],
         "jwks_uri": jwks_uri,
         "dsi_type": "none",
     }

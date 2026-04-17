@@ -28,6 +28,15 @@ class Config:
     OPENEMR_FHIR_BASE_URL = os.environ.get("OPENEMR_FHIR_BASE_URL", "http://localhost:8300/apis/default/fhir")
     OPENEMR_CLIENT_ID = os.environ.get("OPENEMR_CLIENT_ID")
     OPENEMR_PUBLIC_URL = os.environ.get("OPENEMR_PUBLIC_URL")
+    # OpenEMR for direct database connection for appointment type retrieval
+    OPENEMR_DB_URI = (
+        f"mysql+pymysql://"
+        f"{os.environ.get('OPENEMR_DB_USER', 'openemr')}:"
+        f"{os.environ.get('OPENEMR_DB_PASS', 'openemr')}@"
+        f"{os.environ.get('OPENEMR_DB_HOST', 'mariadb')}:"
+        f"{os.environ.get('OPENEMR_DB_PORT', '3306')}/"
+        f"{os.environ.get('OPENEMR_DB_NAME', 'openemr')}"
+    )
 
     OPENEMR_SCOPES = os.environ.get("OPENEMR_SCOPES", "").split()
     # SMART / JWKS
@@ -35,6 +44,7 @@ class Config:
 
     # Integration Service Public URL
     APP_PUBLIC_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:5000")
+    APP_INTERNAL_URL = os.environ.get("APP_INTERNAL_URL", "http://zoom-bridge:5000")
 
     # Logging
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG")

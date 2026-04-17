@@ -1,5 +1,6 @@
 from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
 from apscheduler.schedulers.background import BackgroundScheduler
 
 db = SQLAlchemy()
@@ -14,3 +15,11 @@ def get_encryption_key():
     if not key:
         raise RuntimeError("ENCRYPTION_KEY is not configured")
     return key
+
+
+def get_openemr_db_engine():
+    """
+    Returns a SQLAlchemy engine connected to OpenEMR's MariaDB.
+    Used for direct DB queries when no API endpoint exists.
+    """
+    return create_engine(current_app.config["OPENEMR_DB_URI"])
