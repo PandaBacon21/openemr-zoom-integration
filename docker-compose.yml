@@ -129,6 +129,7 @@ services:
     environment:
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
+      APP_INTERNAL_URL: http://zoom-bridge:5000
     volumes:
       - ./server/instance:/app/instance
       - ./keys:/app/keys

@@ -423,7 +423,7 @@ def test_delete_provider_mapping_requires_zoom_account_id(client):
 
 
 def test_delete_provider_mapping_success(client, monkeypatch):
-    monkeypatch.setattr("app.services.providers.delete_provider_mapping", lambda account_id, mapping_id: None)
+    monkeypatch.setattr("app.services.providers.delete_provider_mapping", lambda account_id, npi: None)
 
     response = client.delete(
         "/config/providers/10",
@@ -432,13 +432,13 @@ def test_delete_provider_mapping_success(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "deleted", "id": 10}
+    assert response.get_json() == {"status": "deleted", "npi": "10"}
 
 
 def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
         "app.services.providers.delete_provider_mapping",
-        lambda account_id, mapping_id: (_ for _ in ()).throw(ValueError("not found")),
+        lambda account_id, npi: (_ for _ in ()).throw(ValueError("not found")),
     )
 
     response = client.delete(
@@ -454,11 +454,216 @@ def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
 def test_delete_provider_mapping_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
         "app.services.providers.delete_provider_mapping",
-        lambda account_id, mapping_id: (_ for _ in ()).throw(RuntimeError("db down")),
+        lambda account_id, npi: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
     response = client.delete(
         "/config/providers/10",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "db down"}
+
+
+def test_create_appointment_filter_requires_body(client):
+    response = client.post("/config/appointment-types", headers=API_HEADERS, json={})
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Request body is required"}
+
+
+def test_create_appointment_filter_requires_fields(client):
+    response = client.post(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        json={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Missing required fields: openemr_type_id, openemr_type_name"}
+
+
+def test_create_appointment_filter_success(client, monkeypatch):
+    fake_filter = SimpleNamespace(
+        id=33,
+        openemr_type_id="5",
+        openemr_type_name="Telehealth Follow-up",
+        created_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr("app.services.appointment_filters.create_appointment_filter", lambda **kwargs: fake_filter)
+
+    response = client.post(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "openemr_type_id": "5",
+            "openemr_type_name": "Telehealth Follow-up",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.get_json() == {
+        "id": 33,
+        "openemr_type_id": "5",
+        "openemr_type_name": "Telehealth Follow-up",
+        "created_at": "2026-01-04T00:00:00+00:00",
+    }
+
+
+def test_create_appointment_filter_maps_value_error_to_400(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.create_appointment_filter",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("duplicate appointment type")),
+    )
+
+    response = client.post(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "openemr_type_id": "5",
+            "openemr_type_name": "Telehealth Follow-up",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "duplicate appointment type"}
+
+
+def test_create_appointment_filter_maps_unexpected_error_to_500(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.create_appointment_filter",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+
+    response = client.post(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "openemr_type_id": "5",
+            "openemr_type_name": "Telehealth Follow-up",
+        },
+    )
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "db down"}
+
+
+def test_list_appointment_filters_requires_zoom_account_id(client):
+    response = client.get("/config/appointment-types", headers=API_HEADERS)
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
+
+
+def test_list_appointment_filters_success(client, monkeypatch):
+    fake_filters = [
+        SimpleNamespace(
+            id=44,
+            openemr_type_id="7",
+            openemr_type_name="New Patient Consult",
+            created_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
+        )
+    ]
+    monkeypatch.setattr("app.services.appointment_filters.get_appointment_filters", lambda account_id: fake_filters)
+
+    response = client.get(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "count": 1,
+        "appointment_types": [
+            {
+                "id": 44,
+                "openemr_type_id": "7",
+                "openemr_type_name": "New Patient Consult",
+                "created_at": "2026-01-05T00:00:00+00:00",
+            }
+        ],
+    }
+
+
+def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.get_appointment_filters",
+        lambda account_id: (_ for _ in ()).throw(ValueError("not found")),
+    )
+
+    response = client.get(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "not found"}
+
+
+def test_list_appointment_filters_maps_unexpected_error_to_500(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.get_appointment_filters",
+        lambda account_id: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+
+    response = client.get(
+        "/config/appointment-types",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "db down"}
+
+
+def test_delete_appointment_filter_requires_zoom_account_id(client):
+    response = client.delete("/config/appointment-types/7", headers=API_HEADERS)
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
+
+
+def test_delete_appointment_filter_success(client, monkeypatch):
+    monkeypatch.setattr("app.services.appointment_filters.delete_appointment_filter", lambda account_id, type_id: None)
+
+    response = client.delete(
+        "/config/appointment-types/7",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "deleted", "appointment_type_id": "7"}
+
+
+def test_delete_appointment_filter_maps_value_error_to_404(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.delete_appointment_filter",
+        lambda account_id, type_id: (_ for _ in ()).throw(ValueError("not found")),
+    )
+
+    response = client.delete(
+        "/config/appointment-types/7",
+        headers=API_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "not found"}
+
+
+def test_delete_appointment_filter_maps_unexpected_error_to_500(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.appointment_filters.delete_appointment_filter",
+        lambda account_id, type_id: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+
+    response = client.delete(
+        "/config/appointment-types/7",
         headers=API_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )

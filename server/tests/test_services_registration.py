@@ -52,8 +52,8 @@ def test_register_with_openemr_posts_expected_payload(app, monkeypatch):
     assert captured["json"]["client_name"] == "Zoomly Bridge - acct-1"
     assert captured["json"]["contacts"] == ["admin@example.com"]
     assert captured["json"]["scope"] == "system/Patient.read system/Appointment.read system/Encounter.read"
-    assert captured["json"]["jwks_uri"] == "http://localhost:5000/.well-known/jwks.json"
-    assert captured["json"]["redirect_uris"] == ["http://localhost:5000/callback"]
+    assert captured["json"]["jwks_uri"] == "http://zoom-bridge:5000/.well-known/jwks.json"
+    assert captured["json"]["redirect_uris"] == ["http://zoom-bridge:5000/callback"]
     assert captured["headers"]["Content-Type"] == "application/json"
     assert captured["timeout"] == 15
 

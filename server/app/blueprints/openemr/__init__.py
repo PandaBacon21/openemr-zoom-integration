@@ -35,3 +35,16 @@ def get_providers():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
+@openemr_bp.route("/openemr/appointment-types", methods=["GET"])
+def get_appointment_types():
+    from app.services.openemr import get_appointment_types
+    try:
+        types = get_appointment_types()
+        return jsonify({
+            "count": len(types),
+            "appointment_types": types
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

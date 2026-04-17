@@ -92,3 +92,31 @@ def _normalize_practitioner(resource: dict) -> dict:
         "npi": npi,
         "email": email,
     }
+
+
+def get_appointment_types() -> list[dict]:
+    """
+    Query OpenEMR appointment categories directly from MariaDB.
+    No API endpoint exists for this resource in OpenEMR 8.0.0.
+    """
+    from sqlalchemy import text
+    from app.extensions import get_openemr_db_engine
+
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT pc_catid, pc_catname, pc_catdesc, pc_duration, pc_catcolor
+            FROM openemr_postcalendar_categories
+            WHERE pc_active = 1
+            ORDER BY pc_seq
+        """))
+        return [
+            {
+                "id": str(row.pc_catid),
+                "name": row.pc_catname,
+                "description": row.pc_catdesc,
+                "duration_seconds": row.pc_duration,
+                "color": row.pc_catcolor,
+            }
+            for row in result
+        ]

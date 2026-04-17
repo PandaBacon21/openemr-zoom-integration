@@ -153,3 +153,79 @@ def test_normalize_practitioner_defaults_for_missing_fields():
         "npi": None,
         "email": None,
     }
+
+
+def test_get_appointment_types_returns_transformed_rows(monkeypatch):
+    captured = {}
+
+    class FakeConn:
+        def execute(self, query):
+            captured["query"] = str(query)
+            return [
+                SimpleNamespace(
+                    pc_catid=1,
+                    pc_catname="New Patient",
+                    pc_catdesc="Initial consult",
+                    pc_duration=1800,
+                    pc_catcolor="#33AA55",
+                ),
+                SimpleNamespace(
+                    pc_catid=2,
+                    pc_catname="Follow-up",
+                    pc_catdesc="Established patient follow-up",
+                    pc_duration=900,
+                    pc_catcolor="#4477CC",
+                ),
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+
+    result = openemr.get_appointment_types()
+
+    assert "FROM openemr_postcalendar_categories" in captured["query"]
+    assert result == [
+        {
+            "id": "1",
+            "name": "New Patient",
+            "description": "Initial consult",
+            "duration_seconds": 1800,
+            "color": "#33AA55",
+        },
+        {
+            "id": "2",
+            "name": "Follow-up",
+            "description": "Established patient follow-up",
+            "duration_seconds": 900,
+            "color": "#4477CC",
+        },
+    ]
+
+
+def test_get_appointment_types_returns_empty_list_when_no_rows(monkeypatch):
+    class FakeConn:
+        def execute(self, query):
+            return []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+
+    assert openemr.get_appointment_types() == []

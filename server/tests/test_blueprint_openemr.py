@@ -133,3 +133,62 @@ def test_get_providers_maps_service_error_to_500(client, app, monkeypatch):
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "openemr timeout"}
+
+
+def test_get_appointment_types_returns_500_when_api_key_not_configured(client, app):
+    app.config["API_KEY"] = None
+    response = client.get("/openemr/appointment-types")
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "API_KEY not configured on server"}
+
+
+def test_get_appointment_types_returns_401_for_invalid_api_key(client, app):
+    app.config["API_KEY"] = "expected-key"
+    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "wrong-key"})
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Invalid or missing API key"}
+
+
+def test_get_appointment_types_success(client, app, monkeypatch):
+    app.config["API_KEY"] = "expected-key"
+    monkeypatch.setattr(
+        "app.services.openemr.get_appointment_types",
+        lambda: [
+            {
+                "id": "1",
+                "name": "New Patient",
+                "description": "Initial consult",
+                "duration_seconds": 1800,
+                "color": "#33AA55",
+            }
+        ],
+    )
+
+    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "expected-key"})
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "count": 1,
+        "appointment_types": [
+            {
+                "id": "1",
+                "name": "New Patient",
+                "description": "Initial consult",
+                "duration_seconds": 1800,
+                "color": "#33AA55",
+            }
+        ],
+    }
+
+
+def test_get_appointment_types_maps_service_error_to_500(client, app, monkeypatch):
+    app.config["API_KEY"] = "expected-key"
+    monkeypatch.setattr(
+        "app.services.openemr.get_appointment_types",
+        lambda: (_ for _ in ()).throw(RuntimeError("db unavailable")),
+    )
+
+    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "expected-key"})
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "db unavailable"}

@@ -130,17 +130,25 @@ class AppointmentTypeFilter(db.Model):
         db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
     )
 
-    appointment_type_id = db.Column(db.String(128), nullable=False)
-    appointment_type_name = db.Column(db.String(256), nullable=True)
-    is_allowed = db.Column(db.Boolean, default=True, nullable=False)
+    openemr_type_id = db.Column(db.String(128), nullable=False)
+    openemr_type_name = db.Column(db.String(256), nullable=False)
 
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
 
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            zoom_account_id: int | None = ...,
+            openemr_type_id: str | None = ...,
+            openemr_type_name: str | None = ...,
+        ) -> None: ...
+
     def __repr__(self):
-        return f"<AppointmentTypeFilter {self.appointment_type_name} allowed={self.is_allowed}>"
+        return f"<AppointmentTypeFilter {self.openemr_type_name} ({self.openemr_type_id})>"
 
 
 class MeetingRecord(db.Model):
