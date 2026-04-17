@@ -134,7 +134,7 @@ def test_delete_provider_mapping_deletes_matching_mapping(app):
         account = _create_account("acct-1", is_active=True)
         mapping = _create_mapping(account, npi="1234567890", is_active=True)
 
-        providers.delete_provider_mapping("acct-1", mapping.id)
+        providers.delete_provider_mapping("acct-1", mapping.openemr_provider_npi)
         deleted = ProviderMapping.query.filter_by(id=mapping.id).first()
 
     assert deleted is None
@@ -143,5 +143,5 @@ def test_delete_provider_mapping_deletes_matching_mapping(app):
 def test_delete_provider_mapping_raises_when_not_found(app):
     with app.app_context():
         _create_account("acct-1", is_active=True)
-        with pytest.raises(ValueError, match="No active mapping found with id 999"):
-            providers.delete_provider_mapping("acct-1", 999)
+        with pytest.raises(ValueError, match="No active mapping found with NPI 999"):
+            providers.delete_provider_mapping("acct-1", "999")

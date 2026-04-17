@@ -236,18 +236,94 @@ def list_provider_mappings():
         return jsonify({"error": str(e)}), 500
 
 
-@config_bp.route("/providers/<int:mapping_id>", methods=["DELETE"])
-def delete_provider_mapping(mapping_id: int):
+@config_bp.route("/providers/<string:npi>", methods=["DELETE"])
+def delete_provider_mapping(npi: str):
     from app.services.providers import delete_provider_mapping
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
     try:
-        delete_provider_mapping(zoom_account_id, mapping_id)
+        delete_provider_mapping(zoom_account_id, npi)
         return jsonify({
             "status": "deleted",
-            "id": mapping_id
+            "npi": npi
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@config_bp.route("/appointment-types", methods=["POST"])
+def create_appointment_filter():
+    from app.services.appointment_filters import create_appointment_filter
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+
+    required = ["zoom_account_id", "openemr_type_id", "openemr_type_name"]
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    try:
+        entry = create_appointment_filter(
+            zoom_account_id=data["zoom_account_id"],
+            openemr_type_id=data["openemr_type_id"],
+            openemr_type_name=data["openemr_type_name"]
+        )
+        return jsonify({
+            "id": entry.id,
+            "openemr_type_id": entry.openemr_type_id,
+            "openemr_type_name": entry.openemr_type_name,
+            "created_at": entry.created_at.isoformat()
+        }), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@config_bp.route("/appointment-types", methods=["GET"])
+def list_appointment_filters():
+    from app.services.appointment_filters import get_appointment_filters
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    try:
+        filters = get_appointment_filters(zoom_account_id)
+        return jsonify({
+            "count": len(filters),
+            "appointment_types": [
+                {
+                    "id": f.id,
+                    "openemr_type_id": f.openemr_type_id,
+                    "openemr_type_name": f.openemr_type_name,
+                    "created_at": f.created_at.isoformat()
+                }
+                for f in filters
+            ]
+        }), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@config_bp.route("/appointment-types/<string:type_id>", methods=["DELETE"])
+def delete_appointment_filter(type_id: str):
+    from app.services.appointment_filters import delete_appointment_filter
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    try:
+        delete_appointment_filter(zoom_account_id, type_id)
+        return jsonify({
+            "status": "deleted",
+            "appointment_type_id": type_id
         }), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404

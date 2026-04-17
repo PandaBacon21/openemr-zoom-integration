@@ -86,9 +86,9 @@ def get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
     ).all()
 
 
-def delete_provider_mapping(zoom_account_id: str, mapping_id: int) -> None:
+def delete_provider_mapping(zoom_account_id: str, npi: str) -> None:
     """
-    Delete a provider mapping by ID.
+    Delete a provider mapping by npi.
     """
     account = ZoomAccount.query.filter_by(
         account_id=zoom_account_id, is_active=True
@@ -97,13 +97,13 @@ def delete_provider_mapping(zoom_account_id: str, mapping_id: int) -> None:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     mapping = ProviderMapping.query.filter_by(
-        id=mapping_id,
+        openemr_provider_npi=npi,
         zoom_account_id=account.id,
         is_active=True
     ).first()
     if not mapping:
-        raise ValueError(f"No active mapping found with id {mapping_id}")
+        raise ValueError(f"No active mapping found with NPI {npi}")
 
     db.session.delete(mapping)
     db.session.commit()
-    logger.info(f"Provider mapping {mapping_id} deleted")
+    logger.info(f"Provider mapping for NPI {npi} deleted")
