@@ -4,9 +4,12 @@ Lightweight Flask backend for linking Zoom account data with OpenEMR workflows.
 
 Current implemented areas:
 - Zoom account registration + deregistration
-- OpenEMR dynamic client registration + token verification checks
+- OpenEMR dynamic client registration + registration verification checks
 - Provider mapping management (OpenEMR provider <-> Zoom user)
-- Protected API endpoints via `X-API-Key`
+- Appointment type filter management
+- OpenEMR provider + appointment type lookup helpers
+- Zoom user lookup helper
+- Protected endpoints via `X-API-Key`
 - JWKS endpoint for per-account key usage
 
 ## Usage
@@ -31,7 +34,13 @@ cp .env.example .env
 - `OPENEMR_BASE_URL`
 - `OPENEMR_PUBLIC_URL`
 - `OPENEMR_FHIR_BASE_URL`
+- `OPENEMR_DB_USER`
+- `OPENEMR_DB_PASS`
+- `OPENEMR_DB_HOST`
+- `OPENEMR_DB_PORT`
+- `OPENEMR_DB_NAME`
 - `APP_PUBLIC_URL`
+- `APP_INTERNAL_URL`
 - `OPENEMR_SCOPES` (space-delimited SMART scopes)
 
 3. Install backend dependencies:
@@ -64,10 +73,16 @@ Configuration and registration (API key protected):
 Provider mapping management (API key protected):
 - `POST /config/providers`
 - `GET /config/providers?zoom_account_id=...`
-- `DELETE /config/providers/<mapping_id>?zoom_account_id=...`
+- `DELETE /config/providers/<npi>?zoom_account_id=...`
+
+Appointment filter management (API key protected):
+- `POST /config/appointment-types`
+- `GET /config/appointment-types?zoom_account_id=...`
+- `DELETE /config/appointment-types/<type_id>?zoom_account_id=...`
 
 OpenEMR and Zoom lookup helpers (API key protected):
 - `GET /openemr/providers?zoom_account_id=...`
+- `GET /openemr/appointment-types`
 - `GET /zoom/users?zoom_account_id=...`
 
 ## Testing
@@ -79,3 +94,7 @@ server/scripts/test.sh
 ```
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
+
+Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
+
+Latest run result in this workspace: `131 passed`.
