@@ -12,6 +12,14 @@ Current implemented areas:
 - Protected endpoints via `X-API-Key`
 - JWKS endpoint for per-account key usage
 
+## Internal Developer Reference
+
+- See [docs/internal/integration-reference.md](docs/internal/integration-reference.md) for:
+  - current data model field contracts
+  - webhook payload/signature contract
+  - OpenEMR appointment status code mapping notes
+  - migration and test coverage pointers
+
 ## Usage
 
 > **Note**
@@ -95,6 +103,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
+Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
 
-Latest run result in this workspace: `131 passed`.
+Latest run result in this workspace: `152 passed`.
