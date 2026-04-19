@@ -43,7 +43,6 @@ def get_practitioners(
     response.raise_for_status()
     data = response.json()
 
-    # Single resource fetch
     if practitioner_id:
         return [_normalize_practitioner(data)]
 

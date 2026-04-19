@@ -53,6 +53,8 @@ services:
 
       # Public HTTPS URL of OpenEMR
       OPENEMR_SETTING_site_addr_oath: ${OPENEMR_PUBLIC_URL}
+      # Webhook secret for OpenEMR -> Flask App
+      OPENEMR_WEBHOOK_SECRET: ${OPENEMR_WEBHOOK_SECRET}
     volumes:
       # Persist site data — includes SMART app registrations, uploaded files.
       # Backup this volume before any OpenEMR upgrade.
@@ -63,6 +65,8 @@ services:
       # Patch for bug and added delete method in OpenEMR Registration/De-Registration flow
       - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
       - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
+      # Patch for adding appointment event notifications
+      - ./patches/zoom_appointment_listener:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener:ro
     networks:
       - integration_net
     healthcheck:
@@ -130,10 +134,15 @@ services:
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
       APP_INTERNAL_URL: http://zoom-bridge:5000
+      # Webhook secret for OpenEMR -> Flask App
+      OPENEMR_WEBHOOK_SECRET: ${OPENEMR_WEBHOOK_SECRET}
     volumes:
       - ./server/instance:/app/instance
       - ./keys:/app/keys
       - ./server/logs:/app/logs
+
+      - ./server/migrations:/app/migrations
+      - ./server/alembic.ini:/app/alembic.ini
 
       # for dev only
       - ./server/app:/app/app

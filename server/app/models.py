@@ -38,6 +38,8 @@ class ZoomAccount(db.Model):
     # Per-account RSA keypair for SMART on FHIR private_key_jwt
     private_key_path = db.Column(db.String(512), nullable=True)
     kid = db.Column(db.String(256), nullable=True)
+    # For appointment time converstion
+    timezone = db.Column(db.String(64), nullable=False, default="America/New_York") 
 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -72,6 +74,7 @@ class ZoomAccount(db.Model):
             private_key_path: str | None = ...,
             kid: str | None = ...,
             key_version: int | None = ...,
+            timezone: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
 

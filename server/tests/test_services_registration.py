@@ -244,8 +244,38 @@ def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, m
     assert account.account_id == "acct-success"
     assert account.openemr_client_id == "openemr-client-id"
     assert account.kid == "zoomly-acct-success"
+    assert account.timezone == "America/New_York"
     assert account.openemr_registration_client_uri == "http://openemr.internal/oauth2/default/client/abc"
     assert stored is not None
+
+
+def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
+    with app.app_context():
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
+        monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(
+            registration,
+            "_register_with_openemr",
+            lambda account_id, contact_email: {
+                "client_id": "openemr-client-id",
+                "client_secret": "openemr-client-secret",
+                "registration_access_token": "registration-token",
+                "registration_client_uri": "https://openemr.public/oauth2/default/client/abc",
+            },
+        )
+
+        registration.register_zoom_account(
+            "acct-custom-tz",
+            "zoom-client-id",
+            "zoom-client-secret",
+            "webhook-secret",
+            "admin@example.com",
+            timezone="America/Los_Angeles",
+        )
+        stored = ZoomAccount.query.filter_by(account_id="acct-custom-tz").first()
+        assert stored is not None
+        assert stored.timezone == "America/Los_Angeles"
 
 
 def test_deregister_zoom_account_raises_when_missing(app):

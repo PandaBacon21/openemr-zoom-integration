@@ -35,6 +35,7 @@ def register():
         "zoom_client_secret":  "secret...",
         "zoom_webhook_secret": "webhook_secret...",
         "contact_email":       "admin@example.com"
+        "timezone": OPTIONAL - defaults to "America/New_York"
     }
 
     Responses:
@@ -68,6 +69,7 @@ def register():
             zoom_client_secret=data["zoom_client_secret"],
             zoom_webhook_secret=data["zoom_webhook_secret"],
             contact_email=data["contact_email"],
+            timezone=data.get("timezone", "America/New_York"),
         )
 
         return jsonify({
@@ -75,6 +77,7 @@ def register():
             "zoom_account_id": account.account_id,
             "openemr_client_id": account.openemr_client_id,
             "kid": account.kid,
+            "timezone": account.timezone, 
             "created_at": account.created_at.isoformat(),
         }), 201
 
@@ -137,6 +140,7 @@ def list_registrations():
                 "is_active": a.is_active,
                 "has_zoom_token": bool(a.zoom_access_token),
                 "has_openemr_token": bool(a.openemr_access_token),
+                "timezone": a.timezone,
                 "created_at": a.created_at.isoformat(),
                 "updated_at": a.updated_at.isoformat(),
             }
