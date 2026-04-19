@@ -51,6 +51,7 @@ def test_register_endpoint_success(client, monkeypatch):
         account_id="acct-1",
         openemr_client_id="openemr-client-id",
         kid="zoomly-acct-1",
+        timezone="America/New_York",
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     monkeypatch.setattr("app.blueprints.config.register_zoom_account", lambda **kwargs: fake_account)
@@ -73,6 +74,7 @@ def test_register_endpoint_success(client, monkeypatch):
         "zoom_account_id": "acct-1",
         "openemr_client_id": "openemr-client-id",
         "kid": "zoomly-acct-1",
+        "timezone": "America/New_York",
         "created_at": "2026-01-01T00:00:00+00:00",
     }
 
@@ -119,6 +121,71 @@ def test_register_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
     assert response.get_json() == {"error": "Registration failed", "detail": "openemr timeout"}
 
 
+def test_register_endpoint_passes_timezone_to_service(client, monkeypatch):
+    captured = {}
+
+    def fake_register(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            account_id="acct-1",
+            openemr_client_id="openemr-client-id",
+            kid="zoomly-acct-1",
+            timezone=kwargs["timezone"],
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("app.blueprints.config.register_zoom_account", fake_register)
+
+    response = client.post(
+        "/config/register",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "zoom_client_id": "client-id",
+            "zoom_client_secret": "client-secret",
+            "zoom_webhook_secret": "webhook-secret",
+            "contact_email": "admin@example.com",
+            "timezone": "America/Chicago",
+        },
+    )
+
+    assert response.status_code == 201
+    assert captured["timezone"] == "America/Chicago"
+    assert response.get_json()["timezone"] == "America/Chicago"
+
+
+def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
+    captured = {}
+
+    def fake_register(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            account_id="acct-1",
+            openemr_client_id="openemr-client-id",
+            kid="zoomly-acct-1",
+            timezone=kwargs["timezone"],
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("app.blueprints.config.register_zoom_account", fake_register)
+
+    response = client.post(
+        "/config/register",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "zoom_client_id": "client-id",
+            "zoom_client_secret": "client-secret",
+            "zoom_webhook_secret": "webhook-secret",
+            "contact_email": "admin@example.com",
+        },
+    )
+
+    assert response.status_code == 201
+    assert captured["timezone"] == "America/New_York"
+    assert response.get_json()["timezone"] == "America/New_York"
+
+
 def test_deregister_endpoint_success(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.deregister_zoom_account", lambda account_id: None)
     response = client.delete("/config/register/acct-1", headers=API_HEADERS)
@@ -159,6 +226,7 @@ def test_list_registrations_returns_summary(client, app):
                 kid="zoomly-acct-1",
                 zoom_access_token="zoom-token",
                 openemr_access_token="openemr-token",
+                timezone="America/Denver",
                 is_active=True,
             )
         )
@@ -171,6 +239,7 @@ def test_list_registrations_returns_summary(client, app):
                 openemr_client_id="openemr-client-id-2",
                 private_key_path="/tmp/keys/acct-2/private.pem",
                 kid="zoomly-acct-2",
+                timezone="America/New_York",
                 is_active=False,
             )
         )
@@ -191,12 +260,14 @@ def test_list_registrations_returns_summary(client, app):
     assert acct1["is_active"] is True
     assert acct1["has_zoom_token"] is True
     assert acct1["has_openemr_token"] is True
+    assert acct1["timezone"] == "America/Denver"
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
 
     assert acct2["is_active"] is False
     assert acct2["has_zoom_token"] is False
     assert acct2["has_openemr_token"] is False
+    assert acct2["timezone"] == "America/New_York"
 
 
 def test_verify_registration_returns_404_for_unknown_account(client):
