@@ -189,6 +189,7 @@ def create_provider_mapping():
             zoom_account_id=data["zoom_account_id"],
             openemr_fhir_id=data["openemr_fhir_id"],
             openemr_provider_npi=data["openemr_provider_npi"],
+            openemr_provider_id=data.get("openemr_provider_id"), 
             openemr_provider_name=data.get("openemr_provider_name"),
             zoom_user_id=data["zoom_user_id"],
             zoom_user_email=data["zoom_user_email"],
@@ -225,6 +226,7 @@ def list_provider_mappings():
                     "id": m.id,
                     "openemr_fhir_id": m.openemr_fhir_id,
                     "openemr_provider_npi": m.openemr_provider_npi,
+                    "openemr_provider_id": m.openemr_provider_id,
                     "openemr_provider_name": m.openemr_provider_name,
                     "zoom_user_id": m.zoom_user_id,
                     "zoom_user_email": m.zoom_user_email,
@@ -240,18 +242,18 @@ def list_provider_mappings():
         return jsonify({"error": str(e)}), 500
 
 
-@config_bp.route("/providers/<string:npi>", methods=["DELETE"])
-def delete_provider_mapping(npi: str):
+@config_bp.route("/providers/<string:openemr_provider_id>", methods=["DELETE"])
+def delete_provider_mapping(openemr_provider_id: str):
     from app.services.providers import delete_provider_mapping
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
     try:
-        delete_provider_mapping(zoom_account_id, npi)
+        delete_provider_mapping(zoom_account_id, openemr_provider_id)
         return jsonify({
             "status": "deleted",
-            "npi": npi
+            "openemr_provider_id": openemr_provider_id
         }), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404

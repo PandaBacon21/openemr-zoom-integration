@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from flask import current_app
 
-from app.extensions import db, get_openemr_db_engine
 from app.models import ZoomAccount, ProviderMapping, AppointmentTypeFilter
 
 logger = logging.getLogger(__name__)
@@ -25,46 +24,6 @@ class AppointmentMatch:
     zoom_account: ZoomAccount
     provider_mapping: ProviderMapping
     payload: dict
-
-
-# ---------------------------------------------------------------------------
-# OpenEMR DB helpers
-# ---------------------------------------------------------------------------
-
-def _lookup_npi_for_provider_id(provider_id: int) -> str | None:
-    """
-    Resolve an OpenEMR users.id integer to the provider's NPI string.
-
-    Uses the direct MariaDB connection (same engine as get_appointment_types())
-    because this value is not exposed through the FHIR API.
-
-    Args:
-        provider_id: The integer from payload['provider_id'] (= users.id = pc_aid)
-
-    Returns:
-        NPI string if found, None if the user doesn't exist or has no NPI set.
-    """
-    engine = get_openemr_db_engine()
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT npi FROM users WHERE id = :uid LIMIT 1"),
-            {"uid": provider_id}
-        ).fetchone()
-
-    if row is None:
-        logger.warning(
-            f"appointment_processor | No user found for provider_id={provider_id}"
-        )
-        return None
-
-    npi = row.npi
-    if not npi:
-        logger.warning(
-            f"appointment_processor | User id={provider_id} has no NPI set"
-        )
-        return None
-
-    return npi
 
 
 # ---------------------------------------------------------------------------
@@ -97,18 +56,10 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
     category_id = payload.get("category_id")
     eid = payload.get("eid")
 
-    # --- 1. Resolve provider_id → NPI ---
+    # --- 1. Resolve provider_id → ProviderMapping ---
     if not provider_id:
         logger.info(
             f"appointment_processor | eid={eid} has no provider_id, dropping"
-        )
-        return []
-
-    npi = _lookup_npi_for_provider_id(provider_id)
-    if not npi:
-        logger.info(
-            f"appointment_processor | eid={eid} provider_id={provider_id} "
-            "resolved to no NPI, dropping"
         )
         return []
 
@@ -117,13 +68,13 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
     # (e.g. a multi-tenant demo). We handle all of them.
     mappings = (
         ProviderMapping.query
-        .filter_by(openemr_provider_npi=npi, is_active=True)
+        .filter_by(openemr_provider_id=str(provider_id), is_active=True)
         .all()
     )
 
     if not mappings:
         logger.info(
-            f"appointment_processor | eid={eid} npi={npi} "
+            f"appointment_processor | eid={eid} provider_id={provider_id} "
             "has no active provider mappings, dropping"
         )
         return []

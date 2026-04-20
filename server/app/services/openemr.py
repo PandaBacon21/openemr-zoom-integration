@@ -164,6 +164,25 @@ def _normalize_practitioner(resource: dict) -> dict:
             email = telecom.get("value")
             break
 
+    # Look up users.id from OpenEMR DB using NPI.
+    # This is the integer used as pc_aid / form_provider in appointment events
+    # and needs to be stored on ProviderMapping for the webhook hot path.
+    users_id = None
+    if npi:
+        try:
+            from sqlalchemy import text
+            from app.extensions import get_openemr_db_engine
+            engine = get_openemr_db_engine()
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT id FROM users WHERE npi = :npi LIMIT 1"),
+                    {"npi": npi}
+                ).fetchone()
+                if row:
+                    users_id = row.id
+        except Exception as e:
+            logger.warning(f"_normalize_practitioner | Failed to look up users.id for npi={npi}: {e}")
+
     return {
         "fhir_id": resource.get("id"),
         "active": resource.get("active", False),
@@ -172,6 +191,7 @@ def _normalize_practitioner(resource: dict) -> dict:
         "full_name": f"{' '.join(prefix)} {' '.join(given)} {family}".strip(),
         "npi": npi,
         "email": email,
+        "users_id": users_id,
     }
 
 

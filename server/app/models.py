@@ -93,6 +93,7 @@ class ProviderMapping(db.Model):
     # OpenEMR side
     openemr_fhir_id = db.Column(db.String(128), nullable=False)
     openemr_provider_npi = db.Column(db.String(10), nullable=False)
+    openemr_provider_id = db.Column(db.String(10), nullable=True)
     openemr_provider_name = db.Column(db.String(256), nullable=True)
  
     # Zoom side
@@ -118,6 +119,7 @@ class ProviderMapping(db.Model):
             zoom_account_id: int | None = ...,
             openemr_fhir_id: str | None = ...,
             openemr_provider_npi: str | None = ...,
+            openemr_provider_id: int | None = ...,
             openemr_provider_name: str | None = ...,
             zoom_user_id: str | None = ...,
             zoom_user_email: str | None = ...,

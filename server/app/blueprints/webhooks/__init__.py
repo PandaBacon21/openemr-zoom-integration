@@ -175,7 +175,7 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
                 zoom_start_url=meeting_data["start_url"],
                 zoom_join_url=meeting_data["join_url"],
                 openemr_appointment_id=str(eid),
-                openemr_provider_id=str(mapping.id),
+                openemr_provider_id=str(mapping.openemr_provider_id) if mapping.openemr_provider_id else str(payload.get("provider_id")),
                 openemr_appt_status=payload.get("appt_status"),
                 status="created",
             )

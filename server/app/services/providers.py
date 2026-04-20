@@ -9,6 +9,7 @@ def create_provider_mapping(
     zoom_account_id: str,
     openemr_fhir_id: str,
     openemr_provider_npi: str,
+    openemr_provider_id: int | None,
     openemr_provider_name: str | None,
     zoom_user_id: str,
     zoom_user_email: str,
@@ -52,6 +53,7 @@ def create_provider_mapping(
         zoom_account_id=account.id,
         openemr_fhir_id=openemr_fhir_id,
         openemr_provider_npi=openemr_provider_npi,
+        openemr_provider_id=openemr_provider_id, 
         openemr_provider_name=openemr_provider_name,
         zoom_user_id=zoom_user_id,
         zoom_user_email=zoom_user_email,
@@ -86,7 +88,7 @@ def get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
     ).all()
 
 
-def delete_provider_mapping(zoom_account_id: str, npi: str) -> None:
+def delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> None:
     """
     Delete a provider mapping by npi.
     """
@@ -97,13 +99,13 @@ def delete_provider_mapping(zoom_account_id: str, npi: str) -> None:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     mapping = ProviderMapping.query.filter_by(
-        openemr_provider_npi=npi,
+        openemr_provider_id=openemr_provider_id,
         zoom_account_id=account.id,
         is_active=True
     ).first()
     if not mapping:
-        raise ValueError(f"No active mapping found with NPI {npi}")
+        raise ValueError(f"No active mapping found with NPI {openemr_provider_id}")
 
     db.session.delete(mapping)
     db.session.commit()
-    logger.info(f"Provider mapping for NPI {npi} deleted")
+    logger.info(f"Provider mapping for NPI {openemr_provider_id} deleted")
