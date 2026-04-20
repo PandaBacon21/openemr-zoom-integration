@@ -26,6 +26,7 @@ def _create_mapping(account: ZoomAccount, *, npi: str, is_active: bool = True) -
         zoom_account_id=account.id,
         openemr_fhir_id=f"fhir-{npi}",
         openemr_provider_npi=npi,
+        openemr_provider_id=f"id-{npi}",
         openemr_provider_name=f"Provider {npi}",
         zoom_user_id=f"user-{npi}",
         zoom_user_email=f"user-{npi}@example.com",
@@ -45,6 +46,7 @@ def test_create_provider_mapping_rejects_basic_zoom_license(app):
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
+                openemr_provider_id=10,
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="u-1",
                 zoom_user_email="jane@example.com",
@@ -60,6 +62,7 @@ def test_create_provider_mapping_requires_active_registration(app):
                 zoom_account_id="missing",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
+                openemr_provider_id=10,
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="u-1",
                 zoom_user_email="jane@example.com",
@@ -78,6 +81,7 @@ def test_create_provider_mapping_rejects_duplicate_npi_for_account(app):
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-2",
                 openemr_provider_npi="1234567890",
+                openemr_provider_id=10,
                 openemr_provider_name="Dr New",
                 zoom_user_id="u-2",
                 zoom_user_email="new@example.com",
@@ -95,6 +99,7 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
             zoom_account_id="acct-1",
             openemr_fhir_id="pract-2",
             openemr_provider_npi="1234567890",
+            openemr_provider_id=10,
             openemr_provider_name="Dr New",
             zoom_user_id="u-2",
             zoom_user_email="new@example.com",
@@ -105,6 +110,7 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
         rows = ProviderMapping.query.filter_by(zoom_account_id=account.id).all()
 
     assert mapping.openemr_provider_npi == "1234567890"
+    assert mapping.openemr_provider_id == "10"
     assert mapping.zoom_user_email == "new@example.com"
     assert len(rows) == 2
 
@@ -134,7 +140,7 @@ def test_delete_provider_mapping_deletes_matching_mapping(app):
         account = _create_account("acct-1", is_active=True)
         mapping = _create_mapping(account, npi="1234567890", is_active=True)
 
-        providers.delete_provider_mapping("acct-1", mapping.openemr_provider_npi)
+        providers.delete_provider_mapping("acct-1", mapping.openemr_provider_id)
         deleted = ProviderMapping.query.filter_by(id=mapping.id).first()
 
     assert deleted is None

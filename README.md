@@ -105,4 +105,4 @@ This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-ca
 
 Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
 
-Latest run result in this workspace: `152 passed`.
+Latest run result in this workspace: `156 passed`.

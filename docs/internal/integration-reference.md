@@ -43,6 +43,7 @@ Relationships:
 | `zoom_account_id` | `Integer(FK)` | yes | FK to `zoom_accounts.id` |
 | `openemr_fhir_id` | `String(128)` | yes | OpenEMR practitioner FHIR id |
 | `openemr_provider_npi` | `String(10)` | yes | Provider NPI used by filter pipeline |
+| `openemr_provider_id` | `String(10)` | no | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
 | `openemr_provider_name` | `String(256)` | no | Provider display name |
 | `zoom_user_email` | `String(256)` | yes | Zoom host email |
 | `zoom_user_name` | `String(256)` | no | Zoom display name |
@@ -146,9 +147,13 @@ Expected payload fields:
 
 Current bridge behavior:
 - Validates signature and minimal payload shape
-- Filters by provider mapping and appointment type allowlist
-- Returns `{"status":"accepted"}` or `{"status":"dropped"}`  
-Meeting creation/deletion orchestration is staged for later workflow steps.
+- Filters by `ProviderMapping.openemr_provider_id` and appointment type allowlist
+- Creates Zoom meeting(s) and stores `MeetingRecord` + `MeetingPatient`
+- Returns one of:
+  - `{"status":"dropped"}` when no mapping/filter match exists
+  - `{"status":"created"}` on full success
+  - `{"status":"partial"}` when some accounts succeed and others fail
+  - `{"status":"error"}` when all matched accounts fail
 
 ## OpenEMR Appointment Status (`appt_status`) Mapping
 
@@ -181,6 +186,8 @@ Current migration chain:
 - `a1b2c3d4e5f6_add_timezone_to_zoom_accounts`
 - `41740385eb41_meeting_records`
 - `9f2c1a7d4b6e_create_meeting_patients_table`
+- `bc1e2fb3b8be_add_openemr_provider_id_to_provider_mappings`
+- `21edaf7095b0_change_openemr_provider_id_to_string_on_provider_mappings`
 
 ## Test Coverage Pointers
 
@@ -191,3 +198,4 @@ Primary files for this integration slice:
 - `server/tests/test_blueprint_config.py`
 - `server/tests/test_migration_timezone.py`
 - `server/tests/test_migration_meeting_records.py`
+- `server/tests/test_migration_provider_mappings.py`

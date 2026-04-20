@@ -124,7 +124,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
                 payload=payload,
             )
         ],
@@ -181,8 +181,16 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
     monkeypatch.setattr(
         "app.blueprints.webhooks.filter_appointment_event",
         lambda payload: [
-            SimpleNamespace(zoom_account=account_1_stub, provider_mapping=SimpleNamespace(id=10), payload=payload),
-            SimpleNamespace(zoom_account=account_2_stub, provider_mapping=SimpleNamespace(id=11), payload=payload),
+            SimpleNamespace(
+                zoom_account=account_1_stub,
+                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                payload=payload,
+            ),
+            SimpleNamespace(
+                zoom_account=account_2_stub,
+                provider_mapping=SimpleNamespace(id=11, openemr_provider_id=11),
+                payload=payload,
+            ),
         ],
     )
 
@@ -226,7 +234,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
                 payload=payload,
             )
         ],
