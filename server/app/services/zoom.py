@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import base64
 import time
 import logging
@@ -8,6 +10,10 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import ZoomAccount
+
+if TYPE_CHECKING: 
+    from .appointment_processor import AppointmentMatch
+
 
 logger = logging.getLogger(__name__)
 
@@ -213,3 +219,171 @@ def get_zoom_users(
         }
         for user in data.get("users", [])
     ]
+
+
+def create_zoom_meeting(match: AppointmentMatch) -> dict:
+    """
+    Create a scheduled Zoom meeting for a matched appointment event.
+
+    Uses the provider's Zoom user ID as the meeting host. Start time is
+    built from the appointment date/time and the account's configured timezone.
+
+    Args:
+        match: AppointmentMatch containing zoom_account, provider_mapping,
+               and the validated appointment payload.
+
+    Returns:
+        dict with keys:
+            meeting_id  — Zoom meeting ID (integer as string)
+            start_url   — Host/alternative host start URL (expires 90 days for API users)
+            join_url    — Patient join URL (does not expire)
+            topic       — Meeting topic as created in Zoom
+
+    Raises:
+        requests.HTTPError: If the Zoom API returns a non-2xx response.
+        ValueError: If required payload fields are missing.
+    """
+    account = match.zoom_account
+    mapping = match.provider_mapping
+    payload = match.payload
+
+    # --- 1. Validate required fields ---
+    appointment_date = payload.get("appointment_date")  # YYYYMMDD
+    appointment_time = payload.get("appointment_time")  # HH:MM
+    if not appointment_date or not appointment_time:
+        raise ValueError(
+            f"Missing appointment_date or appointment_time in payload for eid={payload.get('eid')}"
+        )
+
+    # --- 2. Build start_time string ---
+    # Zoom expects ISO 8601 local time alongside a separate timezone field:
+    # "start_time": "2026-04-20T10:00:00", "timezone": "America/Denver"
+    # We do NOT convert to UTC — Zoom handles the conversion using the timezone field.
+    start_dt = None
+    for fmt in ("%Y%m%d %H:%M", "%Y-%m-%d %H:%M"):
+        try:
+            start_dt = datetime.strptime(
+                f"{appointment_date} {appointment_time}",
+                fmt
+            )
+            break
+        except ValueError:
+            continue
+
+    if start_dt is None:
+        raise ValueError(
+            f"Could not parse appointment datetime for eid={payload.get('eid')}: "
+            f"date={appointment_date} time={appointment_time}"
+        )
+    start_time_str = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    
+        # --- 3. Build meeting topic ---
+    # Format: "Telehealth: {provider_name} | {patient_last_name} | {title}"
+    # Falls back gracefully if any component is missing.
+    #
+    # Provider name comes from ProviderMapping.openemr_provider_name.
+    # Patient last name requires a FHIR lookup using pid from the payload.
+    # Title comes from payload['title'] (form_title from OpenEMR).
+ 
+    provider_name = mapping.openemr_provider_name or "Provider"
+ 
+    # FHIR Patient lookup for last name
+    patient_last_name = None
+    pid = payload.get("pid")
+    if pid:
+        try:
+            from app.services.openemr import get_patient
+            patient = get_patient(account, pid)
+            if patient:
+                patient_last_name = patient.get("last_name")
+        except Exception as e:
+            # Non-fatal — degrade gracefully to topic without patient name
+            logger.warning(
+                f"zoom.create_meeting | FHIR patient lookup failed for pid={pid} "
+                f"eid={payload.get('eid')}: {e}"
+            )
+ 
+    title = payload.get("title")
+ 
+    # Build topic components, filtering out any that are empty
+    topic_parts = ["Telehealth"]
+    if provider_name:
+        topic_parts.append(provider_name)
+    if patient_last_name:
+        topic_parts.append(patient_last_name)
+    if title:
+        topic_parts.append(title)
+ 
+    topic = " | ".join(topic_parts)
+ 
+    # Zoom topic max length is 200 characters — truncate if needed
+    if len(topic) > 200:
+        topic = topic[:197] + "..."
+ 
+
+    # --- 4. Build duration ---
+    # Use duration from payload if present, otherwise default to 30 minutes.
+    duration_minutes = payload.get("duration_minutes", 30)
+    if not isinstance(duration_minutes, int) or duration_minutes <= 0:
+        duration_minutes = 30
+
+    # --- 5. Build Zoom API payload ---
+    meeting_payload = {
+        "topic": topic,
+        "agenda": payload.get("comments") or "",
+        # type 2 = scheduled meeting (not instant, not recurring)
+        "type": 2,
+        "start_time": start_time_str,
+        "duration": duration_minutes,
+        # Account timezone — set during registration, defaults to America/New_York if not configured at app registration.
+        "timezone": account.timezone,
+        "settings": {
+            "host_video": False,
+            "participant_video": False,
+            "join_before_host": False,
+            "mute_upon_entry": True,
+            "waiting_room": True,
+            "waiting_room_options": {
+                "mode": "custom",
+                "who_goes_to_waiting_room": "users_not_in_account"
+            },
+        },
+    }
+
+    # --- 6. Add alternative host if set on the mapping ---
+    # Currently always None until the config UI is built.
+    # When populated, Zoom sends them a host link and they can start the meeting - Such as an MA or Nurse rooming the patient for the provider.
+    if mapping.default_alternative_host_email:
+        meeting_payload["settings"]["alternative_hosts"] = (
+            mapping.default_alternative_host_email
+        )
+
+    logger.info(
+        f"zoom.create_meeting | Creating meeting for eid={payload.get('eid')} "
+        f"provider={mapping.zoom_user_id} start={start_time_str} "
+        f"tz={account.timezone} duration={duration_minutes}min"
+    )
+
+    # --- 7. Call Zoom API ---
+    response = make_zoom_api_request(
+        method="POST",
+        endpoint=f"/users/{mapping.zoom_user_id}/meetings",
+        zoom_account=account,
+        json=meeting_payload,
+    )
+
+    meeting_id = str(response.get("id", ""))
+    start_url = response.get("start_url", "")
+    join_url = response.get("join_url", "")
+
+    logger.info(
+        f"zoom.create_meeting | Meeting created: id={meeting_id} "
+        f"eid={payload.get('eid')}"
+    )
+
+    return {
+        "meeting_id": meeting_id,
+        "start_url": start_url,
+        "join_url": join_url,
+        "topic": response.get("topic", topic),
+    }

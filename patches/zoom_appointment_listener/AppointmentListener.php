@@ -29,7 +29,7 @@ class AppointmentListener
 
     /**
      * Shared secret for HMAC-SHA256 request signing.
-     * Must match WEBHOOK_SECRET in Flask app config.
+     * Must match OPENEMR_WEBHOOK_SECRET in Flask app config.
      * Pulled from environment so it never lives in source code.
      */
     private function getWebhookSecret(): string
@@ -63,6 +63,14 @@ class AppointmentListener
             return;
         }
 
+        // form_allday signals an all-day block (vacation, holiday, etc.).
+        // These are never telehealth appointments — drop immediately.
+        $isAllDay = !empty($postData['form_allday']) && $postData['form_allday'] === '1';
+        if ($isAllDay) {
+            error_log('[ZoomAppointmentListener] All-day event, skipping eid=' . $eid);
+            return;
+        }
+
         // form_provider can be a scalar or array (multi-provider appointments).
         // Normalize to array and take the first value for our 1:1 meeting model.
         $rawProvider = $postData['form_provider'] ?? null;
@@ -75,24 +83,35 @@ class AppointmentListener
         // form_date is already normalized to YYYYMMDD by add_edit_event.php line 81.
         $appointmentDate = $postData['form_date'] ?? null;
 
-        // form_hour is the hour component; form_minute is the minute.
-        // Combine into HH:MM for readability.
+        // form_hour + form_minute give us the start time.
+        // Both are padded to 2 digits and combined into HH:MM.
         $hour   = isset($postData['form_hour'])   ? str_pad((int)$postData['form_hour'],   2, '0', STR_PAD_LEFT) : '00';
         $minute = isset($postData['form_minute']) ? str_pad((int)$postData['form_minute'], 2, '0', STR_PAD_LEFT) : '00';
         $appointmentTime = "{$hour}:{$minute}";
+
+        // form_duration is in minutes. Falls back to 30 if not set.
+        // OpenEMR stores as seconds (duration * 60) but the form field is minutes.
+        $durationMinutes = !empty($postData['form_duration']) ? abs((int)$postData['form_duration']) : 30;
 
         // --- 2. Build the payload ---
         $payload = [
             'event'            => 'appointment.set',
             'eid'              => (int)$eid,
-            'pid'              => !empty($postData['form_pid'])      ? (int)$postData['form_pid']      : null,
+            'pid'              => !empty($postData['form_pid'])        ? (int)$postData['form_pid']        : null,
             'provider_id'      => $providerId,
-            'category_id'      => !empty($postData['form_category']) ? (int)$postData['form_category'] : null,
+            'category_id'      => !empty($postData['form_category'])   ? (int)$postData['form_category']   : null,
             'appointment_date' => $appointmentDate,
             'appointment_time' => $appointmentTime,
-            'appt_status'      => $postData['form_apptstatus'] ?? null,
-            'facility_id'      => !empty($postData['facility'])      ? (int)$postData['facility']      : null,
-            'comments'         => $postData['form_comments']         ?? null,
+            'duration_minutes' => $durationMinutes,
+            'appt_status'      => $postData['form_apptstatus']         ?? null,
+            'facility_id'      => !empty($postData['facility'])        ? (int)$postData['facility']        : null,
+            // form_title is the appointment reason/chief complaint.
+            // Used to populate the Zoom meeting topic.
+            'title'            => !empty($postData['form_title'])      ? trim($postData['form_title'])      : null,
+            // form_room is the exam room assignment.
+            // Useful for the rooming workflow (MA/nurse alternative host flow).
+            'room'             => !empty($postData['form_room'])       ? trim($postData['form_room'])       : null,
+            'comments'         => !empty($postData['form_comments'])   ? trim($postData['form_comments'])   : null,
             // Timestamp lets Flask detect stale/replayed events if needed.
             'fired_at'         => (new \DateTime('now', new \DateTimeZone('UTC')))->format(\DateTime::ATOM),
         ];

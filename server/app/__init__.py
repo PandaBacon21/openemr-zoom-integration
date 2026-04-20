@@ -47,7 +47,7 @@ def _init_extensions(app: Flask) -> None:
     with app.app_context():
         from . import models
 
-        db.create_all()
+        # db.create_all()
 
 def _init_scheduler(app: Flask) -> None:
     import os

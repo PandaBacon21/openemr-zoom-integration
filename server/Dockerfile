@@ -20,9 +20,12 @@ RUN uv sync --frozen --no-dev
 # Copy the rest of the application code.
 COPY . .
 
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 # Create directories used by mounted volumes.
 RUN mkdir -p /app/instance /app/keys /app/logs
 
 EXPOSE 5000
 
-CMD ["uv", "run", "run.py"]
+CMD ["./entrypoint.sh"]

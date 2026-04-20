@@ -5,6 +5,9 @@ import json
 from flask import Blueprint, current_app, request
 
 from app.services.appointment_processor import filter_appointment_event
+from app.services.zoom import create_zoom_meeting
+from app.extensions import db
+from app.models import MeetingRecord, MeetingPatient
 
 webhooks_bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
 
@@ -118,8 +121,8 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
     """
     Orchestrates the appointment event pipeline:
       S4-03: Filter — check provider mapping + appointment type mapping  ✓
-      S4-04: Zoom API — create meeting with provider as host
-      S4-05: Store MeetingRecord
+      S4-04: Zoom API — create meeting with provider as host             ✓
+      S4-05: Store MeetingRecord + MeetingPatient                        ✓
       S4-06: Error handling
       S4-07: Write AuditLog entry
 
@@ -138,21 +141,108 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
         current_app.logger.info(
             f"webhooks.openemr | eid={eid} dropped — no matching account/provider/type"
         )
-        # 200 not 404 — a drop is an expected outcome, not an error.
-        # Returning 4xx would cause OpenEMR's PHP to log cURL errors on
-        # every non-matching appointment, which is noise.
         return {"status": "dropped", "eid": eid}, 200
 
     current_app.logger.info(
         f"webhooks.openemr | eid={eid} matched {len(matches)} account(s), proceeding"
     )
-
-    # S4-04 through S4-07 will iterate matches here
-    # Stub response until next sprint tasks are complete
+    created_meetings = []
+    errors = []
+ 
+    for match in matches:
+        account = match.zoom_account
+        mapping = match.provider_mapping
+ 
+        # S4-04: Create Zoom meeting
+        try:
+            meeting_data = create_zoom_meeting(match)
+        except Exception as e:
+            current_app.logger.error(
+                f"webhooks.openemr | eid={eid} account={account.account_id} "
+                f"Zoom meeting creation failed: {e}"
+            )
+            errors.append({
+                "account_id": account.account_id,
+                "error": str(e)
+            })
+            continue
+ 
+        # S4-05: Store MeetingRecord + MeetingPatient
+        try:
+            meeting_record = MeetingRecord(
+                zoom_account_id=account.id,
+                zoom_meeting_id=meeting_data["meeting_id"],
+                zoom_start_url=meeting_data["start_url"],
+                zoom_join_url=meeting_data["join_url"],
+                openemr_appointment_id=str(eid),
+                openemr_provider_id=str(mapping.openemr_provider_id) if mapping.openemr_provider_id else str(payload.get("provider_id")),
+                openemr_appt_status=payload.get("appt_status"),
+                status="created",
+            )
+            db.session.add(meeting_record)
+            # Flush to get meeting_record.id before creating MeetingPatient
+            db.session.flush()
+ 
+            # Create MeetingPatient — one row for now, supports multiple later
+            pid = payload.get("pid")
+            if pid:
+                meeting_patient = MeetingPatient(
+                    meeting_record_id=meeting_record.id,
+                    openemr_patient_id=str(pid),
+                )
+                db.session.add(meeting_patient)
+ 
+            db.session.commit()
+ 
+            current_app.logger.info(
+                f"webhooks.openemr | eid={eid} account={account.account_id} "
+                f"MeetingRecord created id={meeting_record.id} "
+                f"zoom_meeting_id={meeting_data['meeting_id']}"
+            )
+ 
+            created_meetings.append({
+                "account_id": account.account_id,
+                "zoom_meeting_id": meeting_data["meeting_id"],
+                "zoom_start_ulr": meeting_data["start_url"],
+                "zoom_join_url": meeting_data["join_url"],
+                "meeting_record_id": meeting_record.id,
+            })
+ 
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(
+                f"webhooks.openemr | eid={eid} account={account.account_id} "
+                f"DB write failed: {e}"
+            )
+            errors.append({
+                "account_id": account.account_id,
+                "error": str(e)
+            })
+            continue
+ 
+    # Build response
+    if not created_meetings and errors:
+        # All matches failed
+        return {
+            "status": "error",
+            "eid": eid,
+            "errors": errors
+        }, 500
+ 
+    if created_meetings and errors:
+        # Partial success — some matches succeeded, some failed
+        return {
+            "status": "partial",
+            "eid": eid,
+            "created": created_meetings,
+            "errors": errors
+        }, 207
+ 
+    # Full success
     return {
-        "status": "accepted",
+        "status": "created",
         "eid": eid,
-        "matched_accounts": [m.zoom_account.account_id for m in matches]
+        "created": created_meetings,
     }, 200
 
 

@@ -84,28 +84,34 @@ class ZoomAccount(db.Model):
 
 class ProviderMapping(db.Model):
     __tablename__ = "provider_mappings"
-
+ 
     id = db.Column(db.Integer, primary_key=True)
     zoom_account_id = db.Column(
         db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
     )
-
+ 
     # OpenEMR side
     openemr_fhir_id = db.Column(db.String(128), nullable=False)
     openemr_provider_npi = db.Column(db.String(10), nullable=False)
-    openemr_provider_name = db.Column(db.String(256), nullable=True)    
-
+    openemr_provider_id = db.Column(db.String(10), nullable=True)
+    openemr_provider_name = db.Column(db.String(256), nullable=True)
+ 
     # Zoom side
     zoom_user_email = db.Column(db.String(256), nullable=False)
     zoom_user_name = db.Column(db.String(256), nullable=True)
     zoom_user_id = db.Column(db.String(128), nullable=True)
     zoom_user_type = db.Column(db.Integer, nullable=True)
-
+ 
+    # Default alternative host for meetings created for this provider.
+    # Nullable — (not yet built).
+    default_alternative_host_email = db.Column(db.String(256), nullable=True)
+ 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+ 
     if TYPE_CHECKING:
         def __init__(
             self,
@@ -113,17 +119,19 @@ class ProviderMapping(db.Model):
             zoom_account_id: int | None = ...,
             openemr_fhir_id: str | None = ...,
             openemr_provider_npi: str | None = ...,
+            openemr_provider_id: int | None = ...,
             openemr_provider_name: str | None = ...,
             zoom_user_id: str | None = ...,
             zoom_user_email: str | None = ...,
             zoom_user_name: str | None = ...,
             zoom_user_type: int | None = ...,
+            default_alternative_host_email: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
-
+ 
     def __repr__(self):
         return f"<ProviderMapping {self.openemr_provider_npi} → {self.zoom_user_email}>"
-
+ 
 
 class AppointmentTypeFilter(db.Model):
     __tablename__ = "appointment_type_filters"
@@ -156,25 +164,36 @@ class AppointmentTypeFilter(db.Model):
 
 class MeetingRecord(db.Model):
     __tablename__ = "meeting_records"
-
+ 
     id = db.Column(db.Integer, primary_key=True)
     zoom_account_id = db.Column(
         db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
     )
-
+ 
     # Zoom side
     zoom_meeting_id = db.Column(db.String(128), unique=True, nullable=False)
-    zoom_meeting_url = db.Column(db.String(512), nullable=True)
-
+    # start_url is for the host or alternative host — expires after 90 days for API users
+    zoom_start_url = db.Column(db.String(1024), nullable=True)
+    # join_url is for the patient — does not expire
+    zoom_join_url = db.Column(db.String(1024), nullable=True)
+ 
+    # Alternative host — nullable until config UI is built
+    # Populated from ProviderMapping.default_alternative_host_email at creation
+    # time once that flow is implemented
+    alternative_host_email = db.Column(db.String(256), nullable=True)
+ 
     # OpenEMR side
     openemr_appointment_id = db.Column(db.String(128), nullable=False)
     openemr_provider_id = db.Column(db.String(128), nullable=False)
-    openemr_patient_id = db.Column(db.String(128), nullable=False)
-
+ 
+    # Mirrors the OpenEMR apptstat option_id (e.g. '^' pending, '@' arrived,
+    # 'x' canceled). Updated when OpenEMR fires subsequent appointment events.
+    openemr_appt_status = db.Column(db.String(16), nullable=True)
+ 
     # Status progression:
-    # created → note_received → note_written → completed → error
+    # created → note_received → note_written → completed → error | cancelled
     status = db.Column(db.String(64), default="created", nullable=False)
-
+ 
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
@@ -184,15 +203,60 @@ class MeetingRecord(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
-
+ 
     # Relationships
+    patients = db.relationship(
+        "MeetingPatient", backref="meeting_record",
+        lazy=True, cascade="all, delete-orphan"
+    )
     clinical_note = db.relationship(
         "ClinicalNoteRecord", backref="meeting_record",
         lazy=True, uselist=False, cascade="all, delete-orphan"
     )
 
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            zoom_account_id: int | None = ...,
+            zoom_meeting_id: str | None = ...,
+            zoom_start_url: str | None = ...,
+            zoom_join_url: str | None = ...,
+            alternative_host_email: str | None = ...,
+            openemr_appointment_id: str | None = ...,
+            openemr_provider_id: str | None = ...,
+            openemr_appt_status: str | None = ...,
+            status: str | None = ...,
+        ) -> None: ...
+ 
     def __repr__(self):
         return f"<MeetingRecord zoom={self.zoom_meeting_id} appt={self.openemr_appointment_id}>"
+
+# Adding Specific MeetingPatient class for future state - to account for multiple patients
+class MeetingPatient(db.Model):
+    __tablename__ = "meeting_patients"
+ 
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_record_id = db.Column(
+        db.Integer, db.ForeignKey("meeting_records.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    openemr_patient_id = db.Column(db.String(128), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            meeting_record_id: int | None = ...,
+            openemr_patient_id: str | None = ...,
+        ) -> None: ...
+ 
+    def __repr__(self):
+        return f"<MeetingPatient meeting={self.meeting_record_id} pid={self.openemr_patient_id}>"
 
 
 class ClinicalNoteRecord(db.Model):
@@ -218,6 +282,21 @@ class ClinicalNoteRecord(db.Model):
     is_completed_in_zoom = db.Column(db.Boolean, default=False, nullable=False)
 
     error_message = db.Column(db.Text, nullable=True)
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            meeting_record_id: int | None = ...,
+            zoom_note_id: str | None = ...,
+            zoom_note_title: str | None = ...,
+            note_content: str | None = ...,
+            written_to_openemr_at: datetime | None = ...,
+            completed_in_zoom_at: datetime | None = ...,
+            is_written_to_openemr: bool | None = ...,
+            is_completed_in_zoom: bool | None = ...,
+            error_message: str | None = ...,
+        ) -> None: ...
 
     def __repr__(self):
         return f"<ClinicalNoteRecord {self.zoom_note_id}>"
@@ -250,6 +329,23 @@ class AuditLog(db.Model):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            event_type: str | None = ...,
+            zoom_account_id: str | None = ...,
+            openemr_appointment_id: str | None = ...,
+            openemr_provider_id: str | None = ...,
+            openemr_patient_id: str | None = ...,
+            zoom_meeting_id: str | None = ...,
+            zoom_note_id: str | None = ...,
+            success: bool | None = ...,
+            error_message: str | None = ...,
+            detail: str | None = ...,
+            occurred_at: datetime | None = ...,
+        ) -> None: ...
 
     def __repr__(self):
         return f"<AuditLog {self.event_type} at {self.occurred_at}>"
