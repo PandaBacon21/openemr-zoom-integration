@@ -76,7 +76,7 @@ services:
       timeout: 10s
       retries: 5
 
-  # ─── Branding Init ────────────────────────────────────────────────────────────
+  # ─── OpenEMR Branding Init ────────────────────────────────────────────────────
   # Runs once after OpenEMR is healthy and copies branding files in.
   # This avoids the permission conflict with OpenEMR's startup chmod sweep —
   # by the time this container runs, OpenEMR has finished its setup and Apache
@@ -111,6 +111,32 @@ services:
         chmod 644 /openemr_public/core/menu/primary/logo.png &&
         chmod 644 /openemr_public/core/favicon/favicon.ico &&
         echo 'Branding complete.'
+      "
+    networks:
+      - integration_net
+
+  # ─── OpenEMR Module Init ──────────────────────────────────────────────────────
+  # Runs once after OpenEMR is healthy and registers the Zoom Listener Module with
+  # OpenEMR.
+  zoom-module-init:
+    image: alpine:latest
+    container_name: zoomly-module-init
+    restart: "no"
+    depends_on:
+      openemr:
+        condition: service_healthy
+    command: >
+      sh -c "
+        apk add --no-cache mysql-client &&
+        echo 'Registering Zoom Appointment Listener module...' &&
+        mysql -h mariadb -uopenemr -p${OPENEMR_DB_PASS} openemr -e \"
+          INSERT INTO modules (mod_name, mod_directory, mod_parent, mod_type, mod_active, mod_ui_name, mod_relative_link, mod_ui_order, mod_ui_active, mod_description, mod_nick_name, mod_enc_menu, directory, date, sql_run, type, sql_version, acl_version)
+          SELECT 'ZoomAppointmentListener', 'zoom_appointment_listener', '', '', 1, 'Zoom Appointment Listener', '', 0, 0, 'Zoom telehealth appointment event listener', '', 'no', '', NOW(), 1, 0, '0', '0'
+          WHERE NOT EXISTS (
+            SELECT 1 FROM modules WHERE mod_directory = 'zoom_appointment_listener'
+          );
+        \" &&
+        echo 'Module registration complete.'
       "
     networks:
       - integration_net

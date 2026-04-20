@@ -211,6 +211,21 @@ class MeetingRecord(db.Model):
         "ClinicalNoteRecord", backref="meeting_record",
         lazy=True, uselist=False, cascade="all, delete-orphan"
     )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            zoom_account_id: int | None = ...,
+            zoom_meeting_id: str | None = ...,
+            zoom_start_url: str | None = ...,
+            zoom_join_url: str | None = ...,
+            alternative_host_email: str | None = ...,
+            openemr_appointment_id: str | None = ...,
+            openemr_provider_id: str | None = ...,
+            openemr_appt_status: str | None = ...,
+            status: str | None = ...,
+        ) -> None: ...
  
     def __repr__(self):
         return f"<MeetingRecord zoom={self.zoom_meeting_id} appt={self.openemr_appointment_id}>"
@@ -229,6 +244,14 @@ class MeetingPatient(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            meeting_record_id: int | None = ...,
+            openemr_patient_id: str | None = ...,
+        ) -> None: ...
  
     def __repr__(self):
         return f"<MeetingPatient meeting={self.meeting_record_id} pid={self.openemr_patient_id}>"
@@ -257,6 +280,21 @@ class ClinicalNoteRecord(db.Model):
     is_completed_in_zoom = db.Column(db.Boolean, default=False, nullable=False)
 
     error_message = db.Column(db.Text, nullable=True)
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            meeting_record_id: int | None = ...,
+            zoom_note_id: str | None = ...,
+            zoom_note_title: str | None = ...,
+            note_content: str | None = ...,
+            written_to_openemr_at: datetime | None = ...,
+            completed_in_zoom_at: datetime | None = ...,
+            is_written_to_openemr: bool | None = ...,
+            is_completed_in_zoom: bool | None = ...,
+            error_message: str | None = ...,
+        ) -> None: ...
 
     def __repr__(self):
         return f"<ClinicalNoteRecord {self.zoom_note_id}>"
@@ -289,6 +327,23 @@ class AuditLog(db.Model):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            event_type: str | None = ...,
+            zoom_account_id: str | None = ...,
+            openemr_appointment_id: str | None = ...,
+            openemr_provider_id: str | None = ...,
+            openemr_patient_id: str | None = ...,
+            zoom_meeting_id: str | None = ...,
+            zoom_note_id: str | None = ...,
+            success: bool | None = ...,
+            error_message: str | None = ...,
+            detail: str | None = ...,
+            occurred_at: datetime | None = ...,
+        ) -> None: ...
 
     def __repr__(self):
         return f"<AuditLog {self.event_type} at {self.occurred_at}>"
