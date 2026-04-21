@@ -221,3 +221,66 @@ def get_appointment_types() -> list[dict]:
             }
             for row in result
         ]
+
+
+def write_zoom_urls_to_appointment(
+    eid: int,
+    start_url: str,
+    join_url: str
+) -> bool:
+    """
+    Write Zoom meeting URLs back to the OpenEMR appointment record.
+
+    Uses direct MariaDB connection — the FHIR Appointment resource
+    is read-only in OpenEMR 8.0, so there is no API path for this write.
+
+    Fields updated:
+      pc_hometext — provider/staff facing notes field
+                    Written as "Zoom Meeting: {start_url}"
+      pc_website  — URL field on the appointment, used for patient join URL
+
+    Args:
+        eid:       OpenEMR appointment ID (pc_eid)
+        start_url: Zoom host start URL (provider/alternative host)
+        join_url:  Zoom patient join URL
+
+    Returns:
+        True if the update affected a row, False if eid not found.
+    """
+    from sqlalchemy import text
+    from app.extensions import get_openemr_db_engine
+
+    engine = get_openemr_db_engine()
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("""
+                    UPDATE openemr_postcalendar_events
+                    SET
+                        pc_hometext = :hometext,
+                        pc_website = :website
+                    WHERE pc_eid = :eid
+                """),
+                {
+                    "hometext": f"Zoom Meeting: {start_url}",
+                    "website": join_url,
+                    "eid": int(eid),
+                }
+            )
+
+        if result.rowcount == 0:
+            logger.warning(
+                f"openemr.write_zoom_urls | No appointment found for eid={eid}"
+            )
+            return False
+
+        logger.info(
+            f"openemr.write_zoom_urls | Written Zoom URLs to appointment eid={eid}"
+        )
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"openemr.write_zoom_urls | Failed to write URLs for eid={eid}: {e}"
+        )
+        return False

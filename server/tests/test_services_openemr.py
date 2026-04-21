@@ -257,3 +257,99 @@ def test_get_appointment_types_returns_empty_list_when_no_rows(monkeypatch):
     monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
 
     assert openemr.get_appointment_types() == []
+
+
+def test_write_zoom_urls_to_appointment_updates_hometext_and_website(monkeypatch):
+    captured = {}
+
+    class FakeResult:
+        rowcount = 1
+
+    class FakeConn:
+        def execute(self, query, params):
+            captured["query"] = str(query)
+            captured["params"] = params
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+
+    success = openemr.write_zoom_urls_to_appointment(
+        eid=999,
+        start_url="https://zoom.example/start/999",
+        join_url="https://zoom.example/join/999",
+    )
+
+    assert success is True
+    assert "SET" in captured["query"]
+    assert "pc_hometext" in captured["query"]
+    assert "pc_website" in captured["query"]
+    assert captured["params"] == {
+        "hometext": "Zoom Meeting: https://zoom.example/start/999",
+        "website": "https://zoom.example/join/999",
+        "eid": 999,
+    }
+
+
+def test_write_zoom_urls_to_appointment_returns_false_when_eid_not_found(monkeypatch):
+    class FakeResult:
+        rowcount = 0
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+
+    success = openemr.write_zoom_urls_to_appointment(
+        eid=999,
+        start_url="https://zoom.example/start/999",
+        join_url="https://zoom.example/join/999",
+    )
+
+    assert success is False
+
+
+def test_write_zoom_urls_to_appointment_returns_false_on_exception(monkeypatch):
+    class FakeConn:
+        def execute(self, query, params):
+            raise RuntimeError("db write failed")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+
+    success = openemr.write_zoom_urls_to_appointment(
+        eid=999,
+        start_url="https://zoom.example/start/999",
+        join_url="https://zoom.example/join/999",
+    )
+
+    assert success is False

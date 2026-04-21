@@ -66,7 +66,7 @@ services:
       - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
       - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
       # Patch for adding appointment event notifications
-      - ./patches/zoom_appointment_listener:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener:ro
+      - ./patches/zoom_appointment_listener:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
     networks:
       - integration_net
     healthcheck:
@@ -106,10 +106,14 @@ services:
         cp /branding/core/login/primary/logo.png /openemr_public/core/login/primary/logo.png &&
         cp /branding/core/menu/primary/logo.png /openemr_public/core/menu/primary/logo.png &&
         cp /branding/core/favicon/favicon.ico /openemr_public/core/favicon/favicon.ico &&
+        cp /branding/core/login/primary/logo.png /openemr_public/portal/login/primary/logo.png &&
+        cp /branding/core/menu/primary/logo.png /openemr_public/portal/menu/primary/logo.png &&
         echo 'Setting file permissions...' &&
         chmod 644 /openemr_public/core/login/primary/logo.png &&
         chmod 644 /openemr_public/core/menu/primary/logo.png &&
         chmod 644 /openemr_public/core/favicon/favicon.ico &&
+        chmod 644 /openemr_public/portal/login/primary/logo.png &&
+        chmod 644 /openemr_public/portal/menu/primary/logo.png &&
         echo 'Branding complete.'
       "
     networks:
@@ -135,6 +139,7 @@ services:
           WHERE NOT EXISTS (
             SELECT 1 FROM modules WHERE mod_directory = 'zoom_appointment_listener'
           );
+          UPDATE modules SET mod_active = 1 WHERE mod_directory = 'zoom_appointment_listener';
         \" &&
         echo 'Module registration complete.'
       "

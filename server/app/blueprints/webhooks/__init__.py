@@ -274,6 +274,29 @@ def _handle_new_meeting(match, payload: dict) -> dict:
             openemr_provider_id=mapping.openemr_provider_id,
             zoom_meeting_id=meeting_data["meeting_id"],
         )
+
+        # Write Zoom URLs back to OpenEMR appointment record
+        from app.services.openemr import write_zoom_urls_to_appointment
+        if eid:
+            success = write_zoom_urls_to_appointment(
+                eid=eid,
+                start_url=meeting_data["start_url"],
+                join_url=meeting_data["join_url"],
+            )
+
+            current_app.logger.info(
+                f"webhooks.openemr | eid={eid} account={account.account_id} "
+                f"{'Meeting link written back to OpenEMR' if success else 'Meeting link failed to write back to OpenEMR'} "
+                f"zoom_meeting_id={meeting_data['meeting_id']}"
+            )
+
+            write_audit_log(
+                event_type="openemr.url_writeback_success" if success else "openemr.url_writeback_failed",
+                success=success,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                zoom_meeting_id=meeting_data["meeting_id"],
+            )   
  
         return {
             "account_id": account.account_id,
@@ -363,6 +386,29 @@ def _handle_existing_meeting(
                 openemr_appointment_id=eid,
                 zoom_meeting_id=meeting_data["meeting_id"],
             )
+
+            # Write new URLs back to OpenEMR appointment record
+            from app.services.openemr import write_zoom_urls_to_appointment
+            if eid:
+                success = write_zoom_urls_to_appointment(
+                    eid=eid,
+                    start_url=meeting_data["start_url"],
+                    join_url=meeting_data["join_url"],
+                )
+
+                current_app.logger.info(
+                    f"webhooks.openemr | eid={eid} account={account.account_id} "
+                    f"{'Meeting link written back to OpenEMR' if success else 'Meeting link failed to write back to OpenEMR'} "
+                    f"zoom_meeting_id={meeting_data['meeting_id']}"
+                )
+
+                write_audit_log(
+                    event_type="openemr.url_writeback_success" if success else "openemr.url_writeback_failed",
+                    success=success,
+                    zoom_account_id=account.account_id,
+                    openemr_appointment_id=eid,
+                    zoom_meeting_id=meeting_data["meeting_id"],
+                )
  
             return {
                 "account_id": account.account_id,

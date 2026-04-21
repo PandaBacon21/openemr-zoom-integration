@@ -278,6 +278,37 @@ def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
         assert stored.timezone == "America/Los_Angeles"
 
 
+def test_register_zoom_account_persists_demo_patient_contact_overrides(app, monkeypatch):
+    with app.app_context():
+        monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
+        monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(
+            registration,
+            "_register_with_openemr",
+            lambda account_id, contact_email: {
+                "client_id": "openemr-client-id",
+                "client_secret": "openemr-client-secret",
+                "registration_access_token": "registration-token",
+                "registration_client_uri": "https://openemr.public/oauth2/default/client/abc",
+            },
+        )
+
+        registration.register_zoom_account(
+            "acct-demo-overrides",
+            "zoom-client-id",
+            "zoom-client-secret",
+            "webhook-secret",
+            "admin@example.com",
+            demo_patient_email_override="demo-patient@example.com",
+            demo_patient_phone_override="+13035550199",
+        )
+        stored = ZoomAccount.query.filter_by(account_id="acct-demo-overrides").first()
+        assert stored is not None
+        assert stored.demo_patient_email_override == "demo-patient@example.com"
+        assert stored.demo_patient_phone_override == "+13035550199"
+
+
 def test_deregister_zoom_account_raises_when_missing(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found"):

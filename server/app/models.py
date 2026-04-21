@@ -38,8 +38,13 @@ class ZoomAccount(db.Model):
     # Per-account RSA keypair for SMART on FHIR private_key_jwt
     private_key_path = db.Column(db.String(512), nullable=True)
     kid = db.Column(db.String(256), nullable=True)
+
     # For appointment time converstion
     timezone = db.Column(db.String(64), nullable=False, default="America/New_York") 
+
+    # Demo override — if set, all patient communications use these instead of patient record
+    demo_patient_email_override = db.Column(db.String(256), nullable=True)
+    demo_patient_phone_override = db.Column(db.String(32), nullable=True)
 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -75,6 +80,8 @@ class ZoomAccount(db.Model):
             kid: str | None = ...,
             key_version: int | None = ...,
             timezone: str | None = ...,
+            demo_patient_email_override: str | None = ...,
+            demo_patient_phone_override: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
 
@@ -93,7 +100,7 @@ class ProviderMapping(db.Model):
     # OpenEMR side
     openemr_fhir_id = db.Column(db.String(128), nullable=False)
     openemr_provider_npi = db.Column(db.String(10), nullable=False)
-    openemr_provider_id = db.Column(db.String(10), nullable=True)
+    openemr_provider_id = db.Column(db.String(128), nullable=True)
     openemr_provider_name = db.Column(db.String(256), nullable=True)
  
     # Zoom side
