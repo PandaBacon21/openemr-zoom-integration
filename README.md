@@ -7,6 +7,9 @@ Current implemented areas:
 - OpenEMR dynamic client registration + registration verification checks
 - Provider mapping management (OpenEMR provider <-> Zoom user)
 - Appointment type filter management
+- OpenEMR appointment webhook handling for create, update, and delete flows
+- Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
+- OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
 - Protected endpoints via `X-API-Key`
@@ -81,7 +84,7 @@ Configuration and registration (API key protected):
 Provider mapping management (API key protected):
 - `POST /config/providers`
 - `GET /config/providers?zoom_account_id=...`
-- `DELETE /config/providers/<npi>?zoom_account_id=...`
+- `DELETE /config/providers/<openemr_provider_id>?zoom_account_id=...`
 
 Appointment filter management (API key protected):
 - `POST /config/appointment-types`
@@ -105,4 +108,4 @@ This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-ca
 
 Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
 
-Latest run result in this workspace: `156 passed`.
+Latest run result in this workspace: `172 passed`.

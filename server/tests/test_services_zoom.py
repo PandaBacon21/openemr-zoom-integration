@@ -188,6 +188,9 @@ def test_make_zoom_api_request_adds_authorization(monkeypatch):
     captured = {}
 
     class DummyResponse:
+        status_code = 200
+        content = b'{"ok": true}'
+
         def raise_for_status(self):
             return None
 
@@ -216,3 +219,137 @@ def test_make_zoom_api_request_adds_authorization(monkeypatch):
     assert captured["headers"]["Content-Type"] == "application/json"
     assert captured["timeout"] == 10
     assert captured["kwargs"]["params"] == {"page_size": 30}
+
+
+def test_make_zoom_api_request_returns_empty_dict_for_204(monkeypatch):
+    class DummyResponse:
+        status_code = 204
+        content = b""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            raise AssertionError("json() should not be called for 204 response")
+
+    monkeypatch.setattr(zoom, "get_zoom_token", lambda account: "zoom-token")
+    monkeypatch.setattr(zoom.requests, "request", lambda *args, **kwargs: DummyResponse())
+    monkeypatch.setattr(zoom, "ZOOM_API_BASE_URL", "https://api.zoom.test/v2")
+
+    account = _make_account(account_id="acct")
+    response = zoom.make_zoom_api_request("delete", "/meetings/123", account)
+
+    assert response == {}
+
+
+def test_get_zoom_meeting_returns_payload(monkeypatch):
+    monkeypatch.setattr(
+        zoom,
+        "make_zoom_api_request",
+        lambda method, endpoint, zoom_account: {"id": "123", "topic": "Telehealth"},
+    )
+
+    result = zoom.get_zoom_meeting(_make_account(), "123")
+
+    assert result == {"id": "123", "topic": "Telehealth"}
+
+
+def test_get_zoom_meeting_returns_none_on_404(monkeypatch):
+    response = requests.Response()
+    response.status_code = 404
+    error = requests.HTTPError("not found")
+    error.response = response
+
+    monkeypatch.setattr(
+        zoom,
+        "make_zoom_api_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    assert zoom.get_zoom_meeting(_make_account(), "123") is None
+
+
+def test_delete_zoom_meeting_returns_true_on_success(monkeypatch):
+    captured = {}
+
+    def fake_make_request(method, endpoint, zoom_account):
+        captured["method"] = method
+        captured["endpoint"] = endpoint
+        return {}
+
+    monkeypatch.setattr(zoom, "make_zoom_api_request", fake_make_request)
+
+    assert zoom.delete_zoom_meeting(_make_account(), "123") is True
+    assert captured["method"] == "DELETE"
+    assert captured["endpoint"] == "/meetings/123"
+
+
+def test_delete_zoom_meeting_returns_false_on_404(monkeypatch):
+    response = requests.Response()
+    response.status_code = 404
+    error = requests.HTTPError("not found")
+    error.response = response
+
+    monkeypatch.setattr(
+        zoom,
+        "make_zoom_api_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    assert zoom.delete_zoom_meeting(_make_account(), "123") is False
+
+
+def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
+    captured = {}
+    account = _make_account(account_id="acct-1")
+    account.timezone = "America/Denver"
+
+    match = SimpleNamespace(
+        provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
+        payload={
+            "eid": 999,
+            "pid": 1,
+            "title": "Follow-up",
+            "comments": "Bring records",
+            "appointment_date": "20260420",
+            "appointment_time": "10:00",
+            "duration_minutes": 45,
+        },
+    )
+
+    monkeypatch.setattr("app.services.openemr.get_patient", lambda acct, pid: {"last_name": "Smith"})
+
+    def fake_make_zoom_api_request(method, endpoint, zoom_account, **kwargs):
+        captured["method"] = method
+        captured["endpoint"] = endpoint
+        captured["zoom_account"] = zoom_account
+        captured["json"] = kwargs["json"]
+        return {}
+
+    monkeypatch.setattr(zoom, "make_zoom_api_request", fake_make_zoom_api_request)
+
+    zoom.update_zoom_meeting(account, "123", match)
+
+    assert captured["method"] == "PATCH"
+    assert captured["endpoint"] == "/meetings/123"
+    assert captured["zoom_account"] == account
+    assert captured["json"]["topic"] == "Telehealth | Dr Jane Doe | Smith | Follow-up"
+    assert captured["json"]["agenda"] == "Bring records"
+    assert captured["json"]["duration"] == 45
+    assert captured["json"]["timezone"] == "America/Denver"
+    assert captured["json"]["start_time"] == "2026-04-20T10:00:00"
+
+
+def test_update_zoom_meeting_raises_on_unparseable_datetime():
+    account = _make_account(account_id="acct-1")
+    account.timezone = "America/Denver"
+    match = SimpleNamespace(
+        provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
+        payload={
+            "appointment_date": "bad-date",
+            "appointment_time": "bad-time",
+        },
+    )
+
+    with pytest.raises(ValueError, match="Could not parse appointment datetime for update"):
+        zoom.update_zoom_meeting(account, "123", match)

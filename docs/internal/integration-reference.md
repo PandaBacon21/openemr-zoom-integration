@@ -132,28 +132,53 @@ OpenEMR listener sends JSON payloads to `POST /webhooks/openemr` signed with:
 - Header `X-Zoomly-Signature`
 - Value `hex(hmac_sha256(raw_body, OPENEMR_WEBHOOK_SECRET))`
 
-Expected payload fields:
-- `event`
+`appointment.set` payload fields:
+- `event` (`appointment.set`)
 - `eid`
 - `pid`
 - `provider_id`
 - `category_id`
 - `appointment_date`
 - `appointment_time`
+- `duration_minutes`
 - `appt_status`
 - `facility_id`
+- `title`
+- `room`
 - `comments`
+- `fired_at`
+
+`appointment.deleted` payload fields:
+- `event` (`appointment.deleted`)
+- `eid`
 - `fired_at`
 
 Current bridge behavior:
 - Validates signature and minimal payload shape
-- Filters by `ProviderMapping.openemr_provider_id` and appointment type allowlist
-- Creates Zoom meeting(s) and stores `MeetingRecord` + `MeetingPatient`
-- Returns one of:
-  - `{"status":"dropped"}` when no mapping/filter match exists
-  - `{"status":"created"}` on full success
-  - `{"status":"partial"}` when some accounts succeed and others fail
-  - `{"status":"error"}` when all matched accounts fail
+- For `appointment.set`:
+  - filters by `ProviderMapping.openemr_provider_id` and appointment-type allowlist
+  - creates new meetings when no `MeetingRecord` exists
+  - updates existing meetings when `MeetingRecord` exists and Zoom meeting is still present
+  - recreates meetings when `MeetingRecord` exists but Zoom meeting was deleted
+  - writes `MeetingRecord` and `MeetingPatient` rows
+  - returns one of: `ok`, `partial`, `error`, `dropped`
+- For `appointment.deleted`:
+  - finds `MeetingRecord` rows by `eid`
+  - deletes Zoom meetings
+  - removes local meeting records (cascade removes meeting-patient rows)
+  - returns one of: `deleted`, `no_record`, `error`
+
+## OpenEMR Patch Module (PHP)
+
+Patch files under `patches/zoom_appointment_listener` currently wire two events:
+- `AppointmentSetEvent` -> `AppointmentListener::onAppointmentSet` for create/update webhook payloads
+- `AppointmentDialogCloseEvent` -> `DialogCloseListener::onDialogClose` for delete webhook payloads
+
+Current listener behavior highlights:
+- Drops all-day events early (`form_allday = 1`)
+- Sends `duration_minutes`, `title`, and `room` in `appointment.set`
+- Sends compact `appointment.deleted` payload for delete actions
+- Signs all webhook payloads with HMAC-SHA256 using `OPENEMR_WEBHOOK_SECRET`
 
 ## OpenEMR Appointment Status (`appt_status`) Mapping
 
@@ -195,7 +220,9 @@ Primary files for this integration slice:
 - `server/tests/test_blueprint_webhooks.py`
 - `server/tests/test_services_appointment_processor.py`
 - `server/tests/test_services_registration.py`
+- `server/tests/test_services_zoom.py`
 - `server/tests/test_blueprint_config.py`
 - `server/tests/test_migration_timezone.py`
 - `server/tests/test_migration_meeting_records.py`
 - `server/tests/test_migration_provider_mappings.py`
+- `server/tests/test_patch_zoom_listener_module.py`

@@ -168,6 +168,9 @@ def make_zoom_api_request(
     )
 
     response.raise_for_status()
+    if response.status_code == 204 or not response.content:
+        return {}
+
     return response.json()
 
 
@@ -276,7 +279,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
             f"date={appointment_date} time={appointment_time}"
         )
     start_time_str = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    
+
         # --- 3. Build meeting topic ---
     # Format: "Telehealth: {provider_name} | {patient_last_name} | {title}"
     # Falls back gracefully if any component is missing.
@@ -387,3 +390,159 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         "join_url": join_url,
         "topic": response.get("topic", topic),
     }
+
+
+def get_zoom_meeting(zoom_account: ZoomAccount, meeting_id: str) -> dict | None:
+    """
+    Fetch a Zoom meeting by ID.
+ 
+    Returns the meeting dict if it exists, None if it has been deleted
+    (Zoom returns 404 for deleted meetings).
+ 
+    Args:
+        zoom_account: ZoomAccount to authenticate with
+        meeting_id:   Zoom meeting ID string
+ 
+    Returns:
+        Meeting dict from Zoom API, or None if not found.
+    """
+    try:
+        return make_zoom_api_request(
+            method="GET",
+            endpoint=f"/meetings/{meeting_id}",
+            zoom_account=zoom_account,
+        )
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            logger.info(
+                f"zoom.get_meeting | Meeting {meeting_id} not found in Zoom (likely deleted)"
+            )
+            return None
+        raise
+ 
+ 
+def delete_zoom_meeting(zoom_account: ZoomAccount, meeting_id: str) -> bool:
+    """
+    Delete a Zoom meeting by ID.
+ 
+    Used when an OpenEMR appointment is deleted — removes the corresponding
+    Zoom meeting so the provider doesn't see a ghost meeting in their calendar.
+ 
+    Args:
+        zoom_account: ZoomAccount to authenticate with
+        meeting_id:   Zoom meeting ID string
+ 
+    Returns:
+        True if deleted successfully, False if meeting was already gone.
+    """
+    try:
+        make_zoom_api_request(
+            method="DELETE",
+            endpoint=f"/meetings/{meeting_id}",
+            zoom_account=zoom_account,
+        )
+        logger.info(f"zoom.delete_meeting | Meeting {meeting_id} deleted")
+        return True
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            logger.info(
+                f"zoom.delete_meeting | Meeting {meeting_id} already deleted in Zoom"
+            )
+            return False
+        raise
+
+
+def update_zoom_meeting(
+    zoom_account: ZoomAccount,
+    meeting_id: str,
+    match: "AppointmentMatch"
+) -> None:
+    """
+    Update an existing Zoom meeting with new appointment details.
+
+    Called when an OpenEMR appointment is updated and a MeetingRecord
+    already exists. Updates all four mutable fields unconditionally.
+
+    Args:
+        zoom_account: ZoomAccount to authenticate with
+        meeting_id:   Zoom meeting ID string
+        match:        AppointmentMatch with updated payload and provider mapping
+    """
+    mapping = match.provider_mapping
+    payload = match.payload
+
+    appointment_date = payload.get("appointment_date")
+    appointment_time = payload.get("appointment_time")
+
+    # Parse start time — same logic as create_zoom_meeting
+    start_dt = None
+    for fmt in ("%Y%m%d %H:%M", "%Y-%m-%d %H:%M"):
+        try:
+            start_dt = datetime.strptime(
+                f"{appointment_date} {appointment_time}",
+                fmt
+            )
+            break
+        except ValueError:
+            continue
+
+    if start_dt is None:
+        raise ValueError(
+            f"Could not parse appointment datetime for update: "
+            f"date={appointment_date} time={appointment_time}"
+        )
+
+    start_time_str = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Rebuild topic — same logic as create_zoom_meeting
+    provider_name = mapping.openemr_provider_name or "Provider"
+    patient_last_name = None
+    pid = payload.get("pid")
+    if pid:
+        try:
+            from app.services.openemr import get_patient
+            patient = get_patient(zoom_account, pid)
+            if patient:
+                patient_last_name = patient.get("last_name")
+        except Exception as e:
+            logger.warning(
+                f"zoom.update_meeting | FHIR patient lookup failed for pid={pid}: {e}"
+            )
+
+    title = payload.get("title")
+    topic_parts = ["Telehealth"]
+    if provider_name:
+        topic_parts.append(provider_name)
+    if patient_last_name:
+        topic_parts.append(patient_last_name)
+    if title:
+        topic_parts.append(title)
+    topic = " | ".join(topic_parts)
+    if len(topic) > 200:
+        topic = topic[:197] + "..."
+
+    duration_minutes = payload.get("duration_minutes", 30)
+    if not isinstance(duration_minutes, int) or duration_minutes <= 0:
+        duration_minutes = 30
+
+    update_payload = {
+        "topic": topic,
+        "start_time": start_time_str,
+        "duration": duration_minutes,
+        "timezone": zoom_account.timezone,
+        "agenda": payload.get("comments") or "",
+    }
+
+    logger.info(
+        f"zoom.update_meeting | Updating meeting {meeting_id} "
+        f"start={start_time_str} tz={zoom_account.timezone} duration={duration_minutes}min"
+    )
+
+    make_zoom_api_request(
+        method="PATCH",
+        endpoint=f"/meetings/{meeting_id}",
+        zoom_account=zoom_account,
+        json=update_payload,
+    )
+
+    logger.info(f"zoom.update_meeting | Meeting {meeting_id} updated successfully")
