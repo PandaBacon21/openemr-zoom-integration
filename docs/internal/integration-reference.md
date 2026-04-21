@@ -168,6 +168,12 @@ Current bridge behavior:
   - removes local meeting records (cascade removes meeting-patient rows)
   - returns one of: `deleted`, `no_record`, `error`
 
+Audit events emitted by webhook handlers:
+- `appointment.received.<event>` on accepted inbound payloads
+- `appointment.dropped` when filtering produces no account/provider/type matches
+- `meeting.created`, `meeting.updated`, `meeting.recreated`, `meeting.deleted` on successful meeting lifecycle actions
+- `meeting.create_failed`, `meeting.delete_failed` on handled failure paths
+
 ## OpenEMR Patch Module (PHP)
 
 Patch files under `patches/zoom_appointment_listener` currently wire two events:
@@ -219,6 +225,7 @@ Current migration chain:
 Primary files for this integration slice:
 - `server/tests/test_blueprint_webhooks.py`
 - `server/tests/test_services_appointment_processor.py`
+- `server/tests/test_services_audit.py`
 - `server/tests/test_services_registration.py`
 - `server/tests/test_services_zoom.py`
 - `server/tests/test_blueprint_config.py`

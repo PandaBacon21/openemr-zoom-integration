@@ -326,6 +326,59 @@ def test_openemr_webhook_drops_by_provider_payload(client, app, monkeypatch):
     assert response.get_json() == {"status": "dropped", "eid": 999}
 
 
+def test_openemr_webhook_writes_received_and_dropped_audit_events(client, app, monkeypatch):
+    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    calls = []
+
+    monkeypatch.setattr("app.blueprints.webhooks.filter_appointment_event", lambda payload: [])
+    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "dropped", "eid": 999}
+    assert len(calls) == 2
+    assert calls[0]["event_type"] == "appointment.received.appointment.set"
+    assert calls[0]["success"] is True
+    assert calls[0]["openemr_appointment_id"] == 999
+    assert calls[0]["detail"] == {"event": "appointment.set", "appointment_type": 27}
+    assert calls[1]["event_type"] == "appointment.dropped"
+    assert calls[1]["success"] is True
+    assert calls[1]["openemr_appointment_id"] == 999
+    assert calls[1]["detail"] == {
+        "reason": "no matching provider/type",
+        "appointment_type": 27,
+    }
+
+
+def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client, app, monkeypatch):
+    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    calls = []
+    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "no_record", "eid": 999}
+    assert len(calls) == 1
+    assert calls[0]["event_type"] == "appointment.received.appointment.deleted"
+    assert calls[0]["success"] is True
+    assert calls[0]["openemr_appointment_id"] == 999
+    assert calls[0]["detail"] == {"event": "appointment.deleted", "appointment_type": None}
+
+
 def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(client, app, monkeypatch):
     app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
     with app.app_context():
