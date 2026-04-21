@@ -3,6 +3,7 @@
 namespace Zoomly\ZoomAppointmentListener;
 
 use OpenEMR\Events\Appointments\AppointmentSetEvent;
+use OpenEMR\Events\Appointments\AppointmentDialogCloseEvent;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Bootstrap
@@ -16,10 +17,18 @@ class Bootstrap
 
     public function setup(): void
     {
-        $listener = new AppointmentListener();
+        $appointmentListener = new AppointmentListener();
         $this->eventDispatcher->addListener(
             AppointmentSetEvent::EVENT_HANDLE,
-            [$listener, 'onAppointmentSet'],
+            [$appointmentListener, 'onAppointmentSet'],
+            0
+        );
+
+        // Listen for appointment dialog close - handles appointment delete action
+        $dialogCloseListener = new DialogCloseListener();
+        $this->eventDispatcher->addListener(
+            AppointmentDialogCloseEvent::EVENT_NAME,
+            [$dialogCloseListener, 'onDialogClose'],
             0
         );
     }

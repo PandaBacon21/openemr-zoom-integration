@@ -49,8 +49,32 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
         captured["timeout"] = timeout
         return DummyResponse()
 
+    class FakeResult:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class FakeConn:
+        def execute(self, query, params):
+            if params["npi"] == "1234567890":
+                return FakeResult(SimpleNamespace(id=10))
+            return FakeResult(None)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
     monkeypatch.setattr(openemr, "get_openemr_token", lambda account: "openemr-token")
     monkeypatch.setattr(openemr.requests, "get", fake_get)
+    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
 
     with app.app_context():
         providers = openemr.get_practitioners(
@@ -72,6 +96,7 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "full_name": "Dr Jane Doe",
             "npi": "1234567890",
             "email": "jane@example.com",
+            "users_id": 10,
         },
         {
             "fhir_id": "pract-2",
@@ -81,6 +106,7 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "full_name": "John Smith",
             "npi": None,
             "email": None,
+            "users_id": None,
         },
     ]
 
@@ -124,6 +150,7 @@ def test_get_practitioners_single_resource_fetch(app, monkeypatch):
             "full_name": "Elena Rodriguez",
             "npi": None,
             "email": None,
+            "users_id": None,
         }
     ]
 
@@ -152,6 +179,7 @@ def test_normalize_practitioner_defaults_for_missing_fields():
         "full_name": "",
         "npi": None,
         "email": None,
+        "users_id": None,
     }
 
 

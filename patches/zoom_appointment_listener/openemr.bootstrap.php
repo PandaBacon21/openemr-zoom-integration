@@ -8,6 +8,7 @@ if (!isset($eventDispatcher) || !isset($classLoader)) {
 // Explicitly require our classes since they live flat in the module directory.
 require_once $module['path'] . '/Bootstrap.php';
 require_once $module['path'] . '/AppointmentListener.php';
+require_once $module['path'] . '/DialogCloseListener.php';
 
 // Wire up the event listener.
 $moduleBootstrap = new \Zoomly\ZoomAppointmentListener\Bootstrap($eventDispatcher);

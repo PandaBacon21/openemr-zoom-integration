@@ -422,6 +422,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
             id=21,
             openemr_fhir_id="pract-1",
             openemr_provider_npi="1234567890",
+            openemr_provider_id="10",
             openemr_provider_name="Dr Jane Doe",
             zoom_user_id="u-1",
             zoom_user_email="jane@example.com",
@@ -445,6 +446,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
                 "id": 21,
                 "openemr_fhir_id": "pract-1",
                 "openemr_provider_npi": "1234567890",
+                "openemr_provider_id": "10",
                 "openemr_provider_name": "Dr Jane Doe",
                 "zoom_user_id": "u-1",
                 "zoom_user_email": "jane@example.com",
@@ -503,7 +505,7 @@ def test_delete_provider_mapping_success(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "deleted", "npi": "10"}
+    assert response.get_json() == {"status": "deleted", "openemr_provider_id": "10"}
 
 
 def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
