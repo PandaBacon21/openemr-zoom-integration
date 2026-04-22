@@ -826,7 +826,38 @@ def _validate_and_process_note(
         f"matched MeetingRecord id={record.id} eid={record.openemr_appointment_id}"
     )
 
-    # S5-04 placeholder: retrieve note content from Zoom API
+    # Retrieve note content from Zoom API
+    from app.services.zoom import get_zoom_clinical_note
+    note_data = get_zoom_clinical_note(account, note_id)
+
+    if not note_data:
+        current_app.logger.warning(
+            f"zoom_webhook | note_id={note_id} not found in Zoom API"
+        )
+        write_audit_log(
+            event_type="note.retrieved",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            error_message="note not found in Zoom API",
+        )
+        return {"status": "error", "reason": "note not found"}, 500
+
+    write_audit_log(
+        event_type="note.retrieved",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_number,
+        zoom_note_id=note_id,
+        detail={"note_title": note_data.get("note_title")}
+    )
+
+    current_app.logger.info(
+        f"zoom_webhook | note_id={note_id} retrieved successfully"
+    )
+
+    # S5-05 placeholder: write note to OpenEMR
     return {"status": "received", "meeting_record_id": record.id}, 200
 
 
