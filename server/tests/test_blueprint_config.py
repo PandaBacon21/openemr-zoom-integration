@@ -52,6 +52,8 @@ def test_register_endpoint_success(client, monkeypatch):
         openemr_client_id="openemr-client-id",
         kid="zoomly-acct-1",
         timezone="America/New_York",
+        demo_patient_email_override=None,
+        demo_patient_phone_override=None,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     monkeypatch.setattr("app.blueprints.config.register_zoom_account", lambda **kwargs: fake_account)
@@ -75,6 +77,8 @@ def test_register_endpoint_success(client, monkeypatch):
         "openemr_client_id": "openemr-client-id",
         "kid": "zoomly-acct-1",
         "timezone": "America/New_York",
+        "demo_patient_email_override": None,
+        "demo_patient_phone_override": None,
         "created_at": "2026-01-01T00:00:00+00:00",
     }
 
@@ -131,6 +135,8 @@ def test_register_endpoint_passes_timezone_to_service(client, monkeypatch):
             openemr_client_id="openemr-client-id",
             kid="zoomly-acct-1",
             timezone=kwargs["timezone"],
+            demo_patient_email_override=None,
+            demo_patient_phone_override=None,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
@@ -164,6 +170,8 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
             openemr_client_id="openemr-client-id",
             kid="zoomly-acct-1",
             timezone=kwargs["timezone"],
+            demo_patient_email_override=None,
+            demo_patient_phone_override=None,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
@@ -184,6 +192,44 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
     assert response.status_code == 201
     assert captured["timezone"] == "America/New_York"
     assert response.get_json()["timezone"] == "America/New_York"
+
+
+def test_register_endpoint_passes_demo_patient_overrides_to_service(client, monkeypatch):
+    captured = {}
+
+    def fake_register(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            account_id="acct-1",
+            openemr_client_id="openemr-client-id",
+            kid="zoomly-acct-1",
+            timezone=kwargs["timezone"],
+            demo_patient_email_override=kwargs["demo_patient_email_override"],
+            demo_patient_phone_override=kwargs["demo_patient_phone_override"],
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("app.blueprints.config.register_zoom_account", fake_register)
+
+    response = client.post(
+        "/config/register",
+        headers=API_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "zoom_client_id": "client-id",
+            "zoom_client_secret": "client-secret",
+            "zoom_webhook_secret": "webhook-secret",
+            "contact_email": "admin@example.com",
+            "demo_patient_email_override": "demo-patient@example.com",
+            "demo_patient_phone_override": "+13035550199",
+        },
+    )
+
+    assert response.status_code == 201
+    assert captured["demo_patient_email_override"] == "demo-patient@example.com"
+    assert captured["demo_patient_phone_override"] == "+13035550199"
+    assert response.get_json()["demo_patient_email_override"] == "demo-patient@example.com"
+    assert response.get_json()["demo_patient_phone_override"] == "+13035550199"
 
 
 def test_deregister_endpoint_success(client, monkeypatch):
@@ -227,6 +273,8 @@ def test_list_registrations_returns_summary(client, app):
                 zoom_access_token="zoom-token",
                 openemr_access_token="openemr-token",
                 timezone="America/Denver",
+                demo_patient_email_override="demo-patient+acct1@example.com",
+                demo_patient_phone_override="+13035550111",
                 is_active=True,
             )
         )
@@ -240,6 +288,8 @@ def test_list_registrations_returns_summary(client, app):
                 private_key_path="/tmp/keys/acct-2/private.pem",
                 kid="zoomly-acct-2",
                 timezone="America/New_York",
+                demo_patient_email_override=None,
+                demo_patient_phone_override=None,
                 is_active=False,
             )
         )
@@ -261,6 +311,8 @@ def test_list_registrations_returns_summary(client, app):
     assert acct1["has_zoom_token"] is True
     assert acct1["has_openemr_token"] is True
     assert acct1["timezone"] == "America/Denver"
+    assert acct1["demo_patient_email_override"] == "demo-patient+acct1@example.com"
+    assert acct1["demo_patient_phone_override"] == "+13035550111"
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
 
@@ -268,6 +320,8 @@ def test_list_registrations_returns_summary(client, app):
     assert acct2["has_zoom_token"] is False
     assert acct2["has_openemr_token"] is False
     assert acct2["timezone"] == "America/New_York"
+    assert acct2["demo_patient_email_override"] is None
+    assert acct2["demo_patient_phone_override"] is None
 
 
 def test_verify_registration_returns_404_for_unknown_account(client):

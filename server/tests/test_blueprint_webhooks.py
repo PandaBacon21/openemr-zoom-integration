@@ -379,6 +379,105 @@ def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client,
     assert calls[0]["detail"] == {"event": "appointment.deleted", "appointment_type": None}
 
 
+def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, app, monkeypatch):
+    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    with app.app_context():
+        account = _create_zoom_account("acct-writeback")
+        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+
+    calls = []
+    captured = {}
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.filter_appointment_event",
+        lambda payload: [
+            SimpleNamespace(
+                zoom_account=account_stub,
+                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                payload=payload,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.create_zoom_meeting",
+        lambda match: {
+            "meeting_id": "123456789",
+            "start_url": "https://zoom.example/start/123456789",
+            "join_url": "https://zoom.example/join/123456789",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.write_zoom_urls_to_appointment",
+        lambda eid, start_url, join_url: captured.update(
+            {"eid": eid, "start_url": start_url, "join_url": join_url}
+        )
+        or True,
+    )
+    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "eid": 999,
+        "start_url": "https://zoom.example/start/123456789",
+        "join_url": "https://zoom.example/join/123456789",
+    }
+    event_types = [call["event_type"] for call in calls]
+    assert "appointment.received.appointment.set" in event_types
+    assert "meeting.created" in event_types
+    assert "openemr.url_writeback_success" in event_types
+
+
+def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatch):
+    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    with app.app_context():
+        account = _create_zoom_account("acct-writeback-fail")
+        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+
+    calls = []
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.filter_appointment_event",
+        lambda payload: [
+            SimpleNamespace(
+                zoom_account=account_stub,
+                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                payload=payload,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.create_zoom_meeting",
+        lambda match: {
+            "meeting_id": "writeback-fail-1",
+            "start_url": "https://zoom.example/start/writeback-fail-1",
+            "join_url": "https://zoom.example/join/writeback-fail-1",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.write_zoom_urls_to_appointment",
+        lambda eid, start_url, join_url: False,
+    )
+    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    event_types = [call["event_type"] for call in calls]
+    assert "openemr.url_writeback_failed" in event_types
+
+
 def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(client, app, monkeypatch):
     app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
     with app.app_context():

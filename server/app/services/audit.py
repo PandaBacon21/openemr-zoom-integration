@@ -27,15 +27,17 @@ def write_audit_log(
     If the write fails, the error is logged to the app logger and silently swallowed.
 
     Event types for appointment/meeting pipeline:
-      appointment.received      — inbound webhook accepted and validated
-      appointment.dropped       — filtered out (no matching provider/type)
-      meeting.created           — Zoom meeting created successfully
-      meeting.updated           — Zoom meeting patched with new appointment details
-      meeting.recreated         — replacement meeting created after Zoom deletion
-      meeting.deleted           — Zoom meeting deleted on appointment delete
-      meeting.create_failed     — Zoom API error during meeting creation
-      meeting.update_failed     — Zoom API error during meeting update
-      meeting.delete_failed     — Zoom API error during meeting delete
+      appointment.received          — inbound webhook accepted and validated
+      appointment.dropped           — filtered out (no matching provider/type)
+      meeting.created               — Zoom meeting created successfully
+      meeting.updated               — Zoom meeting patched with new appointment details
+      meeting.recreated             — replacement meeting created after Zoom deletion
+      meeting.deleted               — Zoom meeting deleted on appointment delete
+      meeting.create_failed         — Zoom API error during meeting creation
+      meeting.update_failed         — Zoom API error during meeting update
+      meeting.delete_failed         — Zoom API error during meeting delete
+      openemr.url_writeback_success - Zoom Meeting links written to OpenEMR Appointment Record
+      openemr.url_writeback_failed  - Zoom Meeting links failed when writing to OpenEMR Appointment Record
 
     Event types for clinical note pipeline:
       note.received             — clinical note webhook received from Zoom

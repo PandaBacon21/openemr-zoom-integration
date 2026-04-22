@@ -98,6 +98,8 @@ def register_zoom_account(
     zoom_webhook_secret: str,
     contact_email: str, 
     timezone: str = "America/New_York",
+    demo_patient_email_override: str | None = None,
+    demo_patient_phone_override: str | None = None,
 ) -> ZoomAccount:
     """
     Full registration flow for a Zoom account.
@@ -169,6 +171,8 @@ def register_zoom_account(
             private_key_path=private_key_path,
             kid=kid,
             timezone=timezone,
+            demo_patient_email_override=demo_patient_email_override,
+            demo_patient_phone_override=demo_patient_phone_override,
             is_active=True,
         )
 

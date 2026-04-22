@@ -34,8 +34,10 @@ def register():
         "zoom_client_id":      "xyz...",
         "zoom_client_secret":  "secret...",
         "zoom_webhook_secret": "webhook_secret...",
-        "contact_email":       "admin@example.com"
-        "timezone": OPTIONAL - defaults to "America/New_York"
+        "contact_email":       "admin@example.com",
+        "timezone":            "America/New_York",  // optional
+        "demo_patient_email_override": "demo-patient@example.com",  // optional
+        "demo_patient_phone_override": "+13035550199"  // optional
     }
 
     Responses:
@@ -70,6 +72,8 @@ def register():
             zoom_webhook_secret=data["zoom_webhook_secret"],
             contact_email=data["contact_email"],
             timezone=data.get("timezone", "America/New_York"),
+            demo_patient_email_override=data.get("demo_patient_email_override"),
+            demo_patient_phone_override=data.get("demo_patient_phone_override")
         )
 
         return jsonify({
@@ -78,6 +82,8 @@ def register():
             "openemr_client_id": account.openemr_client_id,
             "kid": account.kid,
             "timezone": account.timezone, 
+            "demo_patient_email_override": account.demo_patient_email_override,
+            "demo_patient_phone_override": account.demo_patient_phone_override,
             "created_at": account.created_at.isoformat(),
         }), 201
 
@@ -141,6 +147,8 @@ def list_registrations():
                 "has_zoom_token": bool(a.zoom_access_token),
                 "has_openemr_token": bool(a.openemr_access_token),
                 "timezone": a.timezone,
+                "demo_patient_email_override": a.demo_patient_email_override,
+                "demo_patient_phone_override": a.demo_patient_phone_override,
                 "created_at": a.created_at.isoformat(),
                 "updated_at": a.updated_at.isoformat(),
             }

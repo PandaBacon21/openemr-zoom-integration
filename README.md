@@ -9,7 +9,9 @@ Current implemented areas:
 - Appointment type filter management
 - OpenEMR appointment webhook handling for create, update, and delete flows
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
+- OpenEMR appointment URL writeback (`pc_hometext` + `pc_website`) after meeting create/recreate
 - Audit logging for webhook intake and meeting lifecycle events
+- Per-account demo patient contact overrides (`demo_patient_email_override`, `demo_patient_phone_override`)
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
@@ -107,6 +109,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups, Zoom lookups, and protected blueprint endpoints.
+Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, and protected blueprint endpoints.
 
-Latest run result in this workspace: `176 passed`.
+Latest run result in this workspace: `187 passed`.

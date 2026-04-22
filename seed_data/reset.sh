@@ -23,7 +23,12 @@ DELETE FROM patient_data WHERE pid BETWEEN 100 AND 129;
 DELETE FROM openemr_postcalendar_categories
   WHERE pc_catname IN ('zoom-telehealth','new-patient-zoom','new-patient-in-person','phone-consult','in-person');
 DELETE FROM users WHERE id IN (10,11,12,13,20,21,30,31);
+DELETE FROM users_secure WHERE id IN (10,11,12,13,20,21,30,31);
+DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 19;
+DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong');
 DELETE FROM facility WHERE id = 1;
+DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 129;
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'use_email_for_portal_username';
 UPDATE facility SET inactive = 0, name = 'Your Clinic Name Here' WHERE id = 3;
 UPDATE users SET facility_id = 3 WHERE id = 1;
 

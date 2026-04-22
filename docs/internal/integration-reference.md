@@ -26,6 +26,8 @@ This is a working reference for model contracts, webhook payload expectations, a
 | `private_key_path` | `String(512)` | no | Filesystem path to per-account private key |
 | `kid` | `String(256)` | no | JWKS key id used for private_key_jwt |
 | `timezone` | `String(64)` | yes | IANA timezone; default `America/New_York` |
+| `demo_patient_email_override` | `String(256)` | no | Optional demo override for patient email communications |
+| `demo_patient_phone_override` | `String(32)` | no | Optional demo override for patient phone/SMS communications |
 | `is_active` | `Boolean` | yes | Soft-active registration state |
 | `created_at` | `DateTime(timezone=True)` | yes | Created timestamp (UTC) |
 | `updated_at` | `DateTime(timezone=True)` | yes | Updated timestamp (UTC) |
@@ -43,7 +45,7 @@ Relationships:
 | `zoom_account_id` | `Integer(FK)` | yes | FK to `zoom_accounts.id` |
 | `openemr_fhir_id` | `String(128)` | yes | OpenEMR practitioner FHIR id |
 | `openemr_provider_npi` | `String(10)` | yes | Provider NPI used by filter pipeline |
-| `openemr_provider_id` | `String(10)` | no | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
+| `openemr_provider_id` | `String(128)` | no | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
 | `openemr_provider_name` | `String(256)` | no | Provider display name |
 | `zoom_user_email` | `String(256)` | yes | Zoom host email |
 | `zoom_user_name` | `String(256)` | no | Zoom display name |
@@ -160,6 +162,9 @@ Current bridge behavior:
   - creates new meetings when no `MeetingRecord` exists
   - updates existing meetings when `MeetingRecord` exists and Zoom meeting is still present
   - recreates meetings when `MeetingRecord` exists but Zoom meeting was deleted
+  - writes meeting links back to OpenEMR appointment row:
+    - `pc_hometext` = `Zoom Meeting: <start_url>`
+    - `pc_website` = `<join_url>`
   - writes `MeetingRecord` and `MeetingPatient` rows
   - returns one of: `ok`, `partial`, `error`, `dropped`
 - For `appointment.deleted`:
@@ -173,6 +178,7 @@ Audit events emitted by webhook handlers:
 - `appointment.dropped` when filtering produces no account/provider/type matches
 - `meeting.created`, `meeting.updated`, `meeting.recreated`, `meeting.deleted` on successful meeting lifecycle actions
 - `meeting.create_failed`, `meeting.delete_failed` on handled failure paths
+- `openemr.url_writeback_success`, `openemr.url_writeback_failed` for appointment URL writeback outcomes
 
 ## OpenEMR Patch Module (PHP)
 
@@ -219,6 +225,7 @@ Current migration chain:
 - `9f2c1a7d4b6e_create_meeting_patients_table`
 - `bc1e2fb3b8be_add_openemr_provider_id_to_provider_mappings`
 - `21edaf7095b0_change_openemr_provider_id_to_string_on_provider_mappings`
+- `071951c50951_add_demo_patient_contact_overrides_to_zoom_accounts`
 
 ## Test Coverage Pointers
 
@@ -226,10 +233,13 @@ Primary files for this integration slice:
 - `server/tests/test_blueprint_webhooks.py`
 - `server/tests/test_services_appointment_processor.py`
 - `server/tests/test_services_audit.py`
+- `server/tests/test_services_openemr.py`
 - `server/tests/test_services_registration.py`
 - `server/tests/test_services_zoom.py`
 - `server/tests/test_blueprint_config.py`
+- `server/tests/test_seed_data_sql.py`
 - `server/tests/test_migration_timezone.py`
 - `server/tests/test_migration_meeting_records.py`
 - `server/tests/test_migration_provider_mappings.py`
+- `server/tests/test_migration_demo_patient_overrides.py`
 - `server/tests/test_patch_zoom_listener_module.py`

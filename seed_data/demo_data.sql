@@ -108,6 +108,49 @@ INSERT INTO `users` (
  'Hana', 'Song', 'MA', 'Medical Assistant', 'josh.aiken@zoomineer.com', 'josh.aiken@zoomineer.com',
  1, 0, 'med_asst', '356AM0700X', 'standard', 'standard');
 
+
+-- =============================================================================
+-- STAFF SECURE PASSWORDS (ZoomDem0!)
+-- OpenEMR 8.0 uses users_secure for authentication, not users.password
+-- =============================================================================
+INSERT INTO users_secure (id, username, password, last_update_password) VALUES
+(10, 'moconnor',   '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(11, 'erodriguez', '$2y$12$w1I6JUkBsl1O9yuo7LSmte0DEGC.4ewzgNISqDRglz9PNPsFDMJ6y', NOW()),
+(12, 'amiller',    '$2y$12$HFxqNhdpiD3tXpi7ZebNae7ClwQZ/5IAO9Ll8zBAbxzSrXwnZGXzS', NOW()),
+(13, 'mthompson',  '$2y$12$9Bx9nibZUz2LzKaYCphJCeFrEeSfE1tPjaGLXccaDN7QZaqV9kLdS', NOW()),
+(20, 'blee',       '$2y$12$4GWtwxpsqqwSYwAE58stXuyHu9wE7YYkQh/mvBb/Jw3tFXPZ9155m', NOW()),
+(21, 'amartin',    '$2y$12$LfXdio/YMJ7br6BFTgWd3e9kgMKf173W2dqUzXoBjmIcmPXmrlDnS', NOW()),
+(30, 'bwilliams',  '$2y$12$CBV47dDP/2CvTxaO7bER4.XTm0z6zTJSrfKLcz6gOk5ViFJWGTFHi', NOW()),
+(31, 'hsong',      '$2y$12$9jMeSDX.LGvUw61ENWAXyenoSGfXrQ4gMS2rI6klVr0kdF5LP6kxK', NOW());
+
+
+-- gacl_aro (explicit IDs required — no auto_increment)
+INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden) VALUES
+(12, 'users', 'moconnor',   10, 'Michael OConnor',  0),
+(13, 'users', 'amiller',    10, 'Amelia Miller',    0),
+(14, 'users', 'mthompson',  10, 'Marcus Thompson',  0),
+(15, 'users', 'blee',       10, 'Bill Lee',         0),
+(16, 'users', 'amartin',    10, 'Amy Martin',       0),
+(17, 'users', 'bwilliams',  10, 'Ben Williams',     0),
+(18, 'users', 'hsong',      10, 'Hana Song',        0),
+(19, 'users', 'erodriguez', 10, 'Elena Rodriguez',  0);
+
+-- gacl_groups_aro_map
+INSERT IGNORE INTO gacl_groups_aro_map (group_id, aro_id) VALUES
+(13,12),(13,19),(13,13),(13,14),
+(12,15),(12,16),(12,17),(12,18);
+
+-- groups
+INSERT IGNORE INTO groups (name, user) VALUES
+('Physicians', 'moconnor'),
+('Physicians', 'erodriguez'),
+('Physicians', 'amiller'),
+('Physicians', 'mthompson'),
+('Clinicians', 'blee'),
+('Clinicians', 'amartin'),
+('Clinicians', 'bwilliams'),
+('Clinicians', 'hsong');
+
 -- =============================================================================
 -- APPOINTMENT TYPES
 -- =============================================================================
@@ -278,6 +321,40 @@ INSERT INTO `patient_data` (
 (129, UNHEX(REPLACE(UUID(), '-', '')), 'Amara', 'Diallo', 'S', 'Ms.',
  '1984-07-07', 'Female', 'single', '261 Humboldt Street', 'Denver', 'CO', '80230', 'USA',
  '303-555-0130', 'josh.aiken@zoomineer.com', 11, '129', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW());
+
+
+-- =============================================================================
+-- PATIENT PORTAL ACCESS
+-- Enable portal access for demo patients 100-105
+-- Username: firstname.lastname, Password: pass
+-- =============================================================================
+
+-- Enable Patient Portal
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'portal_onsite_two_enable';
+-- Disable email-as-username so we can use firstname.lastname format
+UPDATE globals SET gl_value = '0' WHERE gl_name = 'use_email_for_portal_username';
+-- Set patient portal URL
+UPDATE globals SET gl_value = 'https://openemr-dev.theloosemoose.us/portal' WHERE gl_name = 'portal_onsite_two_address';
+
+-- Enable portal access on patient_data rows
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'james.harrison' WHERE pid = 100;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'sofia.reyes'    WHERE pid = 101;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'david.kim'      WHERE pid = 102;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'rachel.nguyen'  WHERE pid = 103;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'carlos.mendez'  WHERE pid = 104;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'linda.patel'    WHERE pid = 105;
+
+-- Create portal credentials (password: 'ZoomDem0!', bcrypt hashed)
+INSERT IGNORE INTO patient_access_onsite
+    (pid, portal_username, portal_pwd, portal_pwd_status, portal_login_username)
+VALUES
+    (100, 'james.harrison', '$2y$12$EIpHTZKZfZeol9IvJczpLe5wuan4k.hxDz1laRkBPpOcdOgYkv.wK', 1, 'james.harrison'),
+    (101, 'sofia.reyes',    '$2y$12$ijYVMFvrTW915U5a6H9oAe1BaAgDDnkiMxTD1O5luDwnLWaKFWysi', 1, 'sofia.reyes'),
+    (102, 'david.kim',      '$2y$12$y0OO0j0eanYZh7tZX61OdOd3Ax.FMF15kgcyiXEuWtdwFS0kA49tm', 1, 'david.kim'),
+    (103, 'rachel.nguyen',  '$2y$12$DJHYhWP.Y/pl4OWBRKCOOuEsJwbSuPQ6xWtgjaO3ak0CajnBUdffu', 1, 'rachel.nguyen'),
+    (104, 'carlos.mendez',  '$2y$12$x//cQ7uVV1QpGENhd3MQu.o/.EAfV6mVin2n1nj4/uv0YSgFFYSpW', 1, 'carlos.mendez'),
+    (105, 'linda.patel',    '$2y$12$8JnLYbEzToMoMYIQ1Lsm8ulVHXye46./se7QyURqhkS2MAswPxrAO', 1, 'linda.patel');
+
 
 -- =============================================================================
 -- APPOINTMENTS
