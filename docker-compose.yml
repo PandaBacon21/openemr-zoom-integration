@@ -111,16 +111,16 @@ services:
         cp /branding/core/favicon/favicon.ico /openemr_public/core/favicon/favicon.ico &&
         cp /branding/core/login/primary/logo.png /openemr_public/portal/login/primary/logo.png &&
         cp /branding/core/menu/primary/logo.png /openemr_public/portal/menu/primary/logo.png &&
-        cp /branding/zoom_icon.png /openemr_public/zoom_icon.png &&
-        cp /branding/zoom_icon.png /openemr_public/zoom_icon_64x64.png &&
+        cp /branding/Product_Meetings_Light_Badge-Solo.png /openemr_public/Product_Meetings_Light_Badge-Solo.png &&
+        cp /branding/Product_Meetings_Bloom_Badge-Solo.png /openemr_public/Product_Meetings_Bloom_Badge-Solo.png &&
         echo 'Setting file permissions...' &&
         chmod 644 /openemr_public/core/login/primary/logo.png &&
         chmod 644 /openemr_public/core/menu/primary/logo.png &&
         chmod 644 /openemr_public/core/favicon/favicon.ico &&
         chmod 644 /openemr_public/portal/login/primary/logo.png &&
         chmod 644 /openemr_public/portal/menu/primary/logo.png &&
-        chmod 644 /openemr_public/zoom_icon.png &&
-        chmod 644 /openemr_public/zoom_icon_64x64.png &&
+        chmod 644 /openemr_public/Product_Meetings_Light_Badge-Solo.png &&
+        chmod 644 /openemr_public/Product_Meetings_Bloom_Badge-Solo.png &&
         echo 'Branding complete.'
       "
     networks:

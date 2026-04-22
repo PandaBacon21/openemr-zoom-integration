@@ -19,6 +19,9 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- Widen pc_website to accommodate full Zoom start URLs with zak tokens
+ALTER TABLE openemr_postcalendar_events MODIFY pc_website VARCHAR(1024);
+
 -- =============================================================================
 -- FACILITY
 -- Override default facility (id=3) to hide it, create Zoomly Medical Center
@@ -36,7 +39,7 @@ INSERT INTO `facility` (
     1, UNHEX(REPLACE(UUID(), '-', '')),
     'Zoomly Medical Center', '303-555-0100',
     '100 Health Plaza', 'Denver', 'CO', '80201', 'USA',
-    '1234567890', '#0E72ED',
+    '1234567890', '#0b5cff',
     1, 1, 1, 1, 0
 );
 
@@ -151,6 +154,7 @@ INSERT IGNORE INTO groups (name, user) VALUES
 ('Clinicians', 'bwilliams'),
 ('Clinicians', 'hsong');
 
+
 -- =============================================================================
 -- APPOINTMENT TYPES
 -- =============================================================================
@@ -160,22 +164,22 @@ INSERT INTO `openemr_postcalendar_categories` (
     `pc_duration`, `pc_cattype`, `pc_active`, `pc_seq`,
     `pc_recurrtype`, `pc_recurrfreq`, `pc_end_date_flag`,
     `pc_end_date_freq`, `pc_end_all_day`, `pc_dailylimit`,
-    `aco_spec`
+    `aco_spec`, `pc_constant_id`
 ) VALUES
-('zoom-telehealth', '#0E72ED', 'Zoom telehealth video appointment — established patient',
- 1800, 0, 1, 10, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
+('zoom-telehealth', '#0b5cff', 'Zoom telehealth video appointment — established patient',
+ 1800, 0, 1, 10, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_telehealth'),
 
-('new-patient-zoom', '#00B050', 'New patient intake via Zoom video',
- 2700, 0, 1, 20, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
+('new-patient-zoom', '#b4d0f8', 'New patient intake via Zoom video',
+ 2700, 0, 1, 20, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'new_patient_zoom'),
 
 ('new-patient-in-person', '#888888', 'New patient intake in office',
- 2700, 0, 1, 30, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
+ 2700, 0, 1, 30, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'new_patient_in_person'),
 
 ('phone-consult', '#F5A623', 'Phone consultation — no video',
- 900, 0, 1, 40, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
+ 900, 0, 1, 40, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'phone_consult'),
 
 ('in-person', '#E07B39', 'Established patient in-office visit',
- 1800, 0, 1, 50, 0, 0, 0, 0, 0, 0, 'encounters|notes');
+ 1800, 0, 1, 50, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'in_person');
 
 SET @zoom_telehealth_catid  = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'zoom-telehealth');
 SET @new_patient_zoom_catid = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'new-patient-zoom');
@@ -186,6 +190,7 @@ SET @in_person_catid        = (SELECT pc_catid FROM openemr_postcalendar_categor
 -- Serialized recurrspec and location used by OpenEMR calendar (required for display)
 SET @recurrspec = 'a:6:{s:17:"event_repeat_freq";s:1:"0";s:22:"event_repeat_freq_type";s:1:"0";s:19:"event_repeat_on_num";s:1:"1";s:19:"event_repeat_on_day";s:1:"0";s:20:"event_repeat_on_freq";s:1:"0";s:6:"exdate";s:0:"";}';
 SET @location   = 'a:6:{s:14:"event_location";s:0:"";s:13:"event_street1";s:0:"";s:13:"event_street2";s:0:"";s:10:"event_city";s:0:"";s:11:"event_state";s:0:"";s:12:"event_postal";s:0:"";}';
+
 
 -- =============================================================================
 -- PATIENTS

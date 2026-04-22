@@ -8,10 +8,13 @@ from app.services.appointment_processor import filter_appointment_event
 from app.services.zoom import create_zoom_meeting, get_zoom_meeting, delete_zoom_meeting
 from app.services.audit import write_audit_log
 from app.extensions import db
-from app.models import MeetingRecord, MeetingPatient
+from app.models import MeetingRecord, MeetingPatient, ZoomAccount
 
 webhooks_bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
 
+"""
+OPENEMR WEBHOOK
+"""
 
 # ---------------------------------------------------------------------------
 # Signature verification helper
@@ -466,7 +469,6 @@ def _handle_existing_meeting(
             return {"error": str(e)}
  
 
-
 # ---------------------------------------------------------------------------
 # Delete handler
 # ---------------------------------------------------------------------------
@@ -553,6 +555,310 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
         "eid": eid,
         "deleted_meetings": deleted_meetings
     }, 200
+
+
+"""
+ZOOM WEBHOOK
+"""
+
+
+# ---------------------------------------------------------------------------
+# Helper: look up ZoomAccount by account_id from payload
+# ---------------------------------------------------------------------------
+
+def _get_account(payload: dict) -> ZoomAccount | None:
+    """
+    Zoom webhooks include the account_id at the top level of the payload.
+    Use this to look up the correct ZoomAccount and its webhook_secret.
+    """
+    account_id = payload.get("account_id")
+    
+    # Fallback: some events nest it inside payload object
+    if not account_id:
+        account_id = payload.get("payload", {}).get("account_id")
+    
+    if not account_id:
+        return None
+    
+    return ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
+
+
+# ---------------------------------------------------------------------------
+# Helper: verify Zoom webhook signature
+# ---------------------------------------------------------------------------
+
+def _verify_zoom_signature(raw_body: bytes, timestamp: str, signature: str, secret: str) -> bool:
+    """
+    Verify Zoom webhook signature.
+
+    Zoom constructs the message as:
+        v0:{x-zm-request-timestamp}:{raw_body_as_string}
+
+    The raw body must be used as-is (not re-serialized) to preserve
+    exact whitespace and key ordering from Zoom's request.
+
+    Also validates the timestamp is within 5 minutes to prevent replay attacks.
+    """
+    import time
+
+    # Replay attack prevention — reject requests older than 5 minutes
+    try:
+        ts = int(timestamp)
+        if abs(time.time() - ts) > 300:
+            current_app.logger.warning("zoom_webhook | Timestamp out of 5-minute window, rejecting")
+            return False
+    except (ValueError, TypeError):
+        current_app.logger.warning("zoom_webhook | Invalid timestamp header")
+        return False
+
+    message = f"v0:{timestamp}:{raw_body.decode('utf-8')}"
+    expected = "v0=" + hmac.new(
+        secret.encode("utf-8"),
+        msg=message.encode("utf-8"),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(expected, signature)
+
+
+# ---------------------------------------------------------------------------
+# Helper: handle CRC URL validation
+# ---------------------------------------------------------------------------
+
+def _handle_url_validation(payload: dict, secret: str):
+    """
+    Respond to Zoom's endpoint.url_validation CRC challenge.
+
+    Zoom sends this when you click "Validate" in the app dashboard.
+    Must respond within 3 seconds with the encrypted token.
+    """
+    plain_token = payload.get("payload", {}).get("plainToken", "")
+    encrypted_token = hmac.new(
+        secret.encode("utf-8"),
+        msg=plain_token.encode("utf-8"),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+
+    current_app.logger.info("zoom_webhook | CRC validation challenge received, responding")
+    return {
+        "plainToken": plain_token,
+        "encryptedToken": encrypted_token,
+    }, 200
+
+
+# ---------------------------------------------------------------------------
+# Main Zoom webhook endpoint
+# ---------------------------------------------------------------------------
+
+@webhooks_bp.route("/zoom", methods=["POST"])
+def zoom_webhook():
+    """
+    S5-01: Receive and validate inbound Zoom webhook events.
+
+    Flow:
+      1. Read raw body (critical — must not use request.json)
+      2. Parse JSON to get account_id and event type
+      3. Look up ZoomAccount by account_id
+      4. Handle endpoint.url_validation (CRC) without full sig check
+      5. Validate signature and timestamp
+      6. Route to appropriate handler
+    """
+    # --- 1. Read raw body ---
+    raw_body = request.data
+    if not raw_body:
+        return {"error": "empty body"}, 400
+
+    # --- 2. Parse payload ---
+    try:
+        payload = json.loads(raw_body)
+    except (json.JSONDecodeError, ValueError) as e:
+        current_app.logger.warning(f"zoom_webhook | Failed to parse JSON: {e}")
+        return {"error": "invalid JSON"}, 400
+
+    event_type = payload.get("event")
+    account_id = payload.get("payload", {}).get("account_id")
+
+    current_app.logger.info(
+        f"zoom_webhook | Received event={event_type} account_id={account_id}"
+    )
+
+   # --- 3. Handle CRC URL validation first ---
+    # CRC requests have no account_id — match against first active account
+    if event_type == "endpoint.url_validation":
+        # Try account lookup, fall back to first active account
+        account = _get_account(payload) or ZoomAccount.query.filter_by(is_active=True).first()
+        if not account:
+            current_app.logger.warning("zoom_webhook | CRC received but no active account found")
+            return {"error": "unknown account"}, 404
+        secret = account.webhook_secret
+        if not secret:
+            current_app.logger.warning("zoom_webhook | CRC received but no webhook_secret configured")
+            return {"error": "webhook secret not configured"}, 500
+        return _handle_url_validation(payload, secret)
+
+    # --- 4. Look up ZoomAccount for all other events ---
+    account = _get_account(payload)
+    if not account:
+        current_app.logger.warning(f"zoom_webhook | No active account found for account_id={account_id}")
+        return {"error": "unknown account"}, 404
+
+    # --- 5. Validate signature ---
+    timestamp = request.headers.get("x-zm-request-timestamp", "")
+    signature = request.headers.get("x-zm-signature", "")
+
+    if not timestamp or not signature:
+        current_app.logger.warning("zoom_webhook | Missing signature or timestamp headers")
+        return {"error": "missing signature headers"}, 401
+
+    secret = account.webhook_secret
+    if not secret:
+        current_app.logger.warning(f"zoom_webhook | Account {account_id} has no webhook_secret configured")
+        return {"error": "webhook secret not configured"}, 500
+
+    if not _verify_zoom_signature(raw_body, timestamp, signature, secret):
+        current_app.logger.warning(f"zoom_webhook | Invalid signature for account={account_id} event={event_type}")
+        write_audit_log(
+            event_type="zoom.webhook_signature_failed",
+            success=False,
+            zoom_account_id=account_id,
+            detail={"event": event_type}
+        )
+        return {"error": "invalid signature"}, 401
+
+    current_app.logger.info(
+        f"zoom_webhook | Signature verified for account={account_id} event={event_type}"
+    )
+
+    # --- 6. Route to handler ---
+    if event_type == "clinical_notes.note_created":
+        return _handle_cn_created(payload, account)
+    else:
+        current_app.logger.debug(f"zoom_webhook | Unhandled event type: {event_type}")
+        return {"status": "ignored", "event": event_type}, 200
+
+# ---------------------------------------------------------------------------
+# clinical_notes.note_created handler
+# ---------------------------------------------------------------------------
+def _handle_cn_created(payload: dict, account: ZoomAccount):
+    """
+    Handle clinical_notes.note_created event.
+    Extracts meeting_number, note_id, and note_title from payload.
+    """
+    obj = payload.get("payload", {}).get("object", {})
+
+    meeting_number = obj.get("meeting_number")
+    note_id = obj.get("note_id")
+    note_title = obj.get("note_title")
+    ehr_context_available = obj.get("ehr_context_available", False)
+
+    current_app.logger.info(
+        f"zoom_webhook | clinical_notes.note_created | "
+        f"meeting_number={meeting_number} note_id={note_id} "
+        f"title='{note_title}' ehr_context={ehr_context_available}"
+    )
+
+    if not meeting_number or not note_id:
+        current_app.logger.warning(
+            f"zoom_webhook | clinical_notes.note_created | "
+            f"Missing required fields: meeting_number={meeting_number} note_id={note_id}"
+        )
+        write_audit_log(
+            event_type="note.received",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_note_id=note_id,
+            error_message="missing meeting_number or note_id",
+        )
+        return {"error": "missing required fields"}, 400
+
+    write_audit_log(
+        event_type="note.received",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_number,
+        zoom_note_id=note_id,
+        detail={
+            "note_title": note_title,
+            "ehr_context_available": ehr_context_available,
+        }
+    )
+
+    # Validate meeting_number against MeetingRecord
+    return _validate_and_process_note(
+        account=account,
+        meeting_number=meeting_number,
+        note_id=note_id,
+        note_title=note_title,
+    )
+
+
+def _validate_and_process_note(
+    account: ZoomAccount,
+    meeting_number: str,
+    note_id: str,
+    note_title: str | None,
+) -> tuple[dict, int]:
+    """
+    Validate note's meeting_number against stored MeetingRecords.
+    """
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=str(meeting_number),
+        zoom_account_id=account.id,
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | meeting_number={meeting_number} "
+            f"not found in MeetingRecord — dropping note {note_id}"
+        )
+        write_audit_log(
+            event_type="note.dropped",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            error_message="no matching MeetingRecord",
+        )
+        return {"status": "dropped", "reason": "no matching meeting"}, 200
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting_number={meeting_number} "
+        f"matched MeetingRecord id={record.id} eid={record.openemr_appointment_id}"
+    )
+
+    # Retrieve note content from Zoom API
+    from app.services.zoom import get_zoom_clinical_note
+    note_data = get_zoom_clinical_note(account, note_id)
+
+    if not note_data:
+        current_app.logger.warning(
+            f"zoom_webhook | note_id={note_id} not found in Zoom API"
+        )
+        write_audit_log(
+            event_type="note.retrieved",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            error_message="note not found in Zoom API",
+        )
+        return {"status": "error", "reason": "note not found"}, 500
+
+    write_audit_log(
+        event_type="note.retrieved",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_number,
+        zoom_note_id=note_id,
+        detail={"note_title": note_data.get("note_title")}
+    )
+
+    current_app.logger.info(
+        f"zoom_webhook | note_id={note_id} retrieved successfully"
+    )
+
+    # S5-05 placeholder: write note to OpenEMR
+    return {"status": "received", "meeting_record_id": record.id}, 200
 
 
 # ---------------------------------------------------------------------------

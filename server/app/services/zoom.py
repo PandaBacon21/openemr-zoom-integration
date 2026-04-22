@@ -546,3 +546,30 @@ def update_zoom_meeting(
     )
 
     logger.info(f"zoom.update_meeting | Meeting {meeting_id} updated successfully")
+
+
+def get_zoom_clinical_note(zoom_account: ZoomAccount, note_id: str) -> dict | None:
+    """
+    etrieve clinical note content from Zoom Healthcare API.
+
+    GET /clinical_notes/notes/{note_id}
+
+    Returns the full note dict including note_content, or None if not found.
+    """
+    try:
+        result = make_zoom_api_request(
+            "GET",
+            f"/clinical_notes/notes/{note_id}",
+            zoom_account
+        )
+        logger.info(
+            f"zoom.get_clinical_note | Retrieved note_id={note_id} "
+            f"is_completed={result.get('is_note_completed')}"
+        )
+        return result
+    except requests.HTTPError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"zoom.get_clinical_note | Note {note_id} not found")
+            return None
+        logger.error(f"zoom.get_clinical_note | Failed to retrieve note {note_id}: {e}")
+        raise
