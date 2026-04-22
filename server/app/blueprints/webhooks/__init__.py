@@ -572,8 +572,14 @@ def _get_account(payload: dict) -> ZoomAccount | None:
     Use this to look up the correct ZoomAccount and its webhook_secret.
     """
     account_id = payload.get("account_id")
+    
+    # Fallback: some events nest it inside payload object
+    if not account_id:
+        account_id = payload.get("payload", {}).get("account_id")
+    
     if not account_id:
         return None
+    
     return ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
 
 
@@ -670,7 +676,7 @@ def zoom_webhook():
         return {"error": "invalid JSON"}, 400
 
     event_type = payload.get("event")
-    account_id = payload.get("account_id")
+    account_id = payload.get("payload", {}).get("account_id")
 
     current_app.logger.info(
         f"zoom_webhook | Received event={event_type} account_id={account_id}"
@@ -724,24 +730,104 @@ def zoom_webhook():
     )
 
     # --- 6. Route to handler ---
-    if event_type == "recording.transcript_completed":
-        return _handle_cn_completed(payload, account)
+    if event_type == "clinical_notes.note_created":
+        return _handle_cn_created(payload, account)
     else:
         current_app.logger.debug(f"zoom_webhook | Unhandled event type: {event_type}")
         return {"status": "ignored", "event": event_type}, 200
 
 # ---------------------------------------------------------------------------
-# S5-02 placeholder: clinical_notes.note_created handler
+# clinical_notes.note_created handler
 # ---------------------------------------------------------------------------
-def _handle_cn_completed(payload: dict, account: ZoomAccount):
+def _handle_cn_created(payload: dict, account: ZoomAccount):
     """
-    S5-02: Handle clinical_notes.note_created event.
-    Placeholder — full implementation in S5-02.
+    Handle clinical_notes.note_created event.
+    Extracts meeting_number, note_id, and note_title from payload.
     """
+    obj = payload.get("payload", {}).get("object", {})
+
+    meeting_number = obj.get("meeting_number")
+    note_id = obj.get("note_id")
+    note_title = obj.get("note_title")
+    ehr_context_available = obj.get("ehr_context_available", False)
+
     current_app.logger.info(
-        f"zoom_webhook | clinical_notes.note_created received for account={account.account_id}"
+        f"zoom_webhook | clinical_notes.note_created | "
+        f"meeting_number={meeting_number} note_id={note_id} "
+        f"title='{note_title}' ehr_context={ehr_context_available}"
     )
-    return {"status": "received"}, 200
+
+    if not meeting_number or not note_id:
+        current_app.logger.warning(
+            f"zoom_webhook | clinical_notes.note_created | "
+            f"Missing required fields: meeting_number={meeting_number} note_id={note_id}"
+        )
+        write_audit_log(
+            event_type="note.received",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_note_id=note_id,
+            error_message="missing meeting_number or note_id",
+        )
+        return {"error": "missing required fields"}, 400
+
+    write_audit_log(
+        event_type="note.received",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_number,
+        zoom_note_id=note_id,
+        detail={
+            "note_title": note_title,
+            "ehr_context_available": ehr_context_available,
+        }
+    )
+
+    # Validate meeting_number against MeetingRecord
+    return _validate_and_process_note(
+        account=account,
+        meeting_number=meeting_number,
+        note_id=note_id,
+        note_title=note_title,
+    )
+
+
+def _validate_and_process_note(
+    account: ZoomAccount,
+    meeting_number: str,
+    note_id: str,
+    note_title: str | None,
+) -> tuple[dict, int]:
+    """
+    Validate note's meeting_number against stored MeetingRecords.
+    """
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=str(meeting_number),
+        zoom_account_id=account.id,
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | meeting_number={meeting_number} "
+            f"not found in MeetingRecord — dropping note {note_id}"
+        )
+        write_audit_log(
+            event_type="note.dropped",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            error_message="no matching MeetingRecord",
+        )
+        return {"status": "dropped", "reason": "no matching meeting"}, 200
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting_number={meeting_number} "
+        f"matched MeetingRecord id={record.id} eid={record.openemr_appointment_id}"
+    )
+
+    # S5-04 placeholder: retrieve note content from Zoom API
+    return {"status": "received", "meeting_record_id": record.id}, 200
 
 
 # ---------------------------------------------------------------------------

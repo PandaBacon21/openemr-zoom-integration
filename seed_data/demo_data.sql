@@ -19,6 +19,9 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- Widen pc_website to accommodate full Zoom start URLs with zak tokens
+ALTER TABLE openemr_postcalendar_events MODIFY pc_website VARCHAR(1024);
+
 -- =============================================================================
 -- FACILITY
 -- Override default facility (id=3) to hide it, create Zoomly Medical Center
@@ -36,7 +39,7 @@ INSERT INTO `facility` (
     1, UNHEX(REPLACE(UUID(), '-', '')),
     'Zoomly Medical Center', '303-555-0100',
     '100 Health Plaza', 'Denver', 'CO', '80201', 'USA',
-    '1234567890', '#0E72ED',
+    '1234567890', '#0b5cff',
     1, 1, 1, 1, 0
 );
 
@@ -162,10 +165,10 @@ INSERT INTO `openemr_postcalendar_categories` (
     `pc_end_date_freq`, `pc_end_all_day`, `pc_dailylimit`,
     `aco_spec`
 ) VALUES
-('zoom-telehealth', '#0E72ED', 'Zoom telehealth video appointment — established patient',
+('zoom-telehealth', '#0b5cff', 'Zoom telehealth video appointment — established patient',
  1800, 0, 1, 10, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
 
-('new-patient-zoom', '#00B050', 'New patient intake via Zoom video',
+('new-patient-zoom', '#b4d0f8', 'New patient intake via Zoom video',
  2700, 0, 1, 20, 0, 0, 0, 0, 0, 0, 'encounters|notes'),
 
 ('new-patient-in-person', '#888888', 'New patient intake in office',

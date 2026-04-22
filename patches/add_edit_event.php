@@ -1779,8 +1779,8 @@ if (empty($_GET['prov'])) { ?>
     <?php if (!empty($row['pc_website'])): ?>
         <div class="form-row mx-2 mt-2 justify-content-left">
         <a href="<?php echo attr($row['pc_website']); ?>" target="_blank" title="<?php echo xla('Start Zoom Meeting'); ?>">
-        <img src="<?php echo $GLOBALS['webroot']; ?>/public/images/logos/zoom_icon_64x64.png" 
-             style="height:64px; width:64px; background:white;" />
+        <img src="<?php echo $GLOBALS['webroot']; ?>/public/images/logos/Product_Meetings_Bloom_Badge-Solo.png" 
+             style="height:64px; width:64px;" />
         </a>
         </div>
     <?php endif; ?>
