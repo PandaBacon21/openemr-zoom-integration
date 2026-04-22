@@ -67,6 +67,9 @@ services:
       - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
       # Patch for adding appointment event notifications
       - ./patches/zoom_appointment_listener:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
+      # Patch for adding Start Zoom Meeting button
+      - ./patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
+      - ./patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
     networks:
       - integration_net
     healthcheck:
@@ -108,12 +111,16 @@ services:
         cp /branding/core/favicon/favicon.ico /openemr_public/core/favicon/favicon.ico &&
         cp /branding/core/login/primary/logo.png /openemr_public/portal/login/primary/logo.png &&
         cp /branding/core/menu/primary/logo.png /openemr_public/portal/menu/primary/logo.png &&
+        cp /branding/zoom_icon.png /openemr_public/zoom_icon.png &&
+        cp /branding/zoom_icon.png /openemr_public/zoom_icon_64x64.png &&
         echo 'Setting file permissions...' &&
         chmod 644 /openemr_public/core/login/primary/logo.png &&
         chmod 644 /openemr_public/core/menu/primary/logo.png &&
         chmod 644 /openemr_public/core/favicon/favicon.ico &&
         chmod 644 /openemr_public/portal/login/primary/logo.png &&
         chmod 644 /openemr_public/portal/menu/primary/logo.png &&
+        chmod 644 /openemr_public/zoom_icon.png &&
+        chmod 644 /openemr_public/zoom_icon_64x64.png &&
         echo 'Branding complete.'
       "
     networks:

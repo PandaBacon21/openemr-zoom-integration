@@ -257,13 +257,11 @@ def write_zoom_urls_to_appointment(
                 text("""
                     UPDATE openemr_postcalendar_events
                     SET
-                        pc_hometext = :hometext,
                         pc_website = :website
                     WHERE pc_eid = :eid
                 """),
                 {
-                    "hometext": f"Zoom Meeting: {start_url}",
-                    "website": join_url,
+                    "website": start_url,
                     "eid": int(eid),
                 }
             )
