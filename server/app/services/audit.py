@@ -1,7 +1,6 @@
 import json
 import logging
 from datetime import datetime, timezone
-
 from app.extensions import db
 from app.models import AuditLog
 

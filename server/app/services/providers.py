@@ -5,7 +5,7 @@ from app.models import ZoomAccount, ProviderMapping
 logger = logging.getLogger(__name__)
 
 
-def create_provider_mapping(
+def _create_provider_mapping(
     zoom_account_id: str,
     openemr_fhir_id: str,
     openemr_provider_npi: str,
@@ -72,7 +72,7 @@ def create_provider_mapping(
     return mapping
 
 
-def get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
+def _get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
     """
     Get all active provider mappings for a Zoom account.
     """
@@ -88,7 +88,7 @@ def get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
     ).all()
 
 
-def delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> None:
+def _delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> None:
     """
     Delete a provider mapping by npi.
     """

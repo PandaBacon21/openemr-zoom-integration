@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from app.auth.api_key import protect_with_api_key
 from app.models import ZoomAccount
+from app.services.zoom import get_zoom_users
 
 zoom_bp = Blueprint("zoom", __name__, url_prefix="/zoom")
 
@@ -10,7 +11,6 @@ def protect():
 
 @zoom_bp.route("/users", methods=["GET"])
 def get_users():
-    from app.services.zoom import get_zoom_users
 
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:

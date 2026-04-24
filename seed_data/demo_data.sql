@@ -166,7 +166,7 @@ INSERT INTO `openemr_postcalendar_categories` (
     `pc_end_date_freq`, `pc_end_all_day`, `pc_dailylimit`,
     `aco_spec`, `pc_constant_id`
 ) VALUES
-('zoom-telehealth', '#0b5cff', 'Zoom telehealth video appointment — established patient',
+('zoom-telehealth', '#00053D', 'Zoom telehealth video appointment — established patient',
  1800, 0, 1, 10, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_telehealth'),
 
 ('new-patient-zoom', '#b4d0f8', 'New patient intake via Zoom video',

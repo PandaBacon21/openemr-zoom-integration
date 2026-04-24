@@ -38,19 +38,19 @@ def load_private_key(key_path: str):
         )
 
 
-def build_jwks(key_path: str, key_id: str) -> dict:
-    """
-    Build the JWKS response using authlib.
-    OpenEMR fetches this from /.well-known/jwks.json to verify our JWT signatures.
-    """
-    private_key = load_private_key(key_path)
+# def build_jwks(key_path: str, key_id: str) -> dict:
+#     """
+#     Build the JWKS response using authlib.
+#     OpenEMR fetches this from /.well-known/jwks.json to verify our JWT signatures.
+#     """
+#     private_key = load_private_key(key_path)
 
-    # Export the public key as PEM so authlib can import it
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
+#     # Export the public key as PEM so authlib can import it
+#     public_pem = private_key.public_key().public_bytes(
+#         encoding=serialization.Encoding.PEM,
+#         format=serialization.PublicFormat.SubjectPublicKeyInfo
+#     )
 
-    # authlib handles all the base64url encoding and JWKS formatting
-    jwk = JsonWebKey.import_key(public_pem, {"kty": "RSA", "use": "sig", "kid": key_id}) # type: ignore
-    return {"keys": [dict(jwk)]}
+#     # authlib handles all the base64url encoding and JWKS formatting
+#     jwk = JsonWebKey.import_key(public_pem, {"kty": "RSA", "use": "sig", "kid": key_id}) # type: ignore
+#     return {"keys": [dict(jwk)]}

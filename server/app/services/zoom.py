@@ -4,10 +4,9 @@ import base64
 import time
 import logging
 from datetime import datetime, timezone
-
 import requests
 from flask import current_app
-
+from app.services.openemr.openemr import get_patient
 from app.extensions import db
 from app.models import ZoomAccount
 
@@ -295,7 +294,6 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
     pid = payload.get("pid")
     if pid:
         try:
-            from app.services.openemr import get_patient
             patient = get_patient(account, pid)
             if patient:
                 patient_last_name = patient.get("last_name")
@@ -500,7 +498,6 @@ def update_zoom_meeting(
     pid = payload.get("pid")
     if pid:
         try:
-            from app.services.openemr import get_patient
             patient = get_patient(zoom_account, pid)
             if patient:
                 patient_last_name = patient.get("last_name")

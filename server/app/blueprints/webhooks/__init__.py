@@ -1,14 +1,15 @@
 import hashlib
 import hmac
 import json
-
+import time
 from flask import Blueprint, current_app, request
-
 from app.services.appointment_processor import filter_appointment_event
-from app.services.zoom import create_zoom_meeting, get_zoom_meeting, delete_zoom_meeting
+from app.services.zoom import create_zoom_meeting, get_zoom_meeting, update_zoom_meeting, delete_zoom_meeting, get_zoom_clinical_note
+from app.services.openemr.openemr import write_zoom_urls_to_appointment, create_encounter, get_appointment_details, update_appointment_status, get_provider_username, find_encounter_for_appointment, create_encounter, write_note_to_encounter, get_appointment_details
 from app.services.audit import write_audit_log
 from app.extensions import db
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount
+
 
 webhooks_bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
 
@@ -279,7 +280,6 @@ def _handle_new_meeting(match, payload: dict) -> dict:
         )
 
         # Write Zoom URLs back to OpenEMR appointment record
-        from app.services.openemr import write_zoom_urls_to_appointment
         if eid:
             success = write_zoom_urls_to_appointment(
                 eid=eid,
@@ -391,7 +391,6 @@ def _handle_existing_meeting(
             )
 
             # Write new URLs back to OpenEMR appointment record
-            from app.services.openemr import write_zoom_urls_to_appointment
             if eid:
                 success = write_zoom_urls_to_appointment(
                     eid=eid,
@@ -432,7 +431,6 @@ def _handle_existing_meeting(
             "exists — updating"
         )
         try:
-            from app.services.zoom import update_zoom_meeting
             update_zoom_meeting(account, record.zoom_meeting_id, match)
         except Exception as e:
             current_app.logger.error(
@@ -599,7 +597,6 @@ def _verify_zoom_signature(raw_body: bytes, timestamp: str, signature: str, secr
 
     Also validates the timestamp is within 5 minutes to prevent replay attacks.
     """
-    import time
 
     # Replay attack prevention — reject requests older than 5 minutes
     try:
@@ -732,6 +729,8 @@ def zoom_webhook():
     # --- 6. Route to handler ---
     if event_type == "clinical_notes.note_created":
         return _handle_cn_created(payload, account)
+    elif event_type in ("meeting.participant_joined_waiting_room", "meeting.participant_jbh_waiting"):
+        return _handle_waiting_room_joined(payload, account)
     else:
         current_app.logger.debug(f"zoom_webhook | Unhandled event type: {event_type}")
         return {"status": "ignored", "event": event_type}, 200
@@ -827,7 +826,6 @@ def _validate_and_process_note(
     )
 
     # Retrieve note content from Zoom API
-    from app.services.zoom import get_zoom_clinical_note
     note_data = get_zoom_clinical_note(account, note_id)
 
     if not note_data:
@@ -857,8 +855,143 @@ def _validate_and_process_note(
         f"zoom_webhook | note_id={note_id} retrieved successfully"
     )
 
-    # S5-05 placeholder: write note to OpenEMR
-    return {"status": "received", "meeting_record_id": record.id}, 200
+    # S5-05: Find or create encounter, write note
+
+    # Get patient and provider from MeetingRecord
+    pid = None
+    patient = MeetingPatient.query.filter_by(meeting_record_id=record.id).first()
+    if patient:
+        pid = int(patient.openemr_patient_id)
+
+    provider_id = int(record.openemr_provider_id) if record.openemr_provider_id else None
+    eid = int(record.openemr_appointment_id)
+
+    if not pid or not provider_id:
+        current_app.logger.warning(
+            f"zoom_webhook | S5-05 | missing pid={pid} or provider_id={provider_id} "
+            f"for MeetingRecord id={record.id}"
+        )
+        return {"status": "error", "reason": "missing patient or provider"}, 500
+
+    # Find existing encounter or create one
+    encounter_number = find_encounter_for_appointment(eid, pid, provider_id)
+
+    if not encounter_number:
+        current_app.logger.info(
+            f"zoom_webhook | S5-05 | no encounter found for eid={eid} — creating"
+        )
+        appt = get_appointment_details(eid)
+        if appt:
+            encounter_number = create_encounter(
+                pid=pid,
+                provider_id=provider_id,
+                facility_id=appt["facility_id"],
+                pc_catid=appt["pc_catid"],
+                eid=eid,
+            )
+
+    if not encounter_number:
+        current_app.logger.error(
+            f"zoom_webhook | S5-05 | failed to find or create encounter for eid={eid}"
+        )
+        return {"status": "error", "reason": "could not find or create encounter"}, 500
+
+    current_app.logger.info(
+        f"zoom_webhook | S5-05 | using encounter={encounter_number} for eid={eid}"
+    )
+
+    # Get provider username for forms.user field
+    provider_username = get_provider_username(provider_id) or "admin"
+
+    # Write note to encounter
+    success = write_note_to_encounter(
+        encounter_number=encounter_number,
+        pid=pid,
+        provider_id=provider_id,
+        provider_username=provider_username,
+        note_content=note_data.get("note_content", ""),
+        note_title=note_data.get("note_title", note_title or ""),
+        note_id=note_id,
+    )
+
+    write_audit_log(
+        event_type="note.written" if success else "note.write_failed",
+        success=success,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_number,
+        zoom_note_id=note_id,
+        openemr_appointment_id=str(eid),
+        detail={"encounter": encounter_number}
+    )
+
+    return {
+        "status": "written" if success else "write_failed",
+        "encounter": encounter_number,
+        "meeting_record_id": record.id,
+    }, 200 if success else 500
+
+
+def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
+    """
+    Handle meeting.participant_jbh_waiting and meeting.participant_joined_waiting_room.
+    Updates appointment status to Arrived (@) which triggers OpenEMR auto-encounter creation.
+    """
+    obj = payload.get("payload", {}).get("object", {})
+    meeting_id = obj.get("id")
+    participant_name = obj.get("participant", {}).get("user_name", "unknown")
+    event_type = payload.get("event")
+
+    current_app.logger.info(
+        f"zoom_webhook | waiting_room | meeting_id={meeting_id} "
+        f"participant='{participant_name}' event={event_type}"
+    )
+
+    if not meeting_id:
+        current_app.logger.warning("zoom_webhook | waiting_room | missing meeting id")
+        return {"error": "missing meeting id"}, 400
+
+    # Look up MeetingRecord
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=str(meeting_id),
+        zoom_account_id=account.id
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | waiting_room | no MeetingRecord for meeting_id={meeting_id}"
+        )
+        return {"status": "no_record"}, 200
+
+    eid = record.openemr_appointment_id
+
+    # Update appointment status to Arrived
+    success = update_appointment_status(int(eid), "@")
+
+    write_audit_log(
+        event_type="appointment.patient_arrived",
+        success=success,
+        zoom_account_id=account.account_id,
+        openemr_appointment_id=eid,
+        zoom_meeting_id=meeting_id,
+        detail={"participant": participant_name, "trigger": event_type}
+    )
+
+    current_app.logger.info(
+        f"zoom_webhook | waiting_room | eid={eid} status {'updated to Arrived' if success else 'update failed'}"
+    )
+
+    # Get appointment details for encounter creation
+    appt = get_appointment_details(int(eid))
+    if appt:
+        encounter_number = create_encounter(
+            pid=appt["pid"],
+            provider_id=appt["provider_id"],
+            facility_id=appt["facility_id"],
+            pc_catid=appt["pc_catid"],
+            eid=int(eid),
+        )
+
+    return {"status": "ok", "eid": eid}, 200
 
 
 # ---------------------------------------------------------------------------

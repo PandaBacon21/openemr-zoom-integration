@@ -1,12 +1,13 @@
 import logging
-
 import requests
 from flask import current_app
-
+from .reg_verification import trigger_verification_scheduler
 from app.extensions import db
 from app.models import ZoomAccount
 from app.services.zoom import validate_zoom_credentials
 from app.services.keys import generate_keypair, delete_keypair
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,6 @@ def register_zoom_account(
         )
 
     # ── Step 6: Trigger OpenEMR verification scheduler ────────────────────────
-    from .reg_verification import trigger_verification_scheduler
     trigger_verification_scheduler(current_app._get_current_object())  # type: ignore[attr-defined]
 
     logger.info(

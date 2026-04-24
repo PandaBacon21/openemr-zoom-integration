@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-from app.services import openemr
+from server.app.services.openemr import openemr
 
 
 def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
