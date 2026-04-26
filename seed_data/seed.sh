@@ -6,7 +6,9 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Load .env for DB credentials and seed config
 if [ -f "$ROOT_DIR/.env" ]; then
-  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+  MYSQL_ROOT_PASSWORD=$(grep '^MYSQL_ROOT_PASSWORD=' "$ROOT_DIR/.env" | cut -d '=' -f2)
+  MARIADB_CONTAINER=$(grep '^MARIADB_CONTAINER=' "$ROOT_DIR/.env" | cut -d '=' -f2)
+  OPENEMR_DB_NAME=$(grep '^OPENEMR_DB_NAME=' "$ROOT_DIR/.env" | cut -d '=' -f2)
 fi
 
 DB_ROOT_PASS=${MYSQL_ROOT_PASSWORD:-change-me-db-root}

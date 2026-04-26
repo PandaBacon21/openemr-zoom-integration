@@ -280,13 +280,13 @@ def write_zoom_urls_to_appointment(
         return False
 
 
-# Update Appointment Status - should automatically create Encounter if not already done
+# Update Appointment Status 
 def update_appointment_status(eid: int, status: str = "@") -> bool:
     """
     Update appointment status on openemr_postcalendar_events.
     
     Status codes:
-      '@' = Arrived (triggers auto-create encounter)
+      '@' = Arrived
       '-' = None
       '*' = Reminder done
       '+' = Chart pulled
@@ -620,9 +620,6 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> int 
     Returns:
         encounter number (int) or None if not found
     """
-    from sqlalchemy import text
-    from app.extensions import get_openemr_db_engine
-    from datetime import datetime, timezone
 
     engine = get_openemr_db_engine()
     try:
@@ -643,24 +640,6 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> int 
                     f"→ encounter={result.encounter}"
                 )
                 return result.encounter
-
-            # --- 2. Fall back to most recent encounter for pid + provider + today ---
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            result = conn.execute(
-                text("""
-                    SELECT encounter FROM form_encounter
-                    WHERE pid = :pid
-                    AND provider_id = :provider_id
-                    AND DATE(date) = :today
-                    ORDER BY id DESC
-                    LIMIT 1
-                """),
-                {
-                    "pid": int(pid),
-                    "provider_id": int(provider_id),
-                    "today": today,
-                }
-            ).fetchone()
 
             if result:
                 logger.info(
@@ -685,13 +664,15 @@ def write_note_to_encounter(
     note_id: str,
 ) -> bool:
     """
-    S5-05: Write Zoom clinical note into an OpenEMR encounter.
+    Write Zoom clinical note into an OpenEMR encounter.
  
     Writes to two forms:
-      1. form_soap      — parsed SOAP sections (subjective/objective/assessment/plan)
-      2. form_clinical_notes — full note content as a clinical note narrative
+      1. form_soap           — parsed SOAP sections
+      2. form_clinical_notes — full note content as narrative
  
-    Both forms are registered in the forms table linked to the encounter.
+    Both operations are idempotent:
+      - SOAP deduped by encounter + formdir
+      - Clinical Notes deduped by external_id = note_id
  
     Args:
         encounter_number:  OpenEMR encounter number
@@ -705,133 +686,38 @@ def write_note_to_encounter(
     Returns:
         True if successful, False on error
     """
-    from sqlalchemy import text
-    from app.extensions import get_openemr_db_engine
-    import uuid
-    from datetime import datetime, timezone
- 
     engine = get_openemr_db_engine()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    now   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
  
-    # Parse note content into SOAP sections
     soap = parse_soap_sections(note_content)
  
     try:
         with engine.begin() as conn:
- 
-            # ----------------------------------------------------------------
-            # 1. Write SOAP note
-            # ----------------------------------------------------------------
-            soap_result = conn.execute(
-                text("""
-                    INSERT INTO form_soap (
-                        date, pid, user, groupname,
-                        authorized, activity,
-                        subjective, objective, assessment, plan
-                    ) VALUES (
-                        :date, :pid, :user, 'Default',
-                        1, 1,
-                        :subjective, :objective, :assessment, :plan
-                    )
-                """),
-                {
-                    "date": now,
-                    "pid": int(pid),
-                    "user": provider_username,
-                    "subjective": soap["subjective"],
-                    "objective":  soap["objective"],
-                    "assessment": soap["assessment"],
-                    "plan":       soap["plan"],
-                }
+            _upsert_soap_form(
+                conn=conn,
+                encounter_number=encounter_number,
+                pid=pid,
+                provider_id=provider_id,
+                provider_username=provider_username,
+                soap=soap,
+                now=now,
             )
-            soap_form_id = soap_result.lastrowid
- 
-            # Register SOAP form in forms table
-            soap_forms_result = conn.execute(
-                text("""
-                    INSERT INTO forms (
-                        date, encounter, form_name, formdir,
-                        pid, user, groupname, authorized,
-                        deleted, form_id, provider_id
-                    ) VALUES (
-                        :date, :encounter, 'SOAP', 'soap',
-                        :pid, :user, 'Default', 1,
-                        0, :form_id, :provider_id
-                    )
-                """),
-                {
-                    "date":        now,
-                    "encounter":   encounter_number,
-                    "pid":         int(pid),
-                    "user":        provider_username,
-                    "form_id":     soap_form_id,
-                    "provider_id": int(provider_id),
-                }
-            )
- 
-            # ----------------------------------------------------------------
-            # 2. Write Clinical Notes form (full narrative)
-            # ----------------------------------------------------------------
-            cn_uuid = uuid.uuid4().bytes
-            cn_result = conn.execute(
-                text("""
-                    INSERT INTO form_clinical_notes (
-                        form_id, uuid, date, pid, encounter,
-                        user, groupname, authorized, activity,
-                        code, codetext, description, external_id,
-                        clinical_notes_type, clinical_notes_category
-                    ) VALUES (
-                        0, :uuid, :date, :pid, :encounter,
-                        :user, 'Default', 1, 1,
-                        'zoom-clinical-note', :codetext, :description, :external_id,
-                        'Evaluation Note', 'General'
-                    )
-                """),
-                {
-                    "uuid":        cn_uuid,
-                    "date":        today,
-                    "pid":         int(pid),
-                    "encounter":   str(encounter_number),
-                    "user":        provider_username,
-                    "codetext":    note_title,
-                    "description": note_content,
-                    "external_id": note_id,
-                }
-            )
-            cn_id = cn_result.lastrowid
- 
-            # Update form_clinical_notes.form_id to self-referential id
-            conn.execute(
-                text("UPDATE form_clinical_notes SET form_id = :id WHERE id = :id"),
-                {"id": cn_id}
-            )
- 
-            # Register Clinical Notes form in forms table
-            conn.execute(
-                text("""
-                    INSERT INTO forms (
-                        date, encounter, form_name, formdir,
-                        pid, user, groupname, authorized,
-                        deleted, form_id, provider_id
-                    ) VALUES (
-                        :date, :encounter, 'Clinical Notes', 'clinical_notes',
-                        :pid, :user, 'Default', 1,
-                        0, :form_id, :provider_id
-                    )
-                """),
-                {
-                    "date":        now,
-                    "encounter":   encounter_number,
-                    "pid":         int(pid),
-                    "user":        provider_username,
-                    "form_id":     cn_id,
-                    "provider_id": int(provider_id),
-                }
+            _upsert_clinical_note_form(
+                conn=conn,
+                encounter_number=encounter_number,
+                pid=pid,
+                provider_id=provider_id,
+                provider_username=provider_username,
+                note_content=note_content,
+                note_title=note_title,
+                note_id=note_id,
+                now=now,
+                today=today,
             )
  
         logger.info(
-            f"openemr.write_note_to_encounter | Written SOAP + Clinical Notes "
+            f"openemr.write_note_to_encounter | Upserted SOAP + Clinical Notes "
             f"to encounter={encounter_number} pid={pid} note_id={note_id}"
         )
         return True
@@ -842,7 +728,7 @@ def write_note_to_encounter(
             f"encounter={encounter_number} pid={pid}: {e}"
         )
         return False
- 
+
 
 def get_provider_username(provider_id: int) -> str | None:
     from sqlalchemy import text
@@ -859,3 +745,216 @@ def get_provider_username(provider_id: int) -> str | None:
     except Exception as e:
         logger.error(f"openemr.get_provider_username | Failed: {e}")
         return None
+    
+
+def _upsert_soap_form(
+    conn,
+    encounter_number: int,
+    pid: int,
+    provider_id: int,
+    provider_username: str,
+    soap: dict,
+    now: str,
+) -> int:
+    """
+    Insert or update a SOAP form for the given encounter.
+ 
+    Dedup key: forms.encounter + forms.formdir = 'soap' + forms.deleted = 0
+    On update: updates form_soap fields only — forms registration row already exists.
+    On insert: inserts form_soap row and registers in forms table.
+ 
+    Returns:
+        soap_form_id (int) — the form_soap.id for the written row
+    """
+    existing = conn.execute(
+        text("""
+            SELECT form_id FROM forms
+            WHERE encounter = :encounter
+            AND formdir = 'soap'
+            AND deleted = 0
+            LIMIT 1
+        """),
+        {"encounter": encounter_number}
+    ).fetchone()
+ 
+    if existing:
+        conn.execute(
+            text("""
+                UPDATE form_soap
+                SET subjective = :subjective,
+                    objective  = :objective,
+                    assessment = :assessment,
+                    plan       = :plan
+                WHERE id = :id
+            """),
+            {
+                "subjective": soap["subjective"],
+                "objective":  soap["objective"],
+                "assessment": soap["assessment"],
+                "plan":       soap["plan"],
+                "id":         existing.form_id,
+            }
+        )
+        return existing.form_id
+ 
+    # No existing row — insert
+    result = conn.execute(
+        text("""
+            INSERT INTO form_soap (
+                date, pid, user, groupname,
+                authorized, activity,
+                subjective, objective, assessment, plan
+            ) VALUES (
+                :date, :pid, :user, 'Default',
+                1, 1,
+                :subjective, :objective, :assessment, :plan
+            )
+        """),
+        {
+            "date":        now,
+            "pid":         int(pid),
+            "user":        provider_username,
+            "subjective":  soap["subjective"],
+            "objective":   soap["objective"],
+            "assessment":  soap["assessment"],
+            "plan":        soap["plan"],
+        }
+    )
+    soap_form_id = result.lastrowid
+ 
+    # Register in forms table
+    conn.execute(
+        text("""
+            INSERT INTO forms (
+                date, encounter, form_name, formdir,
+                pid, user, groupname, authorized,
+                deleted, form_id, provider_id
+            ) VALUES (
+                :date, :encounter, 'SOAP', 'soap',
+                :pid, :user, 'Default', 1,
+                0, :form_id, :provider_id
+            )
+        """),
+        {
+            "date":        now,
+            "encounter":   encounter_number,
+            "pid":         int(pid),
+            "user":        provider_username,
+            "form_id":     soap_form_id,
+            "provider_id": int(provider_id),
+        }
+    )
+ 
+    return soap_form_id
+
+
+def _upsert_clinical_note_form(
+    conn,
+    encounter_number: int,
+    pid: int,
+    provider_id: int,
+    provider_username: str,
+    note_content: str,
+    note_title: str,
+    note_id: str,
+    now: str,
+    today: str,
+) -> int:
+    """
+    Insert or update a Clinical Notes form for the given encounter.
+ 
+    Dedup key: form_clinical_notes.external_id = note_id
+    On update: updates description (note_content) and codetext (note_title) only.
+    On insert: inserts form_clinical_notes row (with self-referential form_id)
+               and registers in forms table.
+ 
+    Returns:
+        cn_id (int) — the form_clinical_notes.id for the written row
+    """
+    existing = conn.execute(
+        text("""
+            SELECT id FROM form_clinical_notes
+            WHERE external_id = :note_id
+            ORDER BY id DESC
+            LIMIT 1
+        """),
+        {"note_id": note_id}
+    ).fetchone()
+ 
+    if existing:
+        conn.execute(
+            text("""
+                UPDATE form_clinical_notes
+                SET description = :description,
+                    codetext    = '',
+                    clinical_notes_type = 'general_note'
+                WHERE id = :id
+            """),
+            {
+                "description": f"{note_title}\n\n{note_content}",
+                "id":          existing.id,
+            }
+        )
+        return existing.id
+ 
+    # No existing row — insert
+    import uuid
+    cn_uuid = uuid.uuid4().bytes
+ 
+    result = conn.execute(
+        text("""
+            INSERT INTO form_clinical_notes (
+                form_id, uuid, date, pid, encounter,
+                user, groupname, authorized, activity,
+                code, codetext, description, external_id,
+                clinical_notes_type, clinical_notes_category
+            ) VALUES (
+                0, :uuid, :date, :pid, :encounter,
+                :user, 'Default', 1, 1,
+                '', '', :description, :external_id,
+                'general_note', 'general'
+            )
+        """),
+        {
+            "uuid":        cn_uuid,
+            "date":        today,
+            "pid":         int(pid),
+            "encounter":   str(encounter_number),
+            "user":        provider_username,
+            "description": f"{note_title}\n\n{note_content}",
+            "external_id": note_id,
+        }
+    )
+
+    cn_id = result.lastrowid
+ 
+    # Self-referential form_id
+    conn.execute(
+        text("UPDATE form_clinical_notes SET form_id = :id WHERE id = :id"),
+        {"id": cn_id}
+    )
+ 
+    # Register in forms table
+    conn.execute(
+        text("""
+            INSERT INTO forms (
+                date, encounter, form_name, formdir,
+                pid, user, groupname, authorized,
+                deleted, form_id, provider_id
+            ) VALUES (
+                :date, :encounter, 'Clinical Notes', 'clinical_notes',
+                :pid, :user, 'Default', 1,
+                0, :form_id, :provider_id
+            )
+        """),
+        {
+            "date":        now,
+            "encounter":   encounter_number,
+            "pid":         int(pid),
+            "user":        provider_username,
+            "form_id":     cn_id,
+            "provider_id": int(provider_id),
+        }
+    )
+ 
+    return cn_id

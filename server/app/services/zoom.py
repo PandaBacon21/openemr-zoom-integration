@@ -570,3 +570,30 @@ def get_zoom_clinical_note(zoom_account: ZoomAccount, note_id: str) -> dict | No
             return None
         logger.error(f"zoom.get_clinical_note | Failed to retrieve note {note_id}: {e}")
         raise
+
+def mark_zoom_note_completed(zoom_account: ZoomAccount, note_id: str) -> bool:
+    """
+    Mark a Zoom clinical note as completed.
+
+    PATCH /clinical_notes/notes/{note_id} with is_note_completed: true.
+    Called after the provider eSigns and locks the form in OpenEMR.
+
+    Args:
+        zoom_account: The ZoomAccount to use for authentication
+        note_id:      Zoom note ID string
+
+    Returns:
+        True if successful, False on error
+    """
+    try:
+        make_zoom_api_request(
+            "PATCH",
+            f"/clinical_notes/notes/{note_id}",
+            zoom_account,
+            json={"is_note_completed": True}
+        )
+        logger.info(f"zoom.mark_zoom_note_completed | note_id={note_id} marked completed")
+        return True
+    except Exception as e:
+        logger.error(f"zoom.mark_zoom_note_completed | Failed for note_id={note_id}: {e}")
+        return False

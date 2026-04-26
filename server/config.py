@@ -46,8 +46,8 @@ class Config:
     APP_PUBLIC_URL = os.environ.get("APP_PUBLIC_URL", "http://localhost:5000")
     APP_INTERNAL_URL = os.environ.get("APP_INTERNAL_URL", "http://zoom-bridge:5000")
 
-    # OpenEMR -> Flask notifications
-    OPENEMR_WEBHOOK_SECRET = os.environ.get("OPENEMR_WEBHOOK_SECRET")
+    # OpenEMR -> Flask Secret
+    OPENEMR_FLASK_SECRET = os.environ.get("OPENEMR_FLASK_SECRET")
 
     # Logging
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG")

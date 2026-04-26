@@ -11,8 +11,8 @@
  *
  * On delete:
  *   1. Extracts eid from the event
- *   2. Builds a signed delete payload
- *   3. POSTs to Flask bridge webhook endpoint
+ *   2. Builds a delete payload
+ *   3. POSTs signed request to Flask bridge webhook endpoint
  *
  * Module: zoom_appointment_listener
  */
@@ -21,20 +21,10 @@ namespace Zoomly\ZoomAppointmentListener;
 
 use OpenEMR\Events\Appointments\AppointmentDialogCloseEvent;
 
+require_once('/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php');
+
 class DialogCloseListener
 {
-    private const WEBHOOK_URL = 'http://zoom-bridge:5000/webhooks/openemr';
-
-    private function getWebhookSecret(): string
-    {
-        $secret = getenv('OPENEMR_WEBHOOK_SECRET');
-        if (empty($secret)) {
-            error_log('[ZoomAppointmentListener] OPENEMR_WEBHOOK_SECRET is not set');
-            return '';
-        }
-        return $secret;
-    }
-
     /**
      * Event handler — called by Symfony when appointment dialog closes.
      *
@@ -65,56 +55,32 @@ class DialogCloseListener
             return;
         }
 
-        $secret = $this->getWebhookSecret();
-        if (empty($secret)) {
-            error_log('[ZoomAppointmentListener] Cannot send delete webhook: missing secret. eid=' . $eid);
-            return;
-        }
+        // --- POST to Flask bridge ---
+        $result = zoomly_bridge_post('/webhooks/openemr', $payloadJson, 5);
 
-        $signature = hash_hmac('sha256', $payloadJson, $secret);
-        $this->postToFlask($payloadJson, $signature, $eid);
-    }
-
-    private function postToFlask(string $payloadJson, string $signature, int $eid): void
-    {
-        $ch = curl_init(self::WEBHOOK_URL);
-
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payloadJson,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/json',
-                'X-Zoomly-Signature: ' . $signature,
-            ],
-        ]);
-
-        $response   = curl_exec($ch);
-        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError  = curl_error($ch);
-        curl_close($ch);
-
-        if ($curlError) {
+        if ($result['error']) {
             error_log(sprintf(
                 '[ZoomAppointmentListener] cURL error for delete eid=%d: %s',
-                $eid, $curlError
+                $eid,
+                $result['error']
             ));
             return;
         }
 
-        if ($httpStatus < 200 || $httpStatus >= 300) {
+        if ($result['status'] < 200 || $result['status'] >= 300) {
             error_log(sprintf(
                 '[ZoomAppointmentListener] Flask returned HTTP %d for delete eid=%d. Response: %s',
-                $httpStatus, $eid, substr((string)$response, 0, 500)
+                $result['status'],
+                $eid,
+                substr($result['body'], 0, 500)
             ));
             return;
         }
 
         error_log(sprintf(
             '[ZoomAppointmentListener] Successfully delivered delete event for eid=%d (HTTP %d)',
-            $eid, $httpStatus
+            $eid,
+            $result['status']
         ));
     }
 }

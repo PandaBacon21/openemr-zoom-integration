@@ -2,13 +2,15 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timezone
+from sqlalchemy import text
 from flask import Blueprint, current_app, request
 from app.services.appointment_processor import filter_appointment_event
 from app.services.zoom import create_zoom_meeting, get_zoom_meeting, update_zoom_meeting, delete_zoom_meeting, get_zoom_clinical_note
 from app.services.openemr.openemr import write_zoom_urls_to_appointment, create_encounter, get_appointment_details, update_appointment_status, get_provider_username, find_encounter_for_appointment, create_encounter, write_note_to_encounter, get_appointment_details
 from app.services.audit import write_audit_log
-from app.extensions import db
-from app.models import MeetingRecord, MeetingPatient, ZoomAccount
+from app.extensions import db, get_openemr_db_engine
+from app.models import MeetingRecord, MeetingPatient, ZoomAccount, ClinicalNoteRecord
 
 
 webhooks_bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
@@ -32,7 +34,7 @@ def _verify_signature(body: bytes, received_sig: str, secret: str) -> bool:
     Args:
         body:         Raw request bytes (request.data)
         received_sig: Hex digest from the X-Zoomly-Signature header
-        secret:       OPENEMR_WEBHOOK_SECRET from app config
+        secret:       OPENEMR_FLASK_SECRET from app config
 
     Returns:
         True if signatures match, False otherwise.
@@ -67,10 +69,10 @@ def openemr_appointment_webhook():
       - 500: unexpected error during processing
     """
     # --- 1. Pull secret from config ---
-    secret = current_app.config.get("OPENEMR_WEBHOOK_SECRET")
+    secret = current_app.config.get("OPENEMR_FLASK_SECRET")
     if not secret:
         current_app.logger.error(
-            "webhooks.openemr | OPENEMR_WEBHOOK_SECRET is not configured"
+            "webhooks.openemr | OPENEMR_FLASK_SECRET is not configured"
         )
         return {"error": "server misconfiguration"}, 500
 
@@ -820,6 +822,26 @@ def _validate_and_process_note(
         )
         return {"status": "dropped", "reason": "no matching meeting"}, 200
 
+    # Persist note ID immediately so we can retry later if needed
+    clinical_note = ClinicalNoteRecord.query.filter_by(zoom_note_id=note_id).first()
+    if not clinical_note:
+        clinical_note = ClinicalNoteRecord(
+            meeting_record_id=record.id,
+            zoom_note_id=note_id,
+            zoom_note_title=note_title or "",
+            is_written_to_openemr=False,
+        )
+        db.session.add(clinical_note)
+        db.session.commit()
+
+        write_audit_log(
+            event_type="note.record_created",
+            success=True,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+        )
+
     current_app.logger.info(
         f"zoom_webhook | meeting_number={meeting_number} "
         f"matched MeetingRecord id={record.id} eid={record.openemr_appointment_id}"
@@ -838,6 +860,7 @@ def _validate_and_process_note(
             zoom_account_id=account.account_id,
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
+            openemr_appointment_id=str(record.openemr_appointment_id),
             error_message="note not found in Zoom API",
         )
         return {"status": "error", "reason": "note not found"}, 500
@@ -848,14 +871,14 @@ def _validate_and_process_note(
         zoom_account_id=account.account_id,
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
-        detail={"note_title": note_data.get("note_title")}
+        openemr_appointment_id=str(record.openemr_appointment_id),
+        detail={"note_title": note_data.get("note_title")},
     )
 
     current_app.logger.info(
         f"zoom_webhook | note_id={note_id} retrieved successfully"
     )
-
-    # S5-05: Find or create encounter, write note
+    db.session.commit()
 
     # Get patient and provider from MeetingRecord
     pid = None
@@ -868,7 +891,7 @@ def _validate_and_process_note(
 
     if not pid or not provider_id:
         current_app.logger.warning(
-            f"zoom_webhook | S5-05 | missing pid={pid} or provider_id={provider_id} "
+            f"zoom_webhook | missing pid={pid} or provider_id={provider_id} "
             f"for MeetingRecord id={record.id}"
         )
         return {"status": "error", "reason": "missing patient or provider"}, 500
@@ -876,10 +899,25 @@ def _validate_and_process_note(
     # Find existing encounter or create one
     encounter_number = find_encounter_for_appointment(eid, pid, provider_id)
 
+    if encounter_number:
+        # Ensure external_id is set for fetch_zoom_note lookup
+        engine = get_openemr_db_engine()
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    UPDATE form_encounter 
+                    SET external_id = :external_id
+                    WHERE encounter = :encounter
+                    AND (external_id IS NULL OR external_id = '')
+                """),
+                {"external_id": f"zoom_eid_{eid}", "encounter": encounter_number}
+            )
+
     if not encounter_number:
         current_app.logger.info(
-            f"zoom_webhook | S5-05 | no encounter found for eid={eid} — creating"
+            f"zoom_webhook | no encounter found for eid={eid} — creating"
         )
+
         appt = get_appointment_details(eid)
         if appt:
             encounter_number = create_encounter(
@@ -892,7 +930,17 @@ def _validate_and_process_note(
 
     if not encounter_number:
         current_app.logger.error(
-            f"zoom_webhook | S5-05 | failed to find or create encounter for eid={eid}"
+            f"zoom_webhook | failed to find or create encounter for eid={eid}"
+        )
+
+        write_audit_log(
+            event_type="note.encounter_failed",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            openemr_appointment_id=str(eid),
+            error_message="could not find or create encounter",
         )
         return {"status": "error", "reason": "could not find or create encounter"}, 500
 
@@ -913,6 +961,11 @@ def _validate_and_process_note(
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
     )
+    if success:
+        clinical_note.is_written_to_openemr = True
+        clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
+        
+        db.session.commit()
 
     write_audit_log(
         event_type="note.written" if success else "note.write_failed",
@@ -934,7 +987,7 @@ def _validate_and_process_note(
 def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     """
     Handle meeting.participant_jbh_waiting and meeting.participant_joined_waiting_room.
-    Updates appointment status to Arrived (@) which triggers OpenEMR auto-encounter creation.
+    Updates appointment status to Arrived (@).
     """
     obj = payload.get("payload", {}).get("object", {})
     meeting_id = obj.get("id")
