@@ -9,7 +9,7 @@ from app.blueprints.openemr import openemr_bp
 logger = logging.getLogger(__name__)
 
 
-@openemr_bp.route("/openemr/providers", methods=["GET"])
+@openemr_bp.route("/providers", methods=["GET"])
 def get_providers():
 
     zoom_account_id = request.args.get("zoom_account_id")
@@ -35,7 +35,7 @@ def get_providers():
         return jsonify({"error": str(e)}), 500
     
 
-@openemr_bp.route("/openemr/appointment-types", methods=["GET"])
+@openemr_bp.route("/appointment-types", methods=["GET"])
 def get_appointment_types():
     try:
         types = get_appointment_types_list()

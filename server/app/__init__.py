@@ -1,7 +1,7 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-from flask import Flask
+from flask import Flask, send_from_directory
 from config import config_by_name
 from .extensions import scheduler
 from .extensions import db
@@ -50,7 +50,6 @@ def _init_extensions(app: Flask) -> None:
     with app.app_context():
         from . import models
 
-        # db.create_all()
 
 def _init_scheduler(app: Flask) -> None:
 
@@ -79,11 +78,22 @@ def _register_blueprints(app: Flask) -> None:
 
 def _register_app_routes(app: Flask) -> None:
 
+
     @app.route("/health")
     def health():
         return {"status": "ok", "env": app.config.get("ENV", "development")}
+
 
     @app.route("/.well-known/jwks.json")
     def jwks(): 
         accounts = ZoomAccount.query.filter_by(is_active=True).all()
         return build_jwks_for_accounts(accounts), 200
+    
+
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_react(path):
+        static_folder = app.static_folder or os.path.join(app.root_path, "static")
+        if path and os.path.exists(os.path.join(static_folder, path)):
+            return send_from_directory(static_folder, path)
+        return send_from_directory(static_folder, "index.html")
