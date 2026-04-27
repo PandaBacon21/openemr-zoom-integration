@@ -2,7 +2,7 @@ from flask import Blueprint
 from app.auth.api_key import protect_with_api_key
 
 
-openemr_bp = Blueprint("openemr", __name__)
+openemr_bp = Blueprint("openemr", __name__, url_prefix="/openemr")
 
 @openemr_bp.before_request
 def protect():
