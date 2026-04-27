@@ -1,6 +1,6 @@
 from app.extensions import db
 from app.models import AppointmentTypeFilter, ProviderMapping, ZoomAccount
-from app.services import appointment_processor
+from app.services.openemr.appointments import appointment_processor
 
 
 BASE_PAYLOAD = {

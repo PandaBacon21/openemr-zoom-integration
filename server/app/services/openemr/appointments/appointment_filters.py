@@ -1,14 +1,14 @@
-import logging
-from app.extensions import db
+from logging import Logger
 from app.models import ZoomAccount, AppointmentTypeFilter
+from app.extensions import db
 
-logger = logging.getLogger(__name__)
 
 
 def _create_appointment_filter(
     zoom_account_id: str,
     openemr_type_id: str,
-    openemr_type_name: str
+    openemr_type_name: str, 
+    logger: Logger
 ) -> AppointmentTypeFilter:
     """
     Add an appointment type to the allowed list for a Zoom account.
@@ -61,7 +61,8 @@ def _get_appointment_filters(zoom_account_id: str) -> list[AppointmentTypeFilter
     ).all()
 
 
-def _delete_appointment_filter(zoom_account_id: str, type_id: str) -> None:
+def _delete_appointment_filter(zoom_account_id: str, type_id: str,
+    logger: Logger) -> None:
     """
     Remove an appointment type from the allowed list.
     """

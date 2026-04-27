@@ -5,9 +5,11 @@ import time
 from datetime import datetime, timezone
 from sqlalchemy import text
 from flask import Blueprint, current_app, request
-from app.services.appointment_processor import filter_appointment_event
-from app.services.zoom import create_zoom_meeting, get_zoom_meeting, update_zoom_meeting, delete_zoom_meeting, get_zoom_clinical_note
-from app.services.openemr.openemr import write_zoom_urls_to_appointment, create_encounter, get_appointment_details, update_appointment_status, get_provider_username, find_encounter_for_appointment, create_encounter, write_note_to_encounter, get_appointment_details
+from app.services.zoom import (create_zoom_meeting, get_zoom_meeting, update_zoom_meeting, 
+                               delete_zoom_meeting, get_zoom_clinical_note)
+from app.services.openemr import (write_zoom_urls_to_appointment, create_encounter, get_appointment_details, 
+                                  update_appointment_status, get_provider_username, find_encounter_for_appointment, 
+                                  create_encounter, write_note_to_encounter, get_appointment_details, filter_appointment_event)
 from app.services.audit import write_audit_log
 from app.extensions import db, get_openemr_db_engine
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount, ClinicalNoteRecord

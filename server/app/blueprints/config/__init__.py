@@ -1,13 +1,9 @@
 import logging
-
 from flask import Blueprint, request, jsonify
-
-from app.extensions import db
 from app.models import ZoomAccount
-from app.services.registration import register_zoom_account, deregister_zoom_account
-from app.services.reg_verification import verify_openemr_token_for_account
-from app.services.providers import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
-from app.services.appointment_filters import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
+from app.services.registration import register_zoom_account, deregister_zoom_account, verify_openemr_token_for_account
+from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
+from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
 
 
 from app.auth.api_key import protect_with_api_key
@@ -284,7 +280,8 @@ def create_appointment_filter():
         entry = _create_appointment_filter(
             zoom_account_id=data["zoom_account_id"],
             openemr_type_id=data["openemr_type_id"],
-            openemr_type_name=data["openemr_type_name"]
+            openemr_type_name=data["openemr_type_name"], 
+            logger=logger
         )
         return jsonify({
             "id": entry.id,
@@ -331,7 +328,7 @@ def delete_appointment_filter(type_id: str):
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
     try:
-        _delete_appointment_filter(zoom_account_id, type_id)
+        _delete_appointment_filter(zoom_account_id=zoom_account_id, type_id=type_id, logger=logger)
         return jsonify({
             "status": "deleted",
             "appointment_type_id": type_id

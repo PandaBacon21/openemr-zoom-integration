@@ -85,21 +85,21 @@ def test_verify_signature_helper():
 
 
 def test_openemr_webhook_returns_500_when_secret_missing(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = None
+    app.config["OPENEMR_FLASK_SECRET"] = None
     response = client.post("/webhooks/openemr", data=b"{}", content_type="application/json")
     assert response.status_code == 500
     assert response.get_json() == {"error": "server misconfiguration"}
 
 
 def test_openemr_webhook_returns_400_when_signature_missing(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     response = client.post("/webhooks/openemr", data=b"{}", content_type="application/json")
     assert response.status_code == 400
     assert response.get_json() == {"error": "missing signature"}
 
 
 def test_openemr_webhook_returns_401_when_signature_invalid(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     response = client.post(
         "/webhooks/openemr",
         data=b"{}",
@@ -111,7 +111,7 @@ def test_openemr_webhook_returns_401_when_signature_invalid(client, app):
 
 
 def test_openemr_webhook_returns_400_on_invalid_json(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     bad_body = b'{"event":'
     response = client.post(
         "/webhooks/openemr",
@@ -124,7 +124,7 @@ def test_openemr_webhook_returns_400_on_invalid_json(client, app):
 
 
 def test_openemr_webhook_returns_400_when_eid_missing(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload.pop("eid")
     body = _body(payload)
@@ -140,7 +140,7 @@ def test_openemr_webhook_returns_400_when_eid_missing(client, app):
 
 
 def test_openemr_webhook_creates_records_for_matching_payload(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-1")
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
@@ -198,7 +198,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
 
 
 def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account_1 = _create_zoom_account("acct-1")
         account_2 = _create_zoom_account("acct-2")
@@ -252,7 +252,7 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
 
 
 def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-err")
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
@@ -289,7 +289,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
 
 
 def test_openemr_webhook_drops_by_category_payload(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload["category_id"] = 99
 
@@ -308,7 +308,7 @@ def test_openemr_webhook_drops_by_category_payload(client, app, monkeypatch):
 
 
 def test_openemr_webhook_drops_by_provider_payload(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload["provider_id"] = 99
 
@@ -327,7 +327,7 @@ def test_openemr_webhook_drops_by_provider_payload(client, app, monkeypatch):
 
 
 def test_openemr_webhook_writes_received_and_dropped_audit_events(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     calls = []
 
     monkeypatch.setattr("app.blueprints.webhooks.filter_appointment_event", lambda payload: [])
@@ -358,7 +358,7 @@ def test_openemr_webhook_writes_received_and_dropped_audit_events(client, app, m
 
 
 def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     calls = []
     monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
@@ -380,7 +380,7 @@ def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client,
 
 
 def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-writeback")
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
@@ -406,7 +406,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         },
     )
     monkeypatch.setattr(
-        "app.services.openemr.write_zoom_urls_to_appointment",
+        "app.blueprints.webhooks.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: captured.update(
             {"eid": eid, "start_url": start_url, "join_url": join_url}
         )
@@ -435,7 +435,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
 
 
 def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-writeback-fail")
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
@@ -460,7 +460,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         },
     )
     monkeypatch.setattr(
-        "app.services.openemr.write_zoom_urls_to_appointment",
+        "app.blueprints.webhooks.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: False,
     )
     monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
@@ -479,7 +479,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
 
 
 def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-update", meeting_id="meet-old", eid="999")
         record_id = record.id
@@ -500,7 +500,7 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
     )
     monkeypatch.setattr("app.blueprints.webhooks.get_zoom_meeting", lambda account, meeting_id: {"id": meeting_id})
     monkeypatch.setattr("app.blueprints.webhooks.create_zoom_meeting", lambda match: (_ for _ in ()).throw(AssertionError("should not create")))
-    monkeypatch.setattr("app.services.zoom.update_zoom_meeting", lambda account, meeting_id, match: None)
+    monkeypatch.setattr("app.blueprints.webhooks.update_zoom_meeting", lambda account, meeting_id, match: None)
 
     body = _body(payload)
     response = client.post(
@@ -529,7 +529,7 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
 
 
 def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-recreate", meeting_id="meet-old", eid="999")
         record_id = record.id
@@ -580,7 +580,7 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
 
 
 def test_openemr_webhook_delete_returns_no_record_when_meeting_not_found(client, app):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
 
     response = client.post(
@@ -595,7 +595,7 @@ def test_openemr_webhook_delete_returns_no_record_when_meeting_not_found(client,
 
 
 def test_openemr_webhook_delete_removes_zoom_and_db_record(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-delete", meeting_id="meet-del", eid="999")
         record_id = record.id
@@ -625,7 +625,7 @@ def test_openemr_webhook_delete_removes_zoom_and_db_record(client, app, monkeypa
 
 
 def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app, monkeypatch):
-    app.config["OPENEMR_WEBHOOK_SECRET"] = "test-webhook-secret"
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         _, record = _create_meeting_record("acct-delete-error", meeting_id="meet-del-err", eid="999")
         record_id = record.id

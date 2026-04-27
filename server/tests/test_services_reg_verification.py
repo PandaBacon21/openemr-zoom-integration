@@ -5,7 +5,7 @@ import requests
 
 from app.extensions import db
 from app.models import ZoomAccount
-from app.services import reg_verification
+from app.services.registration import reg_verification
 
 
 def _create_account(account_id: str, *, is_active: bool = True, **overrides) -> ZoomAccount:
@@ -35,7 +35,7 @@ def test_verify_openemr_token_for_account_returns_true_on_success(monkeypatch):
         captured["force_refresh"] = force_refresh
         return "token"
 
-    monkeypatch.setattr("app.auth.jwt_assertion.get_openemr_token", fake_get_openemr_token)
+    monkeypatch.setattr(reg_verification, "get_openemr_token", fake_get_openemr_token)
 
     assert reg_verification.verify_openemr_token_for_account(account) is True
     assert captured["account"] is account
@@ -50,7 +50,7 @@ def test_verify_openemr_token_for_account_returns_false_on_401(monkeypatch):
         err.response = SimpleNamespace(status_code=401)
         raise err
 
-    monkeypatch.setattr("app.auth.jwt_assertion.get_openemr_token", _raise)
+    monkeypatch.setattr(reg_verification, "get_openemr_token", _raise)
 
     assert reg_verification.verify_openemr_token_for_account(account) is False
 
@@ -63,7 +63,7 @@ def test_verify_openemr_token_for_account_returns_false_on_unexpected_http_error
         err.response = SimpleNamespace(status_code=500)
         raise err
 
-    monkeypatch.setattr("app.auth.jwt_assertion.get_openemr_token", _raise)
+    monkeypatch.setattr(reg_verification, "get_openemr_token", _raise)
 
     assert reg_verification.verify_openemr_token_for_account(account) is False
 
@@ -74,7 +74,7 @@ def test_verify_openemr_token_for_account_returns_false_on_non_http_exception(mo
     def _raise(*args, **kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("app.auth.jwt_assertion.get_openemr_token", _raise)
+    monkeypatch.setattr(reg_verification, "get_openemr_token", _raise)
 
     assert reg_verification.verify_openemr_token_for_account(account) is False
 

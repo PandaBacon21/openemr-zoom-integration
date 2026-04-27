@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-from server.app.services.openemr import openemr
+from app.services.openemr import provider
+from app.services.openemr.appointments import appointment
 
 
 def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
@@ -72,12 +73,12 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
         def connect(self):
             return FakeConn()
 
-    monkeypatch.setattr(openemr, "get_openemr_token", lambda account: "openemr-token")
-    monkeypatch.setattr(openemr.requests, "get", fake_get)
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(provider, "get_openemr_token", lambda account: "openemr-token")
+    monkeypatch.setattr(provider.requests, "get", fake_get)
+    monkeypatch.setattr(provider, "get_openemr_db_engine", lambda: FakeEngine())
 
     with app.app_context():
-        providers = openemr.get_practitioners(
+        providers = provider.get_practitioners(
             SimpleNamespace(account_id="acct-1"),
             search="doe",
         )
@@ -130,11 +131,11 @@ def test_get_practitioners_single_resource_fetch(app, monkeypatch):
         captured["params"] = params
         return DummyResponse()
 
-    monkeypatch.setattr(openemr, "get_openemr_token", lambda account: "openemr-token")
-    monkeypatch.setattr(openemr.requests, "get", fake_get)
+    monkeypatch.setattr(provider, "get_openemr_token", lambda account: "openemr-token")
+    monkeypatch.setattr(provider.requests, "get", fake_get)
 
     with app.app_context():
-        providers = openemr.get_practitioners(
+        providers = provider.get_practitioners(
             SimpleNamespace(account_id="acct-1"),
             practitioner_id="pract-99",
         )
@@ -160,16 +161,16 @@ def test_get_practitioners_propagates_http_error(app, monkeypatch):
         def raise_for_status(self):
             raise requests.HTTPError("openemr 500")
 
-    monkeypatch.setattr(openemr, "get_openemr_token", lambda account: "openemr-token")
-    monkeypatch.setattr(openemr.requests, "get", lambda *args, **kwargs: DummyResponse())
+    monkeypatch.setattr(provider, "get_openemr_token", lambda account: "openemr-token")
+    monkeypatch.setattr(provider.requests, "get", lambda *args, **kwargs: DummyResponse())
 
     with app.app_context():
         with pytest.raises(requests.HTTPError, match="openemr 500"):
-            openemr.get_practitioners(SimpleNamespace(account_id="acct-1"))
+            provider.get_practitioners(SimpleNamespace(account_id="acct-1"))
 
 
 def test_normalize_practitioner_defaults_for_missing_fields():
-    normalized = openemr._normalize_practitioner({})
+    normalized = provider._normalize_practitioner({})
 
     assert normalized == {
         "fhir_id": None,
@@ -216,9 +217,9 @@ def test_get_appointment_types_returns_transformed_rows(monkeypatch):
         def connect(self):
             return FakeConn()
 
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
 
-    result = openemr.get_appointment_types()
+    result = appointment.get_appointment_types_list()
 
     assert "FROM openemr_postcalendar_categories" in captured["query"]
     assert result == [
@@ -254,12 +255,87 @@ def test_get_appointment_types_returns_empty_list_when_no_rows(monkeypatch):
         def connect(self):
             return FakeConn()
 
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
 
-    assert openemr.get_appointment_types() == []
+    assert appointment.get_appointment_types_list() == []
 
 
-def test_write_zoom_urls_to_appointment_updates_hometext_and_website(monkeypatch):
+def test_get_appointment_details_returns_row(monkeypatch):
+    captured = {}
+
+    class FakeConn:
+        def execute(self, query, params):
+            captured["query"] = str(query)
+            captured["params"] = params
+            return SimpleNamespace(
+                fetchone=lambda: SimpleNamespace(pc_pid=1, pc_aid=10, pc_facility=4, pc_catid=27)
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    details = appointment.get_appointment_details(999)
+
+    assert "FROM openemr_postcalendar_events" in captured["query"]
+    assert captured["params"] == {"eid": 999}
+    assert details == {
+        "pid": 1,
+        "provider_id": 10,
+        "facility_id": 4,
+        "pc_catid": 27,
+    }
+
+
+def test_get_appointment_details_returns_none_when_missing(monkeypatch):
+    class FakeConn:
+        def execute(self, query, params):
+            return SimpleNamespace(fetchone=lambda: None)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    assert appointment.get_appointment_details(999) is None
+
+
+def test_get_appointment_details_returns_none_on_exception(monkeypatch):
+    class FakeConn:
+        def execute(self, query, params):
+            raise RuntimeError("db blew up")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    assert appointment.get_appointment_details(999) is None
+
+
+def test_write_zoom_urls_to_appointment_updates_website_with_start_url(monkeypatch):
     captured = {}
 
     class FakeResult:
@@ -281,9 +357,9 @@ def test_write_zoom_urls_to_appointment_updates_hometext_and_website(monkeypatch
         def begin(self):
             return FakeConn()
 
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
 
-    success = openemr.write_zoom_urls_to_appointment(
+    success = appointment.write_zoom_urls_to_appointment(
         eid=999,
         start_url="https://zoom.example/start/999",
         join_url="https://zoom.example/join/999",
@@ -291,11 +367,9 @@ def test_write_zoom_urls_to_appointment_updates_hometext_and_website(monkeypatch
 
     assert success is True
     assert "SET" in captured["query"]
-    assert "pc_hometext" in captured["query"]
     assert "pc_website" in captured["query"]
     assert captured["params"] == {
-        "hometext": "Zoom Meeting: https://zoom.example/start/999",
-        "website": "https://zoom.example/join/999",
+        "website": "https://zoom.example/start/999",
         "eid": 999,
     }
 
@@ -318,9 +392,9 @@ def test_write_zoom_urls_to_appointment_returns_false_when_eid_not_found(monkeyp
         def begin(self):
             return FakeConn()
 
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
 
-    success = openemr.write_zoom_urls_to_appointment(
+    success = appointment.write_zoom_urls_to_appointment(
         eid=999,
         start_url="https://zoom.example/start/999",
         join_url="https://zoom.example/join/999",
@@ -344,12 +418,84 @@ def test_write_zoom_urls_to_appointment_returns_false_on_exception(monkeypatch):
         def begin(self):
             return FakeConn()
 
-    monkeypatch.setattr("app.extensions.get_openemr_db_engine", lambda: FakeEngine())
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
 
-    success = openemr.write_zoom_urls_to_appointment(
+    success = appointment.write_zoom_urls_to_appointment(
         eid=999,
         start_url="https://zoom.example/start/999",
         join_url="https://zoom.example/join/999",
     )
 
     assert success is False
+
+
+def test_update_appointment_status_updates_row(monkeypatch):
+    captured = {}
+
+    class FakeResult:
+        rowcount = 1
+
+    class FakeConn:
+        def execute(self, query, params):
+            captured["query"] = str(query)
+            captured["params"] = params
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    assert appointment.update_appointment_status(123, "@") is True
+    assert "pc_apptstatus" in captured["query"]
+    assert captured["params"] == {"status": "@", "eid": 123}
+
+
+def test_update_appointment_status_returns_false_when_eid_missing(monkeypatch):
+    class FakeResult:
+        rowcount = 0
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    assert appointment.update_appointment_status(123, "x") is False
+
+
+def test_update_appointment_status_returns_false_on_exception(monkeypatch):
+    class FakeConn:
+        def execute(self, query, params):
+            raise RuntimeError("db failure")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    monkeypatch.setattr(appointment, "get_openemr_db_engine", lambda: FakeEngine())
+
+    assert appointment.update_appointment_status(123, "x") is False

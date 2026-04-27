@@ -3,7 +3,7 @@ import pytest
 
 from app.extensions import db
 from app.models import ZoomAccount
-from app.services import registration
+from app.services.registration import registration
 
 
 def _create_account(account_id: str, *, is_active: bool = True, **overrides) -> ZoomAccount:
@@ -132,7 +132,7 @@ def test_register_zoom_account_replaces_inactive_record(app, monkeypatch):
         _create_account("acct-inactive", is_active=False)
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -219,7 +219,7 @@ def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, m
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -253,7 +253,7 @@ def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -282,7 +282,7 @@ def test_register_zoom_account_persists_demo_patient_contact_overrides(app, monk
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr("app.services.reg_verification.trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",

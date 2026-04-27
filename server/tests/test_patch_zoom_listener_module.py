@@ -26,7 +26,7 @@ def test_dialog_close_listener_emits_appointment_deleted_payload():
     assert "'event'    => 'appointment.deleted'" in text
     assert "$event->getDialogAction() !== 'delete'" in text
     assert "'eid'      => (int)$eid" in text
-    assert "'X-Zoomly-Signature: ' . $signature" in text
+    assert "zoomly_bridge_post('/webhooks/openemr', $payloadJson, 5)" in text
 
 
 def test_appointment_listener_includes_new_payload_fields_and_all_day_guard():

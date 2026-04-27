@@ -1,7 +1,5 @@
 import logging
 from dataclasses import dataclass
-from sqlalchemy import text
-from flask import current_app
 from app.models import ZoomAccount, ProviderMapping, AppointmentTypeFilter
 
 logger = logging.getLogger(__name__)

@@ -10,9 +10,6 @@ from .jwks import load_private_key
 
 logger = logging.getLogger(__name__)
 
-# def _retrieve_scopes() -> list[str]: 
-#     return current_app.config["OPENEMR_SCOPES"]
-
 def build_client_assertion(
     client_id: str,
     audience: str,

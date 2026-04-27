@@ -98,7 +98,7 @@ def test_get_users_success_returns_user_list(client, app, monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("app.services.zoom.get_zoom_users", fake_get_zoom_users)
+    monkeypatch.setattr("app.blueprints.zoom.get_zoom_users", fake_get_zoom_users)
 
     response = client.get(
         "/zoom/users",
@@ -134,7 +134,7 @@ def test_get_users_maps_service_error_to_500(client, app, monkeypatch):
     def fake_get_zoom_users(account, search=None):
         raise RuntimeError("zoom unavailable")
 
-    monkeypatch.setattr("app.services.zoom.get_zoom_users", fake_get_zoom_users)
+    monkeypatch.setattr("app.blueprints.zoom.get_zoom_users", fake_get_zoom_users)
 
     response = client.get(
         "/zoom/users",

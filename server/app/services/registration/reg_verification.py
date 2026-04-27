@@ -5,6 +5,7 @@ from app.auth.jwt_assertion import get_openemr_token
 from app.extensions import scheduler
 from app.extensions import db
 
+
 logger = logging.getLogger(__name__)
 
 

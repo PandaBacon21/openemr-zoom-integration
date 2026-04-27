@@ -10,7 +10,7 @@ from app.models import ZoomAccount, MeetingRecord
 from app.extensions import db, get_openemr_db_engine
 from app.services.audit import write_audit_log
 from app.services.zoom import get_zoom_users, get_zoom_clinical_note, mark_zoom_note_completed
-from app.services.openemr.openemr import write_note_to_encounter, get_provider_username
+from app.services.openemr import write_note_to_encounter, get_provider_username
 
  
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ zoom_bp = Blueprint("zoom", __name__, url_prefix="/zoom")
 
 @zoom_bp.before_request
 def protect():
-    if request.endpoint == "zoom.fetch_zoom_note":
+    if request.endpoint == "zoom.fetch_zoom_note" or request.endpoint == "zoom.complete_zoom_note":
         return
     return protect_with_api_key()
 

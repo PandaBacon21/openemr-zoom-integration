@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from app.auth.api_key import protect_with_api_key
 from app.models import ZoomAccount
-from app.services.openemr.openemr import get_practitioners, get_appointment_types_list
+from app.services.openemr import get_practitioners, get_appointment_types_list
 
 openemr_bp = Blueprint("openemr", __name__)
 

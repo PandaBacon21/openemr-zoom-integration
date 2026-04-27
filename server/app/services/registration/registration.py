@@ -8,7 +8,6 @@ from app.services.zoom import validate_zoom_credentials
 from app.services.keys import generate_keypair, delete_keypair
 
 
-
 logger = logging.getLogger(__name__)
 
 

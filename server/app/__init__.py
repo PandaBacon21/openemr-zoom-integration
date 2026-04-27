@@ -6,7 +6,6 @@ from config import config_by_name
 from .extensions import scheduler
 from .extensions import db
 from app.services.keys import build_jwks_for_accounts
-# from .auth.jwks import build_jwks
 from app.models import ZoomAccount
 
 
