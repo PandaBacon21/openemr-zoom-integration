@@ -80,7 +80,7 @@ def test_get_providers_success_returns_provider_list(client, app, monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("app.services.openemr.get_practitioners", fake_get_practitioners)
+    monkeypatch.setattr("app.blueprints.openemr.get_practitioners", fake_get_practitioners)
 
     response = client.get(
         "/openemr/providers",
@@ -123,7 +123,7 @@ def test_get_providers_maps_service_error_to_500(client, app, monkeypatch):
     def fake_get_practitioners(account, search=None, practitioner_id=None):
         raise RuntimeError("openemr timeout")
 
-    monkeypatch.setattr("app.services.openemr.get_practitioners", fake_get_practitioners)
+    monkeypatch.setattr("app.blueprints.openemr.get_practitioners", fake_get_practitioners)
 
     response = client.get(
         "/openemr/providers",
@@ -152,7 +152,7 @@ def test_get_appointment_types_returns_401_for_invalid_api_key(client, app):
 def test_get_appointment_types_success(client, app, monkeypatch):
     app.config["API_KEY"] = "expected-key"
     monkeypatch.setattr(
-        "app.services.openemr.get_appointment_types",
+        "app.blueprints.openemr.get_appointment_types_list",
         lambda: [
             {
                 "id": "1",
@@ -184,7 +184,7 @@ def test_get_appointment_types_success(client, app, monkeypatch):
 def test_get_appointment_types_maps_service_error_to_500(client, app, monkeypatch):
     app.config["API_KEY"] = "expected-key"
     monkeypatch.setattr(
-        "app.services.openemr.get_appointment_types",
+        "app.blueprints.openemr.get_appointment_types_list",
         lambda: (_ for _ in ()).throw(RuntimeError("db unavailable")),
     )
 

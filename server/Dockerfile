@@ -20,8 +20,10 @@ RUN uv sync --frozen --no-dev
 # Copy the rest of the application code.
 COPY . .
 
-COPY entrypoint.sh ./
+
+COPY ../scripts/entrypoint.sh ./
 RUN chmod +x entrypoint.sh
+
 
 # Create directories used by mounted volumes.
 RUN mkdir -p /app/instance /app/keys /app/logs

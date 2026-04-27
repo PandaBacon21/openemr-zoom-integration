@@ -9,8 +9,7 @@
  * On event fire:
  *   1. Extracts appointment data from the event's $_POST payload
  *   2. Builds a structured JSON payload
- *   3. Signs the payload with HMAC-SHA256 using a shared secret
- *   4. POSTs to the Flask bridge webhook endpoint
+ *   3. POSTs signed request to the Flask bridge webhook endpoint
  *
  * Module: zoom_appointment_listener
  */
@@ -19,29 +18,10 @@ namespace Zoomly\ZoomAppointmentListener;
 
 use OpenEMR\Events\Appointments\AppointmentSetEvent;
 
+require_once('/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php');
+
 class AppointmentListener
 {
-    /**
-     * Endpoint on the Flask bridge service.
-     * Uses internal Docker DNS — zoom-bridge is the compose service name.
-     */
-    private const WEBHOOK_URL = 'http://zoom-bridge:5000/webhooks/openemr';
-
-    /**
-     * Shared secret for HMAC-SHA256 request signing.
-     * Must match OPENEMR_WEBHOOK_SECRET in Flask app config.
-     * Pulled from environment so it never lives in source code.
-     */
-    private function getWebhookSecret(): string
-    {
-        $secret = getenv('OPENEMR_WEBHOOK_SECRET');
-        if (empty($secret)) {
-            error_log('[ZoomAppointmentListener] OPENEMR_WEBHOOK_SECRET is not set');
-            return '';
-        }
-        return $secret;
-    }
-
     /**
      * Event handler — called by Symfony when 'appointment.set' fires.
      *
@@ -122,68 +102,24 @@ class AppointmentListener
             return;
         }
 
-        // --- 3. Sign the payload ---
-        $secret = $this->getWebhookSecret();
-        if (empty($secret)) {
-            // Log and bail — sending an unsigned request to Flask would be rejected anyway.
-            error_log('[ZoomAppointmentListener] Cannot send webhook: missing secret. eid=' . $eid);
-            return;
-        }
+        // --- 3. POST to Flask bridge ---
+        $result = zoomly_bridge_post('/webhooks/openemr', $payloadJson, 5);
 
-        // HMAC-SHA256 over the raw JSON body.
-        // Flask will recompute this from the received body and compare.
-        $signature = hash_hmac('sha256', $payloadJson, $secret);
-
-        // --- 4. POST to Flask ---
-        $this->postToFlask($payloadJson, $signature, $eid);
-    }
-
-    /**
-     * Sends the signed JSON payload to the Flask bridge using cURL.
-     *
-     * @param string $payloadJson  Raw JSON string
-     * @param string $signature    HMAC-SHA256 hex digest
-     * @param int    $eid          Appointment ID (for log context only)
-     */
-    private function postToFlask(string $payloadJson, string $signature, int $eid): void
-    {
-        $ch = curl_init(self::WEBHOOK_URL);
-
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payloadJson,
-            CURLOPT_RETURNTRANSFER => true,
-            // Generous timeout — Flask is on the same Docker network so this should
-            // never be needed, but avoids hanging OpenEMR's request if bridge is down.
-            CURLOPT_TIMEOUT        => 5,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/json',
-                // Flask reads this header to verify the request origin.
-                'X-Zoomly-Signature: ' . $signature,
-            ],
-        ]);
-
-        $response   = curl_exec($ch);
-        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError  = curl_error($ch);
-        curl_close($ch);
-
-        if ($curlError) {
+        if ($result['error']) {
             error_log(sprintf(
                 '[ZoomAppointmentListener] cURL error for eid=%d: %s',
                 $eid,
-                $curlError
+                $result['error']
             ));
             return;
         }
 
-        if ($httpStatus < 200 || $httpStatus >= 300) {
+        if ($result['status'] < 200 || $result['status'] >= 300) {
             error_log(sprintf(
                 '[ZoomAppointmentListener] Flask returned HTTP %d for eid=%d. Response: %s',
-                $httpStatus,
+                $result['status'],
                 $eid,
-                substr((string)$response, 0, 500)  // cap log length
+                substr($result['body'], 0, 500)
             ));
             return;
         }
@@ -191,7 +127,7 @@ class AppointmentListener
         error_log(sprintf(
             '[ZoomAppointmentListener] Successfully delivered event for eid=%d (HTTP %d)',
             $eid,
-            $httpStatus
+            $result['status']
         ));
     }
 }

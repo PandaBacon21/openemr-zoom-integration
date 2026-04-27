@@ -2,8 +2,11 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 from flask import Flask
-from .extensions import db
 from config import config_by_name
+from .extensions import scheduler
+from .extensions import db
+from app.services.keys import build_jwks_for_accounts
+from app.models import ZoomAccount
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -50,8 +53,6 @@ def _init_extensions(app: Flask) -> None:
         # db.create_all()
 
 def _init_scheduler(app: Flask) -> None:
-    import os
-    from .extensions import scheduler
 
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         if not scheduler.running:
@@ -77,7 +78,6 @@ def _register_blueprints(app: Flask) -> None:
 
 
 def _register_app_routes(app: Flask) -> None:
-    from .auth.jwks import build_jwks
 
     @app.route("/health")
     def health():
@@ -85,7 +85,5 @@ def _register_app_routes(app: Flask) -> None:
 
     @app.route("/.well-known/jwks.json")
     def jwks(): 
-        from app.services.keys import build_jwks_for_accounts
-        from app.models import ZoomAccount
         accounts = ZoomAccount.query.filter_by(is_active=True).all()
         return build_jwks_for_accounts(accounts), 200

@@ -1,9 +1,10 @@
 import logging
-from datetime import datetime, timezone
-
+from datetime import datetime, timezone, timedelta
 import requests
-
+from app.auth.jwt_assertion import get_openemr_token
+from app.extensions import scheduler
 from app.extensions import db
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,6 @@ def verify_openemr_token_for_account(zoom_account) -> bool:
     Does not raise — all errors are caught and logged so the scheduler
     can continue to the next account.
     """
-    from app.auth.jwt_assertion import get_openemr_token
-
     try:
         token = get_openemr_token(zoom_account, force_refresh=True)
         logger.info(
@@ -92,7 +91,6 @@ def check_pending_registrations(app) -> None:
 
         if still_pending:
             # Reschedule itself for another check in 5 minutes
-            from datetime import timedelta
             scheduler.add_job(
                 func=check_pending_registrations,
                 args=[app],
@@ -114,8 +112,7 @@ def trigger_verification_scheduler(app) -> None:
     Called after a new registration to kick off the polling loop.
     Only schedules if not already running to avoid duplicate jobs.
     """
-    from app.extensions import scheduler
-    from app.services.reg_verification import check_pending_registrations
+
 
     scheduler.add_job(
         func=check_pending_registrations,

@@ -3,13 +3,14 @@
 Lightweight Flask backend for linking Zoom account data with OpenEMR workflows.
 
 Current implemented areas:
+
 - Zoom account registration + deregistration
 - OpenEMR dynamic client registration + registration verification checks
 - Provider mapping management (OpenEMR provider <-> Zoom user)
 - Appointment type filter management
 - OpenEMR appointment webhook handling for create, update, and delete flows
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
-- OpenEMR appointment URL writeback (`pc_hometext` + `pc_website`) after meeting create/recreate
+- OpenEMR appointment URL writeback (`pc_website`) after meeting create/recreate
 - Audit logging for webhook intake and meeting lifecycle events
 - Per-account demo patient contact overrides (`demo_patient_email_override`, `demo_patient_phone_override`)
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
@@ -43,11 +44,13 @@ cp .env.example .env
 ```
 
 2. Set required values in `.env` for your environment:
+
 - `ENCRYPTION_KEY`
 - `API_KEY`
 - `OPENEMR_BASE_URL`
 - `OPENEMR_PUBLIC_URL`
 - `OPENEMR_FHIR_BASE_URL`
+- `OPENEMR_FLASK_SECRET`
 - `OPENEMR_DB_USER`
 - `OPENEMR_DB_PASS`
 - `OPENEMR_DB_HOST`
@@ -75,29 +78,44 @@ Default local URL: `http://localhost:5000`
 ## API Surface (Current)
 
 Health and keys:
+
 - `GET /health`
 - `GET /.well-known/jwks.json`
 
 Configuration and registration (API key protected):
+
 - `POST /config/register`
 - `DELETE /config/register/<zoom_account_id>`
 - `GET /config/registrations`
 - `POST /config/register/<zoom_account_id>/verify`
 
 Provider mapping management (API key protected):
+
 - `POST /config/providers`
 - `GET /config/providers?zoom_account_id=...`
 - `DELETE /config/providers/<openemr_provider_id>?zoom_account_id=...`
 
 Appointment filter management (API key protected):
+
 - `POST /config/appointment-types`
 - `GET /config/appointment-types?zoom_account_id=...`
 - `DELETE /config/appointment-types/<type_id>?zoom_account_id=...`
 
 OpenEMR and Zoom lookup helpers (API key protected):
+
 - `GET /openemr/providers?zoom_account_id=...`
 - `GET /openemr/appointment-types`
 - `GET /zoom/users?zoom_account_id=...`
+
+OpenEMR-signed note endpoints:
+
+- `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; API key exempt)
+- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; API key exempt) - not currently in use
+
+Inbound webhook endpoints:
+
+- `POST /webhooks/openemr` (`X-Zoomly-Signature` required)
+- `POST /webhooks/zoom` (Zoom webhook signature flow)
 
 ## Testing
 
@@ -111,4 +129,4 @@ This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-ca
 
 Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, and protected blueprint endpoints.
 
-Latest run result in this workspace: `187 passed`.
+Latest run result in this workspace (April 27, 2026): `192 passed`.

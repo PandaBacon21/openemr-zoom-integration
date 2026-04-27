@@ -2,7 +2,6 @@ import os
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
-from authlib.jose import JsonWebKey
 
 
 def generate_rsa_key_pair(key_path: str) -> None:
@@ -36,21 +35,3 @@ def load_private_key(key_path: str):
             password=None,
             backend=default_backend()
         )
-
-
-def build_jwks(key_path: str, key_id: str) -> dict:
-    """
-    Build the JWKS response using authlib.
-    OpenEMR fetches this from /.well-known/jwks.json to verify our JWT signatures.
-    """
-    private_key = load_private_key(key_path)
-
-    # Export the public key as PEM so authlib can import it
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-
-    # authlib handles all the base64url encoding and JWKS formatting
-    jwk = JsonWebKey.import_key(public_pem, {"kty": "RSA", "use": "sig", "kid": key_id}) # type: ignore
-    return {"keys": [dict(jwk)]}

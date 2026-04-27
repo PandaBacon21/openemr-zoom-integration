@@ -333,7 +333,7 @@ def test_verify_registration_returns_404_for_unknown_account(client):
 def test_verify_registration_returns_success_true(client, app, monkeypatch):
     _create_account(app, "acct-verify", is_active=True)
     monkeypatch.setattr(
-        "app.services.reg_verification.verify_openemr_token_for_account",
+        "app.blueprints.config.verify_openemr_token_for_account",
         lambda account: True,
     )
 
@@ -350,7 +350,7 @@ def test_verify_registration_returns_success_true(client, app, monkeypatch):
 def test_verify_registration_returns_success_false(client, app, monkeypatch):
     _create_account(app, "acct-verify", is_active=True)
     monkeypatch.setattr(
-        "app.services.reg_verification.verify_openemr_token_for_account",
+        "app.blueprints.config.verify_openemr_token_for_account",
         lambda account: False,
     )
 
@@ -392,7 +392,7 @@ def test_create_provider_mapping_success(client, monkeypatch):
         zoom_user_name="Dr Jane Doe",
         created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
-    monkeypatch.setattr("app.services.providers.create_provider_mapping", lambda **kwargs: fake_mapping)
+    monkeypatch.setattr("app.blueprints.config._create_provider_mapping", lambda **kwargs: fake_mapping)
 
     response = client.post(
         "/config/providers",
@@ -420,7 +420,7 @@ def test_create_provider_mapping_success(client, monkeypatch):
 
 def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.create_provider_mapping",
+        "app.blueprints.config._create_provider_mapping",
         lambda **kwargs: (_ for _ in ()).throw(ValueError("duplicate mapping")),
     )
 
@@ -443,7 +443,7 @@ def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
 
 def test_create_provider_mapping_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.create_provider_mapping",
+        "app.blueprints.config._create_provider_mapping",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -484,7 +484,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
             created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
         )
     ]
-    monkeypatch.setattr("app.services.providers.get_provider_mappings", lambda account_id: fake_mappings)
+    monkeypatch.setattr("app.blueprints.config._get_provider_mappings", lambda account_id: fake_mappings)
 
     response = client.get(
         "/config/providers",
@@ -513,7 +513,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
 
 def test_list_provider_mappings_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.get_provider_mappings",
+        "app.blueprints.config._get_provider_mappings",
         lambda account_id: (_ for _ in ()).throw(ValueError("not found")),
     )
 
@@ -529,7 +529,7 @@ def test_list_provider_mappings_maps_value_error_to_404(client, monkeypatch):
 
 def test_list_provider_mappings_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.get_provider_mappings",
+        "app.blueprints.config._get_provider_mappings",
         lambda account_id: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -550,7 +550,7 @@ def test_delete_provider_mapping_requires_zoom_account_id(client):
 
 
 def test_delete_provider_mapping_success(client, monkeypatch):
-    monkeypatch.setattr("app.services.providers.delete_provider_mapping", lambda account_id, npi: None)
+    monkeypatch.setattr("app.blueprints.config._delete_provider_mapping", lambda account_id, npi: None)
 
     response = client.delete(
         "/config/providers/10",
@@ -564,7 +564,7 @@ def test_delete_provider_mapping_success(client, monkeypatch):
 
 def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.delete_provider_mapping",
+        "app.blueprints.config._delete_provider_mapping",
         lambda account_id, npi: (_ for _ in ()).throw(ValueError("not found")),
     )
 
@@ -580,7 +580,7 @@ def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
 
 def test_delete_provider_mapping_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.providers.delete_provider_mapping",
+        "app.blueprints.config._delete_provider_mapping",
         lambda account_id, npi: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -618,7 +618,7 @@ def test_create_appointment_filter_success(client, monkeypatch):
         openemr_type_name="Telehealth Follow-up",
         created_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
     )
-    monkeypatch.setattr("app.services.appointment_filters.create_appointment_filter", lambda **kwargs: fake_filter)
+    monkeypatch.setattr("app.blueprints.config._create_appointment_filter", lambda **kwargs: fake_filter)
 
     response = client.post(
         "/config/appointment-types",
@@ -641,7 +641,7 @@ def test_create_appointment_filter_success(client, monkeypatch):
 
 def test_create_appointment_filter_maps_value_error_to_400(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.create_appointment_filter",
+        "app.blueprints.config._create_appointment_filter",
         lambda **kwargs: (_ for _ in ()).throw(ValueError("duplicate appointment type")),
     )
 
@@ -661,7 +661,7 @@ def test_create_appointment_filter_maps_value_error_to_400(client, monkeypatch):
 
 def test_create_appointment_filter_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.create_appointment_filter",
+        "app.blueprints.config._create_appointment_filter",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -694,7 +694,7 @@ def test_list_appointment_filters_success(client, monkeypatch):
             created_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
         )
     ]
-    monkeypatch.setattr("app.services.appointment_filters.get_appointment_filters", lambda account_id: fake_filters)
+    monkeypatch.setattr("app.blueprints.config._get_appointment_filters", lambda account_id: fake_filters)
 
     response = client.get(
         "/config/appointment-types",
@@ -718,7 +718,7 @@ def test_list_appointment_filters_success(client, monkeypatch):
 
 def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.get_appointment_filters",
+        "app.blueprints.config._get_appointment_filters",
         lambda account_id: (_ for _ in ()).throw(ValueError("not found")),
     )
 
@@ -734,7 +734,7 @@ def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
 
 def test_list_appointment_filters_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.get_appointment_filters",
+        "app.blueprints.config._get_appointment_filters",
         lambda account_id: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -755,7 +755,7 @@ def test_delete_appointment_filter_requires_zoom_account_id(client):
 
 
 def test_delete_appointment_filter_success(client, monkeypatch):
-    monkeypatch.setattr("app.services.appointment_filters.delete_appointment_filter", lambda account_id, type_id: None)
+    monkeypatch.setattr("app.blueprints.config._delete_appointment_filter", lambda **kwargs: None)
 
     response = client.delete(
         "/config/appointment-types/7",
@@ -769,8 +769,8 @@ def test_delete_appointment_filter_success(client, monkeypatch):
 
 def test_delete_appointment_filter_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.delete_appointment_filter",
-        lambda account_id, type_id: (_ for _ in ()).throw(ValueError("not found")),
+        "app.blueprints.config._delete_appointment_filter",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("not found")),
     )
 
     response = client.delete(
@@ -785,8 +785,8 @@ def test_delete_appointment_filter_maps_value_error_to_404(client, monkeypatch):
 
 def test_delete_appointment_filter_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_filters.delete_appointment_filter",
-        lambda account_id, type_id: (_ for _ in ()).throw(RuntimeError("db down")),
+        "app.blueprints.config._delete_appointment_filter",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
     response = client.delete(

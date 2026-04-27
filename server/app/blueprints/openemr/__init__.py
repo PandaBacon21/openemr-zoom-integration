@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from app.auth.api_key import protect_with_api_key
 from app.models import ZoomAccount
+from app.services.openemr import get_practitioners, get_appointment_types_list
 
 openemr_bp = Blueprint("openemr", __name__)
 
@@ -11,7 +12,6 @@ def protect():
 
 @openemr_bp.route("/openemr/providers", methods=["GET"])
 def get_providers():
-    from app.services.openemr import get_practitioners
 
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:
@@ -27,7 +27,6 @@ def get_providers():
     practitioner_id = request.args.get("id")
 
     try:
-        from app.services.openemr import get_practitioners
         practitioners = get_practitioners(account, search=search, practitioner_id=practitioner_id)
         return jsonify({
             "count": len(practitioners),
@@ -39,9 +38,8 @@ def get_providers():
 
 @openemr_bp.route("/openemr/appointment-types", methods=["GET"])
 def get_appointment_types():
-    from app.services.openemr import get_appointment_types
     try:
-        types = get_appointment_types()
+        types = get_appointment_types_list()
         return jsonify({
             "count": len(types),
             "appointment_types": types

@@ -132,7 +132,7 @@ Relationships:
 
 OpenEMR listener sends JSON payloads to `POST /webhooks/openemr` signed with:
 - Header `X-Zoomly-Signature`
-- Value `hex(hmac_sha256(raw_body, OPENEMR_WEBHOOK_SECRET))`
+- Value `hex(hmac_sha256(raw_body, OPENEMR_FLASK_SECRET))`
 
 `appointment.set` payload fields:
 - `event` (`appointment.set`)
@@ -163,8 +163,7 @@ Current bridge behavior:
   - updates existing meetings when `MeetingRecord` exists and Zoom meeting is still present
   - recreates meetings when `MeetingRecord` exists but Zoom meeting was deleted
   - writes meeting links back to OpenEMR appointment row:
-    - `pc_hometext` = `Zoom Meeting: <start_url>`
-    - `pc_website` = `<join_url>`
+    - `pc_website` = `<start_url>`
   - writes `MeetingRecord` and `MeetingPatient` rows
   - returns one of: `ok`, `partial`, `error`, `dropped`
 - For `appointment.deleted`:
@@ -190,7 +189,7 @@ Current listener behavior highlights:
 - Drops all-day events early (`form_allday = 1`)
 - Sends `duration_minutes`, `title`, and `room` in `appointment.set`
 - Sends compact `appointment.deleted` payload for delete actions
-- Signs all webhook payloads with HMAC-SHA256 using `OPENEMR_WEBHOOK_SECRET`
+- Signs all webhook payloads with HMAC-SHA256 using `OPENEMR_FLASK_SECRET`
 
 ## OpenEMR Appointment Status (`appt_status`) Mapping
 
@@ -231,12 +230,21 @@ Current migration chain:
 
 Primary files for this integration slice:
 - `server/tests/test_blueprint_webhooks.py`
+- `server/tests/test_blueprint_openemr.py`
+- `server/tests/test_blueprint_zoom.py`
 - `server/tests/test_services_appointment_processor.py`
+- `server/tests/test_services_appointment_filters.py`
 - `server/tests/test_services_audit.py`
 - `server/tests/test_services_openemr.py`
+- `server/tests/test_services_providers.py`
+- `server/tests/test_services_keys.py`
 - `server/tests/test_services_registration.py`
+- `server/tests/test_services_reg_verification.py`
 - `server/tests/test_services_zoom.py`
 - `server/tests/test_blueprint_config.py`
+- `server/tests/test_jwks.py`
+- `server/tests/test_jwt_assertion.py`
+- `server/tests/test_routes.py`
 - `server/tests/test_seed_data_sql.py`
 - `server/tests/test_migration_timezone.py`
 - `server/tests/test_migration_meeting_records.py`

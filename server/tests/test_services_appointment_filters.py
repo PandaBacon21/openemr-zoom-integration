@@ -2,7 +2,7 @@ import pytest
 
 from app.extensions import db
 from app.models import AppointmentTypeFilter, ZoomAccount
-from app.services import appointment_filters
+from app.services.openemr.appointments import appointment_filters
 
 
 def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
@@ -35,10 +35,11 @@ def _create_filter(account: ZoomAccount, type_id: str, type_name: str) -> Appoin
 def test_create_appointment_filter_requires_active_registration(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found for account missing"):
-            appointment_filters.create_appointment_filter(
+            appointment_filters._create_appointment_filter(
                 zoom_account_id="missing",
                 openemr_type_id="1",
                 openemr_type_name="Telehealth",
+                logger=__import__("logging").getLogger("test"),
             )
 
 
@@ -48,20 +49,22 @@ def test_create_appointment_filter_rejects_duplicate_type(app):
         _create_filter(account, "1", "Telehealth")
 
         with pytest.raises(ValueError, match="already in the filter list"):
-            appointment_filters.create_appointment_filter(
+            appointment_filters._create_appointment_filter(
                 zoom_account_id="acct-1",
                 openemr_type_id="1",
                 openemr_type_name="Telehealth",
+                logger=__import__("logging").getLogger("test"),
             )
 
 
 def test_create_appointment_filter_success(app):
     with app.app_context():
         _create_account("acct-1", is_active=True)
-        entry = appointment_filters.create_appointment_filter(
+        entry = appointment_filters._create_appointment_filter(
             zoom_account_id="acct-1",
             openemr_type_id="2",
             openemr_type_name="Follow-up",
+            logger=__import__("logging").getLogger("test"),
         )
         stored = AppointmentTypeFilter.query.filter_by(id=entry.id).first()
 
@@ -73,7 +76,7 @@ def test_create_appointment_filter_success(app):
 def test_get_appointment_filters_requires_active_registration(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found for account missing"):
-            appointment_filters.get_appointment_filters("missing")
+            appointment_filters._get_appointment_filters("missing")
 
 
 def test_get_appointment_filters_returns_only_for_requested_account(app):
@@ -85,7 +88,7 @@ def test_get_appointment_filters_returns_only_for_requested_account(app):
         keep_2 = _create_filter(account_1, "20", "Follow-up")
         _create_filter(account_2, "30", "Different Account")
 
-        filters = appointment_filters.get_appointment_filters("acct-1")
+        filters = appointment_filters._get_appointment_filters("acct-1")
 
     assert sorted(f.id for f in filters) == sorted([keep_1.id, keep_2.id])
 
@@ -93,14 +96,14 @@ def test_get_appointment_filters_returns_only_for_requested_account(app):
 def test_delete_appointment_filter_requires_active_registration(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found for account missing"):
-            appointment_filters.delete_appointment_filter("missing", "10")
+            appointment_filters._delete_appointment_filter("missing", "10", __import__("logging").getLogger("test"))
 
 
 def test_delete_appointment_filter_raises_when_not_found(app):
     with app.app_context():
         _create_account("acct-1", is_active=True)
         with pytest.raises(ValueError, match="No filter found with id 999"):
-            appointment_filters.delete_appointment_filter("acct-1", "999")
+            appointment_filters._delete_appointment_filter("acct-1", "999", __import__("logging").getLogger("test"))
 
 
 def test_delete_appointment_filter_deletes_entry(app):
@@ -108,7 +111,7 @@ def test_delete_appointment_filter_deletes_entry(app):
         account = _create_account("acct-1", is_active=True)
         entry = _create_filter(account, "10", "Telehealth Consult")
 
-        appointment_filters.delete_appointment_filter("acct-1", "10")
+        appointment_filters._delete_appointment_filter("acct-1", "10", __import__("logging").getLogger("test"))
         deleted = AppointmentTypeFilter.query.filter_by(id=entry.id).first()
 
     assert deleted is None

@@ -53,8 +53,8 @@ services:
 
       # Public HTTPS URL of OpenEMR
       OPENEMR_SETTING_site_addr_oath: ${OPENEMR_PUBLIC_URL}
-      # Webhook secret for OpenEMR -> Flask App
-      OPENEMR_WEBHOOK_SECRET: ${OPENEMR_WEBHOOK_SECRET}
+      # Secret for OpenEMR -> Flask App
+      OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
     volumes:
       # Persist site data — includes SMART app registrations, uploaded files.
       # Backup this volume before any OpenEMR upgrade.
@@ -70,6 +70,12 @@ services:
       # Patch for adding Start Zoom Meeting button
       - ./patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
       - ./patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
+      # Patch for Encounter Form to include a Retrieve Clinical Note Button
+      - ./patches/clinical_note_fetcher/forms.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/forms.php
+      - ./patches/clinical_note_fetcher/fetch_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/fetch_zoom_note.php
+      - ./patches/clinical_note_fetcher/complete_zoom_note.php.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/complete_zoom_note.php
+      # Patch for shared helper function
+      - ./patches/library/zoomly/ZoomBridge.php:/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
     networks:
       - integration_net
     healthcheck:
@@ -172,8 +178,8 @@ services:
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
       APP_INTERNAL_URL: http://zoom-bridge:5000
-      # Webhook secret for OpenEMR -> Flask App
-      OPENEMR_WEBHOOK_SECRET: ${OPENEMR_WEBHOOK_SECRET}
+      # Secret for OpenEMR -> Flask App
+      OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
     volumes:
       - ./server/instance:/app/instance
       - ./keys:/app/keys
