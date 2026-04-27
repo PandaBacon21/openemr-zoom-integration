@@ -322,6 +322,7 @@ class AuditLog(db.Model):
     # Context — not every event has all of these
     zoom_account_id = db.Column(db.String(128), nullable=True)
     openemr_appointment_id = db.Column(db.String(128), nullable=True)
+    openemr_encounter_number = db.Column(db.String(128), nullable=True)
     openemr_provider_id = db.Column(db.String(128), nullable=True)
     openemr_patient_id = db.Column(db.String(128), nullable=True)
     zoom_meeting_id = db.Column(db.String(128), nullable=True)
@@ -344,6 +345,7 @@ class AuditLog(db.Model):
             event_type: str | None = ...,
             zoom_account_id: str | None = ...,
             openemr_appointment_id: str | None = ...,
+            openemr_encounter_number: str | None = ...,
             openemr_provider_id: str | None = ...,
             openemr_patient_id: str | None = ...,
             zoom_meeting_id: str | None = ...,
