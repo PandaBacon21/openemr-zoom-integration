@@ -20,7 +20,8 @@ def test_openemr_root_route_not_defined(client):
 
 def test_zoom_root_route_not_defined(client):
     response = client.get("/zoom/")
-    assert response.status_code == 404
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Invalid or missing API key"}
 
 
 def test_config_root_requires_api_key(client):

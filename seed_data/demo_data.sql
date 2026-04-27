@@ -311,6 +311,10 @@ UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'rachel.
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'carlos.mendez'  WHERE pid = 104;
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'linda.patel'    WHERE pid = 105;
 
+-- =============================================================================
+-- PATIENT PASSWORDS (ZoomDem0!)
+-- =============================================================================
+
 INSERT IGNORE INTO patient_access_onsite
     (pid, portal_username, portal_pwd, portal_pwd_status, portal_login_username)
 VALUES

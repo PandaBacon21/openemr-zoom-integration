@@ -74,7 +74,7 @@ def _create_meeting_record(account_id: str, *, meeting_id: str = "existing-123",
 
 
 def test_verify_signature_helper():
-    from app.blueprints.webhooks import _verify_signature
+    from app.blueprints.webhooks.openemr.openemr_webhook_helpers import _verify_signature
 
     secret = "test-webhook-secret"
     body = b'{"eid":999}'
@@ -146,7 +146,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -156,7 +156,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         ],
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.create_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
         lambda match: {
             "meeting_id": "123456789",
             "start_url": "https://zoom.example/start/123456789",
@@ -206,7 +206,7 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
         account_2_stub = SimpleNamespace(account_id=account_2.account_id, id=account_2.id)
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_1_stub,
@@ -230,7 +230,7 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
             "join_url": "https://zoom.example/join/m-success",
         }
 
-    monkeypatch.setattr("app.blueprints.webhooks.create_zoom_meeting", fake_create_zoom_meeting)
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting", fake_create_zoom_meeting)
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -258,7 +258,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -268,7 +268,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
         ],
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.create_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
         lambda match: (_ for _ in ()).throw(RuntimeError("zoom failure")),
     )
 
@@ -293,7 +293,7 @@ def test_openemr_webhook_drops_by_category_payload(client, app, monkeypatch):
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload["category_id"] = 99
 
-    monkeypatch.setattr("app.blueprints.webhooks.filter_appointment_event", lambda payload: [])
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event", lambda payload: [])
 
     body = _body(payload)
     response = client.post(
@@ -312,7 +312,7 @@ def test_openemr_webhook_drops_by_provider_payload(client, app, monkeypatch):
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload["provider_id"] = 99
 
-    monkeypatch.setattr("app.blueprints.webhooks.filter_appointment_event", lambda payload: [])
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event", lambda payload: [])
 
     body = _body(payload)
     response = client.post(
@@ -330,8 +330,9 @@ def test_openemr_webhook_writes_received_and_dropped_audit_events(client, app, m
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     calls = []
 
-    monkeypatch.setattr("app.blueprints.webhooks.filter_appointment_event", lambda payload: [])
-    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event", lambda payload: [])
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -360,7 +361,8 @@ def test_openemr_webhook_writes_received_and_dropped_audit_events(client, app, m
 def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client, app, monkeypatch):
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     calls = []
-    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
     response = client.post(
@@ -388,7 +390,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
     calls = []
     captured = {}
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -398,7 +400,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         ],
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.create_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
         lambda match: {
             "meeting_id": "123456789",
             "start_url": "https://zoom.example/start/123456789",
@@ -406,13 +408,14 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         },
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.write_zoom_urls_to_appointment",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: captured.update(
             {"eid": eid, "start_url": start_url, "join_url": join_url}
         )
         or True,
     )
-    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -442,7 +445,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
 
     calls = []
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -452,7 +455,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         ],
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.create_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
         lambda match: {
             "meeting_id": "writeback-fail-1",
             "start_url": "https://zoom.example/start/writeback-fail-1",
@@ -460,10 +463,11 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         },
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.write_zoom_urls_to_appointment",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: False,
     )
-    monkeypatch.setattr("app.blueprints.webhooks.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -489,7 +493,7 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
     payload["appt_status"] = "@"
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda p: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -498,9 +502,9 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
             )
         ],
     )
-    monkeypatch.setattr("app.blueprints.webhooks.get_zoom_meeting", lambda account, meeting_id: {"id": meeting_id})
-    monkeypatch.setattr("app.blueprints.webhooks.create_zoom_meeting", lambda match: (_ for _ in ()).throw(AssertionError("should not create")))
-    monkeypatch.setattr("app.blueprints.webhooks.update_zoom_meeting", lambda account, meeting_id, match: None)
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.get_zoom_meeting", lambda account, meeting_id: {"id": meeting_id})
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting", lambda match: (_ for _ in ()).throw(AssertionError("should not create")))
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.update_zoom_meeting", lambda account, meeting_id, match: None)
 
     body = _body(payload)
     response = client.post(
@@ -536,7 +540,7 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
         account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.filter_appointment_event",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda p: [
             SimpleNamespace(
                 zoom_account=account_stub,
@@ -545,9 +549,9 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
             )
         ],
     )
-    monkeypatch.setattr("app.blueprints.webhooks.get_zoom_meeting", lambda account, meeting_id: None)
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.get_zoom_meeting", lambda account, meeting_id: None)
     monkeypatch.setattr(
-        "app.blueprints.webhooks.create_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
         lambda match: {
             "meeting_id": "meet-new",
             "start_url": "https://zoom.example/start/meet-new",
@@ -600,7 +604,7 @@ def test_openemr_webhook_delete_removes_zoom_and_db_record(client, app, monkeypa
         account, record = _create_meeting_record("acct-delete", meeting_id="meet-del", eid="999")
         record_id = record.id
 
-    monkeypatch.setattr("app.blueprints.webhooks.delete_zoom_meeting", lambda account, meeting_id: True)
+    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting", lambda account, meeting_id: True)
 
     body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
     response = client.post(
@@ -631,7 +635,7 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
         record_id = record.id
 
     monkeypatch.setattr(
-        "app.blueprints.webhooks.delete_zoom_meeting",
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting",
         lambda account, meeting_id: (_ for _ in ()).throw(RuntimeError("zoom delete failed")),
     )
 
