@@ -15,6 +15,7 @@ class ZoomAccount(db.Model):
     key_version = db.Column(db.Integer, default=1, nullable=False)
 
     # Zoom Account credentials
+    nickname = db.Column(db.String(128), nullable=True)
     account_id = db.Column(db.String(128), unique=True, nullable=False)
     client_id = db.Column(db.String(128), nullable=False)
     client_secret = db.Column(EncryptedType(db.String(256), get_encryption_key, AesEngine, "pkcs5"), nullable=False)
@@ -68,6 +69,7 @@ class ZoomAccount(db.Model):
         def __init__(
             self,
             *,
+            nickname: str | None = ...,
             account_id: str | None = ...,
             client_id: str | None = ...,
             client_secret: str | None = ...,
