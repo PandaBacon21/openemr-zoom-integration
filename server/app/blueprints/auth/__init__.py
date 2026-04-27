@@ -1,8 +1,5 @@
 from flask import Blueprint
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
-
-@auth_bp.route("/")
-def index():
-    return {"blueprint": "auth", "status": "active"}
+from app.blueprints.auth import auth_routes
