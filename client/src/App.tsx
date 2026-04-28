@@ -3,7 +3,7 @@ import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
-import ConfigPage from "./pages/ConfigPage";
+import ConfigPage from "./pages/config/ConfigPage";
 import ProvidersPage from "./pages/ProvidersPage";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({

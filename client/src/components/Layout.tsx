@@ -55,7 +55,7 @@ const Layout: React.FC = () => {
         }}
       >
         {/* Logo area */}
-        <Toolbar sx={{ px: 2, py: 2, minHeight: "64px !important" }}>
+        <Toolbar sx={{ px: 2, py: 2, minHeight: "74px !important" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Avatar
               sx={{
@@ -149,7 +149,7 @@ const Layout: React.FC = () => {
           elevation={0}
           sx={{ borderBottom: "1px solid", borderColor: "divider" }}
         >
-          <Toolbar sx={{ minHeight: "64px !important" }}>
+          <Toolbar sx={{ minHeight: "74px !important" }}>
             <Typography
               variant="h6"
               color="text.primary"
