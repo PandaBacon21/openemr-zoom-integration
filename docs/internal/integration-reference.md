@@ -9,10 +9,9 @@ This is a working reference for model contracts, webhook payload expectations, a
 
 | Column | Type | Required | Notes |
 |---|---|---|---|
-| `id` | `Integer` | yes | Primary key |
+| `account_id` | `String(128)` | yes | Zoom account-level identifier, primary key |
 | `key_version` | `Integer` | yes | Encryption key version used for row-level secrets |
 | `nickname` | `String(128)` | no | Optional display name for the registration/config UI |
-| `account_id` | `String(128)` | yes | Zoom account-level identifier, unique |
 | `client_id` | `String(128)` | yes | Zoom OAuth client ID |
 | `client_secret` | `EncryptedType(String(256))` | yes | Zoom OAuth client secret (encrypted at rest) |
 | `webhook_secret` | `EncryptedType(String(256))` | no | Zoom webhook secret (encrypted at rest) |
@@ -44,7 +43,7 @@ Relationships:
 | Column | Type | Required | Notes |
 |---|---|---|---|
 | `id` | `Integer` | yes | Primary key |
-| `zoom_account_id` | `Integer(FK)` | yes | FK to `zoom_accounts.id` |
+| `zoom_account_id` | `String(128, FK)` | yes | FK to `zoom_accounts.account_id` |
 | `openemr_fhir_id` | `String(128)` | yes | OpenEMR practitioner FHIR id |
 | `openemr_provider_npi` | `String(10)` | yes | Provider NPI used by filter pipeline |
 | `openemr_provider_id` | `String(128)` | no | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
@@ -62,7 +61,7 @@ Relationships:
 | Column | Type | Required | Notes |
 |---|---|---|---|
 | `id` | `Integer` | yes | Primary key |
-| `zoom_account_id` | `Integer(FK)` | yes | FK to `zoom_accounts.id` |
+| `zoom_account_id` | `String(128, FK)` | yes | FK to `zoom_accounts.account_id` |
 | `openemr_type_id` | `String(128)` | yes | OpenEMR appointment category/list option id |
 | `openemr_type_name` | `String(256)` | yes | OpenEMR appointment category/list option display name |
 | `created_at` | `DateTime(timezone=True)` | no | Created timestamp (UTC) |
@@ -71,9 +70,8 @@ Relationships:
 
 | Column | Type | Required | Notes |
 |---|---|---|---|
-| `id` | `Integer` | yes | Primary key |
-| `zoom_account_id` | `Integer(FK)` | yes | FK to `zoom_accounts.id` |
-| `zoom_meeting_id` | `String(128)` | yes | Zoom meeting ID (unique) |
+| `zoom_meeting_id` | `String(128)` | yes | Zoom meeting ID, primary key |
+| `zoom_account_id` | `String(128, FK)` | yes | FK to `zoom_accounts.account_id` |
 | `zoom_start_url` | `String(1024)` | no | Host/alt-host start URL |
 | `zoom_join_url` | `String(1024)` | no | Patient join URL |
 | `alternative_host_email` | `String(256)` | no | Captured alternative host |
@@ -93,7 +91,7 @@ Relationships:
 | Column | Type | Required | Notes |
 |---|---|---|---|
 | `id` | `Integer` | yes | Primary key |
-| `meeting_record_id` | `Integer(FK)` | yes | FK to `meeting_records.id` (`ON DELETE CASCADE`) |
+| `zoom_meeting_id` | `String(128, FK)` | yes | FK to `meeting_records.zoom_meeting_id` (`ON DELETE CASCADE`) |
 | `openemr_patient_id` | `String(128)` | yes | OpenEMR patient id |
 | `created_at` | `DateTime(timezone=True)` | no | Created timestamp (UTC) |
 
@@ -102,7 +100,7 @@ Relationships:
 | Column | Type | Required | Notes |
 |---|---|---|---|
 | `id` | `Integer` | yes | Primary key |
-| `meeting_record_id` | `Integer(FK)` | yes | FK to `meeting_records.id` |
+| `zoom_meeting_id` | `String(128, FK)` | yes | FK to `meeting_records.zoom_meeting_id` |
 | `zoom_note_id` | `String(128)` | yes | Zoom note identifier (unique) |
 | `zoom_note_title` | `String(256)` | no | Note title |
 | `note_content` | `Text` | no | Note body |
@@ -272,15 +270,12 @@ ORDER BY seq;
 
 Current migration chain:
 - `0d3e2936f4b1_initial_schema` (baseline/stamp)
-- `a1b2c3d4e5f6_add_timezone_to_zoom_accounts`
-- `41740385eb41_meeting_records`
-- `9f2c1a7d4b6e_create_meeting_patients_table`
-- `bc1e2fb3b8be_add_openemr_provider_id_to_provider_mappings`
-- `21edaf7095b0_change_openemr_provider_id_to_string_on_provider_mappings`
-- `071951c50951_add_demo_patient_contact_overrides_to_zoom_accounts`
-- `0051b818835b_add_encounter_number_to_audit_log`
-- `7332ab195d90_add_nickname_to_zoom_account`
-- `ab343facf737_add_demo_patient_override_enabled_to_zoom_account`
+- `5ecd2a942ca3_current_schema_with_string_primary_keys`
+
+The current schema migration uses natural string primary keys for the core integration relationships:
+- `zoom_accounts.account_id`
+- `meeting_records.zoom_meeting_id`
+- foreign keys from provider mappings, appointment filters, meeting records, patients, and clinical notes point at those natural IDs.
 
 ## Test Coverage Pointers
 

@@ -42,7 +42,7 @@ def _create_provider_mapping(
     provider_id: str = "10",
 ) -> ProviderMapping:
     mapping = ProviderMapping(
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
         openemr_fhir_id="pract-1",
         openemr_provider_npi=npi,
         openemr_provider_id=provider_id,
@@ -60,7 +60,7 @@ def _create_provider_mapping(
 
 def _create_type_filter(account: ZoomAccount, type_id: str) -> AppointmentTypeFilter:
     f = AppointmentTypeFilter(
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
         openemr_type_id=type_id,
         openemr_type_name=f"Type {type_id}",
     )

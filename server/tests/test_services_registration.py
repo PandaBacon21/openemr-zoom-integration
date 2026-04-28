@@ -162,7 +162,7 @@ def test_register_zoom_account_replaces_inactive_record(app, monkeypatch):
         records = ZoomAccount.query.filter_by(account_id="acct-inactive").all()
 
     assert len(records) == 1
-    assert records[0].id == account.id
+    assert records[0].account_id == account.account_id
     assert account.is_active is True
 
 
@@ -316,7 +316,7 @@ def test_update_zoom_account_updates_editable_fields(app):
         stored = ZoomAccount.query.filter_by(account_id="acct-update").first()
 
     assert stored is not None
-    assert account.id == stored.id
+    assert account.account_id == stored.account_id
     assert stored.nickname == "New Clinic"
     assert stored.client_secret == "new-client-secret"
     assert stored.webhook_secret == "new-webhook-secret"

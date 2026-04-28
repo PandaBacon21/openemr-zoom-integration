@@ -23,7 +23,7 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
 
 def _create_mapping(account: ZoomAccount, *, npi: str, is_active: bool = True) -> ProviderMapping:
     mapping = ProviderMapping(
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
         openemr_fhir_id=f"fhir-{npi}",
         openemr_provider_npi=npi,
         openemr_provider_id=f"id-{npi}",
@@ -107,7 +107,7 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
             zoom_user_type=2,
         )
 
-        rows = ProviderMapping.query.filter_by(zoom_account_id=account.id).all()
+        rows = ProviderMapping.query.filter_by(zoom_account_id=account.account_id).all()
 
     assert mapping.openemr_provider_npi == "1234567890"
     assert mapping.openemr_provider_id == "10"
