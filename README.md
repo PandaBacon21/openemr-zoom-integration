@@ -4,7 +4,7 @@ Lightweight Flask backend for linking Zoom account data with OpenEMR workflows.
 
 Current implemented areas:
 
-- Zoom account registration + deregistration
+- Zoom account registration, update, and deregistration
 - OpenEMR dynamic client registration + registration verification checks
 - Provider mapping management (OpenEMR provider <-> Zoom user)
 - Appointment type filter management
@@ -12,11 +12,11 @@ Current implemented areas:
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
 - OpenEMR appointment URL writeback (`pc_website`) after meeting create/recreate
 - Audit logging for webhook intake and meeting lifecycle events
-- Per-account demo patient contact overrides (`demo_patient_email_override`, `demo_patient_phone_override`)
+- Per-account nicknames and demo patient contact override controls
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
-- Protected endpoints via `X-API-Key`
+- Protected admin/config endpoints via JWT bearer auth
 - JWKS endpoint for per-account key usage
 
 ## Internal Developer Reference
@@ -46,7 +46,8 @@ cp .env.example .env
 2. Set required values in `.env` for your environment:
 
 - `ENCRYPTION_KEY`
-- `API_KEY`
+- `CONFIG_ADMIN_PASSWORD`
+- `CONFIG_JWT_SECRET`
 - `OPENEMR_BASE_URL`
 - `OPENEMR_PUBLIC_URL`
 - `OPENEMR_FHIR_BASE_URL`
@@ -82,35 +83,47 @@ Health and keys:
 - `GET /health`
 - `GET /.well-known/jwks.json`
 
-Configuration and registration (API key protected):
+Admin authentication:
+
+- `POST /api/auth/login`
+- `GET /api/auth/verify`
+
+Configuration and registration (JWT bearer protected):
 
 - `POST /config/register`
+- `PATCH /config/register/<zoom_account_id>`
 - `DELETE /config/register/<zoom_account_id>`
 - `GET /config/registrations`
 - `POST /config/register/<zoom_account_id>/verify`
 
-Provider mapping management (API key protected):
+Provider mapping management (JWT bearer protected):
 
 - `POST /config/providers`
 - `GET /config/providers?zoom_account_id=...`
 - `DELETE /config/providers/<openemr_provider_id>?zoom_account_id=...`
 
-Appointment filter management (API key protected):
+Appointment filter management (JWT bearer protected):
 
 - `POST /config/appointment-types`
 - `GET /config/appointment-types?zoom_account_id=...`
 - `DELETE /config/appointment-types/<type_id>?zoom_account_id=...`
 
-OpenEMR and Zoom lookup helpers (API key protected):
+OpenEMR and Zoom lookup helpers (JWT bearer protected):
 
 - `GET /openemr/providers?zoom_account_id=...`
 - `GET /openemr/appointment-types`
 - `GET /zoom/users?zoom_account_id=...`
 
+Protected routes require:
+
+```http
+Authorization: Bearer <token-from-/api/auth/login>
+```
+
 OpenEMR-signed note endpoints:
 
-- `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; API key exempt)
-- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; API key exempt) - not currently in use
+- `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; JWT exempt)
+- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; JWT exempt) - not currently in use
 
 Inbound webhook endpoints:
 
@@ -127,6 +140,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, and protected blueprint endpoints.
+Current test suite coverage includes auth/JWKS, registration lifecycle and updates, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest run result in this workspace (April 27, 2026): `192 passed`.
+Latest run result in this workspace (April 28, 2026): `209 passed`.
