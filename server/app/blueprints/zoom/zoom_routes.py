@@ -2,7 +2,6 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
 from flask import jsonify, request
-from app.auth.api_key import protect_with_api_key
 from app.models import ZoomAccount, MeetingRecord
 from app.extensions import db, get_openemr_db_engine
 from app.services.audit import write_audit_log
@@ -13,13 +12,6 @@ from app.blueprints.zoom.zoom_route_helper import verify_openemr_signature
 from app.blueprints.zoom import zoom_bp
 
 logger = logging.getLogger(__name__)
-
-
-@zoom_bp.before_request
-def protect():
-    if request.endpoint == "zoom.fetch_zoom_note" or request.endpoint == "zoom.complete_zoom_note":
-        return
-    return protect_with_api_key()
 
 
 @zoom_bp.route("/users", methods=["GET"])

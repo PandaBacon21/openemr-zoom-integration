@@ -62,10 +62,10 @@ const LoginPage: React.FC = () => {
             >
               ZH
             </Avatar>
-            <Typography variant="h5" fontWeight={700}>
+            <Typography variant="h4" sx={{ fontWeight: 700 }}>
               Zoomly Health
             </Typography>
-            <Typography variant="body2" color="text.secondary" mt={0.5}>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               Admin Console
             </Typography>
           </Box>

@@ -1,5 +1,5 @@
 from flask import Blueprint
-from app.auth.api_key import protect_with_api_key
+from app.blueprints.auth.auth_helpers import verify_jwt_request
 
 
 config_bp = Blueprint("config", __name__, url_prefix="/config")
@@ -7,7 +7,7 @@ config_bp = Blueprint("config", __name__, url_prefix="/config")
 
 @config_bp.before_request
 def protect():
-    return protect_with_api_key()
+    return verify_jwt_request()
 
 
 @config_bp.route("/")

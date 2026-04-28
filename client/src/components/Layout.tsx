@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Box,
@@ -10,10 +9,8 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  IconButton,
   Divider,
   Avatar,
-  Tooltip,
 } from "@mui/material";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -72,13 +69,16 @@ const Layout: React.FC = () => {
               ZH
             </Avatar>
             <Box>
-              <Typography variant="subtitle2" fontWeight={700} lineHeight={1.2}>
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 700, lineHeight: 1.2 }}
+              >
                 Zoomly Health
               </Typography>
               <Typography
                 variant="caption"
                 color="text.secondary"
-                lineHeight={1}
+                sx={{ lineHeight: 1.2 }}
               >
                 Admin Console
               </Typography>
@@ -111,9 +111,8 @@ const Layout: React.FC = () => {
                 <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
                 <ListItemText
                   primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: "0.875rem",
-                    fontWeight: 500,
+                  slotProps={{
+                    primary: { sx: { fontSize: "0.875rem", fontWeight: 500 } },
                   }}
                 />
               </ListItemButton>
@@ -134,7 +133,9 @@ const Layout: React.FC = () => {
             </ListItemIcon>
             <ListItemText
               primary="Sign out"
-              primaryTypographyProps={{ fontSize: "0.875rem" }}
+              slotProps={{
+                primary: { sx: { fontSize: "0.875rem" } },
+              }}
             />
           </ListItemButton>
         </Box>
@@ -149,7 +150,11 @@ const Layout: React.FC = () => {
           sx={{ borderBottom: "1px solid", borderColor: "divider" }}
         >
           <Toolbar sx={{ minHeight: "64px !important" }}>
-            <Typography variant="h6" fontWeight={600} color="text.primary">
+            <Typography
+              variant="h6"
+              color="text.primary"
+              sx={{ fontWeight: 600 }}
+            >
               {NAV_ITEMS.find((i) => location.pathname.startsWith(i.path))
                 ?.label ?? "Zoomly Health"}
             </Typography>

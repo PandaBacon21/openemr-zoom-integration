@@ -44,6 +44,7 @@ class ZoomAccount(db.Model):
     timezone = db.Column(db.String(64), nullable=False, default="America/New_York") 
 
     # Demo override — if set, all patient communications use these instead of patient record
+    demo_patient_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     demo_patient_email_override = db.Column(db.String(256), nullable=True)
     demo_patient_phone_override = db.Column(db.String(32), nullable=True)
 
@@ -82,6 +83,7 @@ class ZoomAccount(db.Model):
             kid: str | None = ...,
             key_version: int | None = ...,
             timezone: str | None = ...,
+            demo_patient_override_enabled: bool | None = ...,
             demo_patient_email_override: str | None = ...,
             demo_patient_phone_override: str | None = ...,
             is_active: bool | None = ...,
