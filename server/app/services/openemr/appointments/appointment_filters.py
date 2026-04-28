@@ -21,7 +21,7 @@ def _create_appointment_filter(
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     existing = AppointmentTypeFilter.query.filter_by(
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         openemr_type_id=openemr_type_id
     ).first()
     if existing:
@@ -31,7 +31,7 @@ def _create_appointment_filter(
         )
 
     filter_entry = AppointmentTypeFilter(
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         openemr_type_id=openemr_type_id,
         openemr_type_name=openemr_type_name
     )
@@ -57,7 +57,7 @@ def _get_appointment_filters(zoom_account_id: str) -> list[AppointmentTypeFilter
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     return AppointmentTypeFilter.query.filter_by(
-        zoom_account_id=account.id
+        zoom_account_id=zoom_account_id
     ).all()
 
 
@@ -74,7 +74,7 @@ def _delete_appointment_filter(zoom_account_id: str, type_id: str,
 
     filter_entry = AppointmentTypeFilter.query.filter_by(
         openemr_type_id=type_id,
-        zoom_account_id=account.id
+        zoom_account_id=zoom_account_id
     ).first()
     if not filter_entry:
         raise ValueError(f"No filter found with id {type_id}")

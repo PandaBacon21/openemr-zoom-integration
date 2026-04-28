@@ -116,7 +116,7 @@ def fetch_zoom_note(encounter_number: int):
  
     # --- 4. Look up the ZoomAccount for this meeting record ---
     account = ZoomAccount.query.filter_by(
-        id=record.zoom_account_id, is_active=True
+        account_id=record.zoom_account_id, is_active=True
     ).first()
  
     if not account:
@@ -237,7 +237,7 @@ def complete_zoom_note(encounter_number: int):
         write_audit_log(
             event_type="zoom.completion_skipped",
             success=True,
-            zoom_account_id=record.account_id,
+            zoom_account_id=record.zoom_account_id,
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
         )
@@ -245,7 +245,7 @@ def complete_zoom_note(encounter_number: int):
 
     # --- 5. Look up ZoomAccount ---
     account = ZoomAccount.query.filter_by(
-        id=record.zoom_account_id, is_active=True
+        account_id=record.zoom_account_id, is_active=True
     ).first()
 
     if not account:

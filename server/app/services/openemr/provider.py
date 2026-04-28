@@ -63,8 +63,6 @@ def get_practitioners(
 
 
 def get_provider_username(provider_id: int) -> str | None:
-    from sqlalchemy import text
-    from app.extensions import get_openemr_db_engine
     
     engine = get_openemr_db_engine()
     try:
@@ -164,7 +162,7 @@ def _create_provider_mapping(
 
     # Check for duplicate — same NPI already mapped for this account
     existing = ProviderMapping.query.filter_by(
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         openemr_provider_npi=openemr_provider_npi,
         is_active=True
     ).first()
@@ -175,7 +173,7 @@ def _create_provider_mapping(
         )
 
     mapping = ProviderMapping(
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         openemr_fhir_id=openemr_fhir_id,
         openemr_provider_npi=openemr_provider_npi,
         openemr_provider_id=openemr_provider_id, 
@@ -208,7 +206,7 @@ def _get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     return ProviderMapping.query.filter_by(
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         is_active=True
     ).all()
 
@@ -225,7 +223,7 @@ def _delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> 
 
     mapping = ProviderMapping.query.filter_by(
         openemr_provider_id=openemr_provider_id,
-        zoom_account_id=account.id,
+        zoom_account_id=zoom_account_id,
         is_active=True
     ).first()
     if not mapping:

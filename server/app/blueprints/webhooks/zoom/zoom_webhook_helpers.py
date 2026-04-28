@@ -164,7 +164,7 @@ def _validate_and_process_note(
     """
     record = MeetingRecord.query.filter_by(
         zoom_meeting_id=str(meeting_number),
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
     ).first()
 
     if not record:
@@ -186,7 +186,7 @@ def _validate_and_process_note(
     clinical_note = ClinicalNoteRecord.query.filter_by(zoom_note_id=note_id).first()
     if not clinical_note:
         clinical_note = ClinicalNoteRecord(
-            meeting_record_id=record.id,
+            zoom_meeting_id=record.zoom_meeting_id,
             zoom_note_id=note_id,
             zoom_note_title=note_title or "",
             is_written_to_openemr=False,
@@ -242,7 +242,7 @@ def _validate_and_process_note(
 
     # Get patient and provider from MeetingRecord
     pid = None
-    patient = MeetingPatient.query.filter_by(meeting_record_id=record.id).first()
+    patient = MeetingPatient.query.filter_by(zoom_meeting_id=record.zoom_meeting_id).first()
     if patient:
         pid = int(patient.openemr_patient_id)
 
@@ -340,7 +340,7 @@ def _validate_and_process_note(
     return {
         "status": "written" if success else "write_failed",
         "encounter": encounter_number,
-        "meeting_record_id": record.id,
+        "zoom_meeting_id": record.zoom_meeting_id,
     }, 200 if success else 500
 
 
@@ -366,7 +366,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     # Look up MeetingRecord
     record = MeetingRecord.query.filter_by(
         zoom_meeting_id=str(meeting_id),
-        zoom_account_id=account.id
+        zoom_account_id=account.account_id
     ).first()
 
     if not record:
