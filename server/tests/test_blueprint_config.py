@@ -1,15 +1,15 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from auth_utils import AUTH_HEADERS
 from app.extensions import db
 from app.models import ZoomAccount
-
-API_HEADERS = {"X-API-Key": "test-api-key"}
 
 
 def _create_account(app, account_id: str, *, is_active: bool = True) -> ZoomAccount:
     with app.app_context():
         account = ZoomAccount(
+            nickname=None,
             account_id=account_id,
             client_id="zoom-client-id",
             client_secret="zoom-client-secret",
@@ -25,7 +25,7 @@ def _create_account(app, account_id: str, *, is_active: bool = True) -> ZoomAcco
 
 
 def test_register_endpoint_requires_json_body(client):
-    response = client.post("/config/register", headers=API_HEADERS)
+    response = client.post("/config/register", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "Request body must be JSON"}
 
@@ -33,7 +33,7 @@ def test_register_endpoint_requires_json_body(client):
 def test_register_endpoint_requires_all_fields(client):
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -48,6 +48,7 @@ def test_register_endpoint_requires_all_fields(client):
 
 def test_register_endpoint_success(client, monkeypatch):
     fake_account = SimpleNamespace(
+        nickname="Demo Account",
         account_id="acct-1",
         openemr_client_id="openemr-client-id",
         kid="zoomly-acct-1",
@@ -60,19 +61,21 @@ def test_register_endpoint_success(client, monkeypatch):
 
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
             "zoom_client_secret": "client-secret",
             "zoom_webhook_secret": "webhook-secret",
             "contact_email": "admin@example.com",
+            "nickname": "Demo Account",
         },
     )
 
     assert response.status_code == 201
     assert response.get_json() == {
         "status": "registered",
+        "nickname": "Demo Account",
         "zoom_account_id": "acct-1",
         "openemr_client_id": "openemr-client-id",
         "kid": "zoomly-acct-1",
@@ -90,7 +93,7 @@ def test_register_endpoint_maps_value_error_to_400(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", _raise)
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -111,7 +114,7 @@ def test_register_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", _raise)
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -131,6 +134,7 @@ def test_register_endpoint_passes_timezone_to_service(client, monkeypatch):
     def fake_register(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
+            nickname=None,
             account_id="acct-1",
             openemr_client_id="openemr-client-id",
             kid="zoomly-acct-1",
@@ -144,7 +148,7 @@ def test_register_endpoint_passes_timezone_to_service(client, monkeypatch):
 
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -166,6 +170,7 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
     def fake_register(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
+            nickname=None,
             account_id="acct-1",
             openemr_client_id="openemr-client-id",
             kid="zoomly-acct-1",
@@ -179,7 +184,7 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
 
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
@@ -194,18 +199,19 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
     assert response.get_json()["timezone"] == "America/New_York"
 
 
-def test_register_endpoint_passes_demo_patient_overrides_to_service(client, monkeypatch):
+def test_register_endpoint_passes_nickname_to_service(client, monkeypatch):
     captured = {}
 
     def fake_register(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
+            nickname=kwargs["nickname"],
             account_id="acct-1",
             openemr_client_id="openemr-client-id",
             kid="zoomly-acct-1",
             timezone=kwargs["timezone"],
-            demo_patient_email_override=kwargs["demo_patient_email_override"],
-            demo_patient_phone_override=kwargs["demo_patient_phone_override"],
+            demo_patient_email_override=None,
+            demo_patient_phone_override=None,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
@@ -213,28 +219,143 @@ def test_register_endpoint_passes_demo_patient_overrides_to_service(client, monk
 
     response = client.post(
         "/config/register",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "zoom_client_id": "client-id",
             "zoom_client_secret": "client-secret",
             "zoom_webhook_secret": "webhook-secret",
             "contact_email": "admin@example.com",
+            "nickname": "North Clinic",
+        },
+    )
+
+    assert response.status_code == 201
+    assert captured["nickname"] == "North Clinic"
+    assert response.get_json()["nickname"] == "North Clinic"
+
+
+def test_update_registration_requires_json_body(client):
+    response = client.patch("/config/register/acct-1", headers=AUTH_HEADERS)
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Request body must be JSON"}
+
+
+def test_update_registration_success(client, monkeypatch):
+    captured = {}
+
+    def fake_update(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            nickname="South Clinic",
+            timezone="America/Denver",
+            demo_patient_override_enabled=True,
+            demo_patient_email_override="demo-patient@example.com",
+            demo_patient_phone_override="+13035550199",
+            updated_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("app.blueprints.config.config_routes.update_zoom_account", fake_update)
+
+    response = client.patch(
+        "/config/register/acct-1",
+        headers=AUTH_HEADERS,
+        json={
+            "nickname": "South Clinic",
+            "zoom_client_secret": "new-client-secret",
+            "zoom_webhook_secret": "new-webhook-secret",
+            "timezone": "America/Denver",
+            "demo_patient_override_enabled": True,
             "demo_patient_email_override": "demo-patient@example.com",
             "demo_patient_phone_override": "+13035550199",
         },
     )
 
-    assert response.status_code == 201
-    assert captured["demo_patient_email_override"] == "demo-patient@example.com"
-    assert captured["demo_patient_phone_override"] == "+13035550199"
-    assert response.get_json()["demo_patient_email_override"] == "demo-patient@example.com"
-    assert response.get_json()["demo_patient_phone_override"] == "+13035550199"
+    assert response.status_code == 200
+    assert captured == {
+        "zoom_account_id": "acct-1",
+        "nickname": "South Clinic",
+        "zoom_client_secret": "new-client-secret",
+        "zoom_webhook_secret": "new-webhook-secret",
+        "timezone": "America/Denver",
+        "demo_patient_override_enabled": True,
+        "demo_patient_email_override": "demo-patient@example.com",
+        "demo_patient_phone_override": "+13035550199",
+    }
+    assert response.get_json() == {
+        "status": "updated",
+        "zoom_account_id": "acct-1",
+        "nickname": "South Clinic",
+        "timezone": "America/Denver",
+        "demo_patient_override_enabled": True,
+        "demo_patient_email_override": "demo-patient@example.com",
+        "demo_patient_phone_override": "+13035550199",
+        "updated_at": "2026-01-06T00:00:00+00:00",
+    }
+
+
+def test_update_registration_passes_false_override_flag(client, monkeypatch):
+    captured = {}
+
+    def fake_update(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            nickname=None,
+            timezone="America/New_York",
+            demo_patient_override_enabled=False,
+            demo_patient_email_override=None,
+            demo_patient_phone_override=None,
+            updated_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr("app.blueprints.config.config_routes.update_zoom_account", fake_update)
+
+    response = client.patch(
+        "/config/register/acct-1",
+        headers=AUTH_HEADERS,
+        json={"demo_patient_override_enabled": False},
+    )
+
+    assert response.status_code == 200
+    assert captured["demo_patient_override_enabled"] is False
+    assert response.get_json()["demo_patient_override_enabled"] is False
+
+
+def test_update_registration_maps_value_error_to_400(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.blueprints.config.config_routes.update_zoom_account",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError("No valid fields provided")),
+    )
+
+    response = client.patch(
+        "/config/register/acct-1",
+        headers=AUTH_HEADERS,
+        json={"unknown": "value"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "No valid fields provided"}
+
+
+def test_update_registration_maps_unexpected_error_to_500(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.blueprints.config.config_routes.update_zoom_account",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+
+    response = client.patch(
+        "/config/register/acct-1",
+        headers=AUTH_HEADERS,
+        json={"nickname": "South Clinic"},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "Update failed", "detail": "db down"}
 
 
 def test_deregister_endpoint_success(client, monkeypatch):
     monkeypatch.setattr("app.blueprints.config.config_routes.deregister_zoom_account", lambda account_id: None)
-    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
+    response = client.delete("/config/register/acct-1", headers=AUTH_HEADERS)
     assert response.status_code == 200
     assert response.get_json() == {"status": "deregistered", "zoom_account_id": "acct-1"}
 
@@ -244,7 +365,7 @@ def test_deregister_endpoint_maps_not_found_to_404(client, monkeypatch):
         raise ValueError("not found")
 
     monkeypatch.setattr("app.blueprints.config.config_routes.deregister_zoom_account", _raise)
-    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
+    response = client.delete("/config/register/acct-1", headers=AUTH_HEADERS)
     assert response.status_code == 404
     assert response.get_json() == {"error": "not found"}
 
@@ -254,7 +375,7 @@ def test_deregister_endpoint_maps_unexpected_error_to_500(client, monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr("app.blueprints.config.config_routes.deregister_zoom_account", _raise)
-    response = client.delete("/config/register/acct-1", headers=API_HEADERS)
+    response = client.delete("/config/register/acct-1", headers=AUTH_HEADERS)
     assert response.status_code == 500
     assert response.get_json() == {"error": "Deregistration failed", "detail": "db down"}
 
@@ -263,6 +384,7 @@ def test_list_registrations_returns_summary(client, app):
     with app.app_context():
         db.session.add(
             ZoomAccount(
+                nickname="Primary Clinic",
                 account_id="acct-1",
                 client_id="zoom-client-id",
                 client_secret="zoom-client-secret",
@@ -273,6 +395,7 @@ def test_list_registrations_returns_summary(client, app):
                 zoom_access_token="zoom-token",
                 openemr_access_token="openemr-token",
                 timezone="America/Denver",
+                demo_patient_override_enabled=True,
                 demo_patient_email_override="demo-patient+acct1@example.com",
                 demo_patient_phone_override="+13035550111",
                 is_active=True,
@@ -280,6 +403,7 @@ def test_list_registrations_returns_summary(client, app):
         )
         db.session.add(
             ZoomAccount(
+                nickname=None,
                 account_id="acct-2",
                 client_id="zoom-client-id-2",
                 client_secret="zoom-client-secret-2",
@@ -288,6 +412,7 @@ def test_list_registrations_returns_summary(client, app):
                 private_key_path="/tmp/keys/acct-2/private.pem",
                 kid="zoomly-acct-2",
                 timezone="America/New_York",
+                demo_patient_override_enabled=False,
                 demo_patient_email_override=None,
                 demo_patient_phone_override=None,
                 is_active=False,
@@ -295,7 +420,7 @@ def test_list_registrations_returns_summary(client, app):
         )
         db.session.commit()
 
-    response = client.get("/config/registrations", headers=API_HEADERS)
+    response = client.get("/config/registrations", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     body = response.get_json()
@@ -305,27 +430,31 @@ def test_list_registrations_returns_summary(client, app):
     acct1 = next(item for item in body["registrations"] if item["zoom_account_id"] == "acct-1")
     acct2 = next(item for item in body["registrations"] if item["zoom_account_id"] == "acct-2")
 
+    assert acct1["nickname"] == "Primary Clinic"
     assert acct1["openemr_client_id"] == "openemr-client-id"
     assert acct1["kid"] == "zoomly-acct-1"
     assert acct1["is_active"] is True
     assert acct1["has_zoom_token"] is True
     assert acct1["has_openemr_token"] is True
     assert acct1["timezone"] == "America/Denver"
+    assert acct1["demo_patient_override_enabled"] is True
     assert acct1["demo_patient_email_override"] == "demo-patient+acct1@example.com"
     assert acct1["demo_patient_phone_override"] == "+13035550111"
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
 
+    assert acct2["nickname"] is None
     assert acct2["is_active"] is False
     assert acct2["has_zoom_token"] is False
     assert acct2["has_openemr_token"] is False
     assert acct2["timezone"] == "America/New_York"
+    assert acct2["demo_patient_override_enabled"] is False
     assert acct2["demo_patient_email_override"] is None
     assert acct2["demo_patient_phone_override"] is None
 
 
 def test_verify_registration_returns_404_for_unknown_account(client):
-    response = client.post("/config/register/missing/verify", headers=API_HEADERS)
+    response = client.post("/config/register/missing/verify", headers=AUTH_HEADERS)
     assert response.status_code == 404
     assert response.get_json() == {"error": "No active registration found for account missing"}
 
@@ -337,10 +466,11 @@ def test_verify_registration_returns_success_true(client, app, monkeypatch):
         lambda account: True,
     )
 
-    response = client.post("/config/register/acct-verify/verify", headers=API_HEADERS)
+    response = client.post("/config/register/acct-verify/verify", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     assert response.get_json() == {
+        "nickname": None,
         "zoom_account_id": "acct-verify",
         "openemr_verified": True,
         "message": "OpenEMR token verified successfully",
@@ -354,10 +484,11 @@ def test_verify_registration_returns_success_false(client, app, monkeypatch):
         lambda account: False,
     )
 
-    response = client.post("/config/register/acct-verify/verify", headers=API_HEADERS)
+    response = client.post("/config/register/acct-verify/verify", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     assert response.get_json() == {
+        "nickname": None,
         "zoom_account_id": "acct-verify",
         "openemr_verified": False,
         "message": "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again",
@@ -365,7 +496,7 @@ def test_verify_registration_returns_success_false(client, app, monkeypatch):
 
 
 def test_create_provider_mapping_requires_body(client):
-    response = client.post("/config/providers", headers=API_HEADERS, json={})
+    response = client.post("/config/providers", headers=AUTH_HEADERS, json={})
     assert response.status_code == 400
     assert response.get_json() == {"error": "Request body is required"}
 
@@ -373,7 +504,7 @@ def test_create_provider_mapping_requires_body(client):
 def test_create_provider_mapping_requires_fields(client):
     response = client.post(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={"zoom_account_id": "acct-1", "openemr_fhir_id": "pract-1"},
     )
 
@@ -396,7 +527,7 @@ def test_create_provider_mapping_success(client, monkeypatch):
 
     response = client.post(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_fhir_id": "pract-1",
@@ -426,7 +557,7 @@ def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
 
     response = client.post(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_fhir_id": "pract-1",
@@ -449,7 +580,7 @@ def test_create_provider_mapping_maps_unexpected_error_to_500(client, monkeypatc
 
     response = client.post(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_fhir_id": "pract-1",
@@ -465,7 +596,7 @@ def test_create_provider_mapping_maps_unexpected_error_to_500(client, monkeypatc
 
 
 def test_list_provider_mappings_requires_zoom_account_id(client):
-    response = client.get("/config/providers", headers=API_HEADERS)
+    response = client.get("/config/providers", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
@@ -488,7 +619,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
 
     response = client.get(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -519,7 +650,7 @@ def test_list_provider_mappings_maps_value_error_to_404(client, monkeypatch):
 
     response = client.get(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -535,7 +666,7 @@ def test_list_provider_mappings_maps_unexpected_error_to_500(client, monkeypatch
 
     response = client.get(
         "/config/providers",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -544,7 +675,7 @@ def test_list_provider_mappings_maps_unexpected_error_to_500(client, monkeypatch
 
 
 def test_delete_provider_mapping_requires_zoom_account_id(client):
-    response = client.delete("/config/providers/10", headers=API_HEADERS)
+    response = client.delete("/config/providers/10", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
@@ -554,7 +685,7 @@ def test_delete_provider_mapping_success(client, monkeypatch):
 
     response = client.delete(
         "/config/providers/10",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -570,7 +701,7 @@ def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
 
     response = client.delete(
         "/config/providers/10",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -586,7 +717,7 @@ def test_delete_provider_mapping_maps_unexpected_error_to_500(client, monkeypatc
 
     response = client.delete(
         "/config/providers/10",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -595,7 +726,7 @@ def test_delete_provider_mapping_maps_unexpected_error_to_500(client, monkeypatc
 
 
 def test_create_appointment_filter_requires_body(client):
-    response = client.post("/config/appointment-types", headers=API_HEADERS, json={})
+    response = client.post("/config/appointment-types", headers=AUTH_HEADERS, json={})
     assert response.status_code == 400
     assert response.get_json() == {"error": "Request body is required"}
 
@@ -603,7 +734,7 @@ def test_create_appointment_filter_requires_body(client):
 def test_create_appointment_filter_requires_fields(client):
     response = client.post(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={"zoom_account_id": "acct-1"},
     )
 
@@ -622,7 +753,7 @@ def test_create_appointment_filter_success(client, monkeypatch):
 
     response = client.post(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_type_id": "5",
@@ -647,7 +778,7 @@ def test_create_appointment_filter_maps_value_error_to_400(client, monkeypatch):
 
     response = client.post(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_type_id": "5",
@@ -667,7 +798,7 @@ def test_create_appointment_filter_maps_unexpected_error_to_500(client, monkeypa
 
     response = client.post(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
             "openemr_type_id": "5",
@@ -680,7 +811,7 @@ def test_create_appointment_filter_maps_unexpected_error_to_500(client, monkeypa
 
 
 def test_list_appointment_filters_requires_zoom_account_id(client):
-    response = client.get("/config/appointment-types", headers=API_HEADERS)
+    response = client.get("/config/appointment-types", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
@@ -698,7 +829,7 @@ def test_list_appointment_filters_success(client, monkeypatch):
 
     response = client.get(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -724,7 +855,7 @@ def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
 
     response = client.get(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -740,7 +871,7 @@ def test_list_appointment_filters_maps_unexpected_error_to_500(client, monkeypat
 
     response = client.get(
         "/config/appointment-types",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -749,7 +880,7 @@ def test_list_appointment_filters_maps_unexpected_error_to_500(client, monkeypat
 
 
 def test_delete_appointment_filter_requires_zoom_account_id(client):
-    response = client.delete("/config/appointment-types/7", headers=API_HEADERS)
+    response = client.delete("/config/appointment-types/7", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
@@ -759,7 +890,7 @@ def test_delete_appointment_filter_success(client, monkeypatch):
 
     response = client.delete(
         "/config/appointment-types/7",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -775,7 +906,7 @@ def test_delete_appointment_filter_maps_value_error_to_404(client, monkeypatch):
 
     response = client.delete(
         "/config/appointment-types/7",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -791,7 +922,7 @@ def test_delete_appointment_filter_maps_unexpected_error_to_500(client, monkeypa
 
     response = client.delete(
         "/config/appointment-types/7",
-        headers=API_HEADERS,
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 

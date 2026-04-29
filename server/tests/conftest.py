@@ -1,7 +1,12 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
+
+SERVER_ROOT = Path(__file__).resolve().parents[1]
+if str(SERVER_ROOT) not in sys.path:
+    sys.path.insert(0, str(SERVER_ROOT))
 
 # Force test-safe env before any `app.*` module import during test collection.
 # Use direct assignment (not setdefault) so local/dev env vars cannot point tests
@@ -13,6 +18,8 @@ os.environ["KEYS_BASE_DIR"] = "/tmp/zoomly-test-keys"
 os.environ["ZOOM_TOKEN_URL"] = "https://zoom.us/oauth/token"
 os.environ["ZOOM_API_BASE_URL"] = "https://api.zoom.us/v2"
 os.environ["API_KEY"] = "test-api-key"
+os.environ["CONFIG_ADMIN_PASSWORD"] = "test-admin-password"
+os.environ["CONFIG_JWT_SECRET"] = "test-config-jwt-secret-0123456789"
 
 
 @pytest.fixture()
@@ -31,6 +38,8 @@ def app(tmp_path: Path):
         OPENEMR_PUBLIC_URL="https://openemr.public",
         OPENEMR_FHIR_BASE_URL="http://openemr.internal/apis/default/fhir",
         APP_PUBLIC_URL="http://localhost:5000",
+        CONFIG_ADMIN_PASSWORD="test-admin-password",
+        CONFIG_JWT_SECRET="test-config-jwt-secret-0123456789",
         JWKS_PRIVATE_PATH=str(tmp_path / "keys" / "private.pem"),
         KEY_ID="test-key-id",
         OPENEMR_SCOPES=[

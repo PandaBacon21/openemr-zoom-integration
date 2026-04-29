@@ -6,12 +6,11 @@ def test_demo_patient_override_migration_adds_zoom_account_columns_only():
         Path(__file__).resolve().parents[1]
         / "migrations"
         / "versions"
-        / "071951c50951_add_demo_patient_contact_overrides_to_.py"
+        / "5ecd2a942ca3_current_schema_with_string_primary_keys.py"
     )
     text = migration_path.read_text(encoding="utf-8")
 
-    assert "op.add_column('zoom_accounts', sa.Column('demo_patient_email_override'" in text
-    assert "op.add_column('zoom_accounts', sa.Column('demo_patient_phone_override'" in text
-    assert "op.drop_column('zoom_accounts', 'demo_patient_phone_override')" in text
-    assert "op.drop_column('zoom_accounts', 'demo_patient_email_override')" in text
-    assert "provider_mappings" not in text
+    assert "op.create_table('zoom_accounts'" in text
+    assert "sa.Column('demo_patient_email_override', sa.String(length=256), nullable=True)" in text
+    assert "sa.Column('demo_patient_phone_override', sa.String(length=32), nullable=True)" in text
+    assert "op.drop_table('zoom_accounts')" in text

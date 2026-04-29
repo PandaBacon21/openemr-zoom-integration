@@ -59,7 +59,7 @@ def _create_meeting_record(account_id: str, *, meeting_id: str = "existing-123",
 
     account = _create_zoom_account(account_id)
     record = MeetingRecord(
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
         zoom_meeting_id=meeting_id,
         zoom_start_url=f"https://zoom.example/start/{meeting_id}",
         zoom_join_url=f"https://zoom.example/join/{meeting_id}",
@@ -143,7 +143,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-1")
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
@@ -192,7 +192,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         assert meeting.openemr_appt_status == "^"
         assert meeting.status == "created"
 
-        patient = MeetingPatient.query.filter_by(meeting_record_id=meeting.id).first()
+        patient = MeetingPatient.query.filter_by(zoom_meeting_id=meeting.zoom_meeting_id).first()
         assert patient is not None
         assert patient.openemr_patient_id == "1"
 
@@ -202,8 +202,8 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
     with app.app_context():
         account_1 = _create_zoom_account("acct-1")
         account_2 = _create_zoom_account("acct-2")
-        account_1_stub = SimpleNamespace(account_id=account_1.account_id, id=account_1.id)
-        account_2_stub = SimpleNamespace(account_id=account_2.account_id, id=account_2.id)
+        account_1_stub = SimpleNamespace(account_id=account_1.account_id)
+        account_2_stub = SimpleNamespace(account_id=account_2.account_id)
 
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
@@ -255,7 +255,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-err")
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
@@ -385,7 +385,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-writeback")
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     calls = []
     captured = {}
@@ -441,7 +441,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account = _create_zoom_account("acct-writeback-fail")
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     calls = []
     monkeypatch.setattr(
@@ -486,8 +486,8 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-update", meeting_id="meet-old", eid="999")
-        record_id = record.id
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        record_id = record.zoom_meeting_id
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     payload = dict(OPENEMR_APPOINTMENT_PAYLOAD)
     payload["appt_status"] = "@"
@@ -521,12 +521,12 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
     assert len(body_json["updated"]) == 1
     assert body_json["updated"][0]["action"] == "updated"
     assert body_json["updated"][0]["zoom_meeting_id"] == "meet-old"
-    assert body_json["updated"][0]["meeting_record_id"] == record_id
 
     with app.app_context():
+        from app.extensions import db
         from app.models import MeetingRecord
 
-        refreshed = MeetingRecord.query.get(record_id)
+        refreshed = db.session.get(MeetingRecord, record_id)
         assert refreshed is not None
         assert refreshed.zoom_meeting_id == "meet-old"
         assert refreshed.openemr_appt_status == "@"
@@ -536,8 +536,8 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-recreate", meeting_id="meet-old", eid="999")
-        record_id = record.id
-        account_stub = SimpleNamespace(account_id=account.account_id, id=account.id)
+        old_meeting_id = record.zoom_meeting_id
+        account_stub = SimpleNamespace(account_id=account.account_id)
 
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
@@ -576,11 +576,12 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
     assert body_json["updated"][0]["zoom_meeting_id"] == "meet-new"
 
     with app.app_context():
+        from app.extensions import db
         from app.models import MeetingRecord
 
-        refreshed = MeetingRecord.query.get(record_id)
+        assert db.session.get(MeetingRecord, old_meeting_id) is None
+        refreshed = db.session.get(MeetingRecord, "meet-new")
         assert refreshed is not None
-        assert refreshed.zoom_meeting_id == "meet-new"
 
 
 def test_openemr_webhook_delete_returns_no_record_when_meeting_not_found(client, app):
@@ -602,7 +603,7 @@ def test_openemr_webhook_delete_removes_zoom_and_db_record(client, app, monkeypa
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         account, record = _create_meeting_record("acct-delete", meeting_id="meet-del", eid="999")
-        record_id = record.id
+        record_id = record.zoom_meeting_id
 
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting", lambda account, meeting_id: True)
 
@@ -622,9 +623,10 @@ def test_openemr_webhook_delete_removes_zoom_and_db_record(client, app, monkeypa
     }
 
     with app.app_context():
+        from app.extensions import db
         from app.models import MeetingRecord
 
-        refreshed = MeetingRecord.query.get(record_id)
+        refreshed = db.session.get(MeetingRecord, record_id)
         assert refreshed is None
 
 
@@ -632,7 +634,7 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
     app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
     with app.app_context():
         _, record = _create_meeting_record("acct-delete-error", meeting_id="meet-del-err", eid="999")
-        record_id = record.id
+        record_id = record.zoom_meeting_id
 
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting",
@@ -654,8 +656,9 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
     assert body_json["errors"][0]["meeting_id"] == "meet-del-err"
 
     with app.app_context():
+        from app.extensions import db
         from app.models import MeetingRecord
 
-        refreshed = MeetingRecord.query.get(record_id)
+        refreshed = db.session.get(MeetingRecord, record_id)
         assert refreshed is not None
         assert refreshed.status == "error"

@@ -23,7 +23,7 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
 
 def _create_filter(account: ZoomAccount, type_id: str, type_name: str) -> AppointmentTypeFilter:
     entry = AppointmentTypeFilter(
-        zoom_account_id=account.id,
+        zoom_account_id=account.account_id,
         openemr_type_id=type_id,
         openemr_type_name=type_name,
     )

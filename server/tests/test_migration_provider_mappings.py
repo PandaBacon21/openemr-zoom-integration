@@ -6,28 +6,25 @@ def test_provider_mapping_migration_adds_openemr_provider_id_column():
         Path(__file__).resolve().parents[1]
         / "migrations"
         / "versions"
-        / "bc1e2fb3b8be_add_openemr_provider_id_to_provider_.py"
+        / "5ecd2a942ca3_current_schema_with_string_primary_keys.py"
     )
     text = migration_path.read_text(encoding="utf-8")
 
-    assert "op.add_column('provider_mappings'" in text
+    assert "op.create_table('provider_mappings'" in text
     assert "'openemr_provider_id'" in text
-    assert "sa.Integer()" in text
-    assert "op.drop_column('provider_mappings', 'openemr_provider_id')" in text
+    assert "sa.String(length=128)" in text
+    assert "sa.ForeignKeyConstraint(['zoom_account_id'], ['zoom_accounts.account_id']" in text
+    assert "op.drop_table('provider_mappings')" in text
 
 
-def test_provider_mapping_migration_changes_openemr_provider_id_to_string():
+def test_provider_mapping_migration_uses_string_zoom_account_fk():
     migration_path = (
         Path(__file__).resolve().parents[1]
         / "migrations"
         / "versions"
-        / "21edaf7095b0_change_openemr_provider_id_to_string_on_.py"
+        / "5ecd2a942ca3_current_schema_with_string_primary_keys.py"
     )
     text = migration_path.read_text(encoding="utf-8")
 
-    assert "with op.batch_alter_table('provider_mappings')" in text
-    assert "'openemr_provider_id'" in text
-    assert "existing_type=sa.INTEGER()" in text
-    assert "type_=sa.String(length=128)" in text
-    assert "existing_type=sa.String(length=128)" in text
-    assert "type_=sa.INTEGER()" in text
+    assert "sa.Column('zoom_account_id', sa.String(length=128), nullable=False)" in text
+    assert "op.create_index(op.f('ix_provider_mappings_zoom_account_id')" in text

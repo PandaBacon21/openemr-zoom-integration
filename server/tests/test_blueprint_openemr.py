@@ -1,3 +1,4 @@
+from auth_utils import AUTH_HEADERS, INVALID_AUTH_HEADERS
 from app.extensions import db
 from app.models import ZoomAccount
 
@@ -18,37 +19,31 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
     return account
 
 
-def test_get_providers_returns_500_when_api_key_not_configured(client, app):
-    app.config["API_KEY"] = None
-    response = client.get("/openemr/providers")
+def test_get_providers_returns_500_when_jwt_secret_not_configured(client, app):
+    app.config["CONFIG_JWT_SECRET"] = None
+    response = client.get("/openemr/providers", headers=AUTH_HEADERS)
     assert response.status_code == 500
-    assert response.get_json() == {"error": "API_KEY not configured on server"}
+    assert response.get_json() == {"error": "JWT secret not configured"}
 
 
-def test_get_providers_returns_401_for_invalid_api_key(client, app):
-    app.config["API_KEY"] = "expected-key"
-
-    response = client.get("/openemr/providers", headers={"X-API-Key": "wrong-key"})
+def test_get_providers_returns_401_for_invalid_jwt(client):
+    response = client.get("/openemr/providers", headers=INVALID_AUTH_HEADERS)
 
     assert response.status_code == 401
-    assert response.get_json() == {"error": "Invalid or missing API key"}
+    assert response.get_json() == {"error": "Invalid token"}
 
 
-def test_get_providers_requires_zoom_account_id(client, app):
-    app.config["API_KEY"] = "expected-key"
-
-    response = client.get("/openemr/providers", headers={"X-API-Key": "expected-key"})
+def test_get_providers_requires_zoom_account_id(client):
+    response = client.get("/openemr/providers", headers=AUTH_HEADERS)
 
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
 
-def test_get_providers_returns_404_for_unknown_account(client, app):
-    app.config["API_KEY"] = "expected-key"
-
+def test_get_providers_returns_404_for_unknown_account(client):
     response = client.get(
         "/openemr/providers",
-        headers={"X-API-Key": "expected-key"},
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "missing-account"},
     )
 
@@ -57,8 +52,6 @@ def test_get_providers_returns_404_for_unknown_account(client, app):
 
 
 def test_get_providers_success_returns_provider_list(client, app, monkeypatch):
-    app.config["API_KEY"] = "expected-key"
-
     with app.app_context():
         _create_account("acct-1", is_active=True)
 
@@ -84,7 +77,7 @@ def test_get_providers_success_returns_provider_list(client, app, monkeypatch):
 
     response = client.get(
         "/openemr/providers",
-        headers={"X-API-Key": "expected-key"},
+        headers=AUTH_HEADERS,
         query_string={
             "zoom_account_id": "acct-1",
             "search": "doe",
@@ -115,8 +108,6 @@ def test_get_providers_success_returns_provider_list(client, app, monkeypatch):
 
 
 def test_get_providers_maps_service_error_to_500(client, app, monkeypatch):
-    app.config["API_KEY"] = "expected-key"
-
     with app.app_context():
         _create_account("acct-1", is_active=True)
 
@@ -127,7 +118,7 @@ def test_get_providers_maps_service_error_to_500(client, app, monkeypatch):
 
     response = client.get(
         "/openemr/providers",
-        headers={"X-API-Key": "expected-key"},
+        headers=AUTH_HEADERS,
         query_string={"zoom_account_id": "acct-1"},
     )
 
@@ -135,22 +126,20 @@ def test_get_providers_maps_service_error_to_500(client, app, monkeypatch):
     assert response.get_json() == {"error": "openemr timeout"}
 
 
-def test_get_appointment_types_returns_500_when_api_key_not_configured(client, app):
-    app.config["API_KEY"] = None
-    response = client.get("/openemr/appointment-types")
+def test_get_appointment_types_returns_500_when_jwt_secret_not_configured(client, app):
+    app.config["CONFIG_JWT_SECRET"] = None
+    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
     assert response.status_code == 500
-    assert response.get_json() == {"error": "API_KEY not configured on server"}
+    assert response.get_json() == {"error": "JWT secret not configured"}
 
 
-def test_get_appointment_types_returns_401_for_invalid_api_key(client, app):
-    app.config["API_KEY"] = "expected-key"
-    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "wrong-key"})
+def test_get_appointment_types_returns_401_for_invalid_jwt(client):
+    response = client.get("/openemr/appointment-types", headers=INVALID_AUTH_HEADERS)
     assert response.status_code == 401
-    assert response.get_json() == {"error": "Invalid or missing API key"}
+    assert response.get_json() == {"error": "Invalid token"}
 
 
 def test_get_appointment_types_success(client, app, monkeypatch):
-    app.config["API_KEY"] = "expected-key"
     monkeypatch.setattr(
         "app.blueprints.openemr.openemr_routes.get_appointment_types_list",
         lambda: [
@@ -164,7 +153,7 @@ def test_get_appointment_types_success(client, app, monkeypatch):
         ],
     )
 
-    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "expected-key"})
+    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     assert response.get_json() == {
@@ -182,13 +171,12 @@ def test_get_appointment_types_success(client, app, monkeypatch):
 
 
 def test_get_appointment_types_maps_service_error_to_500(client, app, monkeypatch):
-    app.config["API_KEY"] = "expected-key"
     monkeypatch.setattr(
         "app.blueprints.openemr.openemr_routes.get_appointment_types_list",
         lambda: (_ for _ in ()).throw(RuntimeError("db unavailable")),
     )
 
-    response = client.get("/openemr/appointment-types", headers={"X-API-Key": "expected-key"})
+    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "db unavailable"}

@@ -16,7 +16,6 @@ def _retrieve_scopes() -> list[str]:
 
 def _register_with_openemr(
     zoom_account_id: str,
-    # kid: str,
     contact_email: str
 ) -> dict:
     """
@@ -31,7 +30,6 @@ def _register_with_openemr(
     Raises: requests.HTTPError if registration fails.
     """
     openemr_base_url = current_app.config["OPENEMR_BASE_URL"]
-    # app_public_url = current_app.config["APP_PUBLIC_URL"]
     app_internal_url = current_app.config.get("APP_INTERNAL_URL", "http://zoom-bridge:5000")
 
     registration_endpoint = f"{openemr_base_url}/oauth2/default/registration"
@@ -92,14 +90,13 @@ def _deregister_from_openemr(
 
 
 def register_zoom_account(
+    nickname: str | None, 
     zoom_account_id: str,
     zoom_client_id: str,
     zoom_client_secret: str,
     zoom_webhook_secret: str,
     contact_email: str, 
     timezone: str = "America/New_York",
-    demo_patient_email_override: str | None = None,
-    demo_patient_phone_override: str | None = None,
 ) -> ZoomAccount:
     """
     Full registration flow for a Zoom account.
@@ -158,6 +155,7 @@ def register_zoom_account(
             )
 
         account = ZoomAccount(
+            nickname=nickname,
             account_id=zoom_account_id,
             client_id=zoom_client_id,
             client_secret=zoom_client_secret,
@@ -171,9 +169,6 @@ def register_zoom_account(
             private_key_path=private_key_path,
             kid=kid,
             timezone=timezone,
-            demo_patient_email_override=demo_patient_email_override,
-            demo_patient_phone_override=demo_patient_phone_override,
-            is_active=True,
         )
 
         db.session.add(account)
@@ -215,6 +210,61 @@ def register_zoom_account(
         f"Registration complete for account {zoom_account_id}, "
         f"OpenEMR client_id: {openemr_response['client_id']}"
     )
+    return account
+
+
+def update_zoom_account(
+    zoom_account_id: str,
+    nickname: str | None = None,
+    zoom_client_secret: str | None = None,
+    zoom_webhook_secret: str | None = None,
+    timezone: str | None = None,
+    demo_patient_override_enabled: bool | None = None,
+    demo_patient_email_override: str | None = None,
+    demo_patient_phone_override: str | None = None,
+) -> ZoomAccount:
+    """
+    Update editable fields on a registered Zoom account.
+    Only fields explicitly passed (not None) are updated.
+
+    Returns the updated ZoomAccount.
+    Raises:
+        ValueError: If the account is not found.
+    """
+    account = ZoomAccount.query.filter_by(
+        account_id=zoom_account_id, is_active=True
+    ).first()
+
+    if not account:
+        raise ValueError(f"No active registration found for account {zoom_account_id}")
+
+    FIELD_MAP = {
+        "nickname":                      nickname,
+        "client_secret":                 zoom_client_secret,
+        "webhook_secret":                zoom_webhook_secret,
+        "timezone":                      timezone,
+        "demo_patient_override_enabled": demo_patient_override_enabled,
+        "demo_patient_email_override":   demo_patient_email_override,
+        "demo_patient_phone_override":   demo_patient_phone_override,
+    }
+
+    updated = []
+    for attr, value in FIELD_MAP.items():
+        if value is not None:
+            setattr(account, attr, value)
+            updated.append(attr)
+
+    if not updated:
+        raise ValueError("No valid fields provided")
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Update failed for {zoom_account_id}: {e}")
+        raise
+
+    logger.info(f"Updated account {zoom_account_id}: {updated}")
     return account
 
 

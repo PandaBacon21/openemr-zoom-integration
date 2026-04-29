@@ -53,6 +53,10 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG")
     LOG_FILE = os.environ.get("LOG_FILE", "./logs/zoomly.log")
 
+    # React Config Page
+    CONFIG_ADMIN_PASSWORD = os.environ.get("CONFIG_ADMIN_PASSWORD")
+    CONFIG_JWT_SECRET = os.environ.get("CONFIG_JWT_SECRET")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

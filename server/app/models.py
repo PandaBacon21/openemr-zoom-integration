@@ -8,14 +8,15 @@ from .extensions import db, get_encryption_key
 class ZoomAccount(db.Model):
     __tablename__ = "zoom_accounts"
 
-    id = db.Column(db.Integer, primary_key=True)
+    # Zoom Account ID is the primary key
+    account_id = db.Column(db.String(128), primary_key=True, nullable=False)
     
     # Tracks which encryption key version was used to encrypt this row's sensitive fields.
     # Used during key rotation to identify which rows need re-encryption.
     key_version = db.Column(db.Integer, default=1, nullable=False)
 
     # Zoom Account credentials
-    account_id = db.Column(db.String(128), unique=True, nullable=False)
+    nickname = db.Column(db.String(128), nullable=True)
     client_id = db.Column(db.String(128), nullable=False)
     client_secret = db.Column(EncryptedType(db.String(256), get_encryption_key, AesEngine, "pkcs5"), nullable=False)
     webhook_secret = db.Column(EncryptedType(db.String(256), get_encryption_key, AesEngine, "pkcs5"), nullable=True)
@@ -43,6 +44,7 @@ class ZoomAccount(db.Model):
     timezone = db.Column(db.String(64), nullable=False, default="America/New_York") 
 
     # Demo override — if set, all patient communications use these instead of patient record
+    demo_patient_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     demo_patient_email_override = db.Column(db.String(256), nullable=True)
     demo_patient_phone_override = db.Column(db.String(32), nullable=True)
 
@@ -53,15 +55,18 @@ class ZoomAccount(db.Model):
     # Relationships
     provider_mappings = db.relationship(
         "ProviderMapping", backref="zoom_account",
-        lazy=True, cascade="all, delete-orphan"
+        lazy=True, cascade="all, delete-orphan",
+        foreign_keys="ProviderMapping.zoom_account_id"
     )
     appointment_type_filters = db.relationship(
         "AppointmentTypeFilter", backref="zoom_account",
-        lazy=True, cascade="all, delete-orphan"
+        lazy=True, cascade="all, delete-orphan",
+        foreign_keys="AppointmentTypeFilter.zoom_account_id"
     )
     meeting_records = db.relationship(
         "MeetingRecord", backref="zoom_account",
-        lazy=True, cascade="all, delete-orphan"
+        lazy=True, cascade="all, delete-orphan",
+        foreign_keys="MeetingRecord.zoom_account_id"
     )
 
     if TYPE_CHECKING:
@@ -69,6 +74,7 @@ class ZoomAccount(db.Model):
             self,
             *,
             account_id: str | None = ...,
+            nickname: str | None = ...,
             client_id: str | None = ...,
             client_secret: str | None = ...,
             webhook_secret: str | None = ...,
@@ -80,6 +86,7 @@ class ZoomAccount(db.Model):
             kid: str | None = ...,
             key_version: int | None = ...,
             timezone: str | None = ...,
+            demo_patient_override_enabled: bool | None = ...,
             demo_patient_email_override: str | None = ...,
             demo_patient_phone_override: str | None = ...,
             is_active: bool | None = ...,
@@ -94,7 +101,7 @@ class ProviderMapping(db.Model):
  
     id = db.Column(db.Integer, primary_key=True)
     zoom_account_id = db.Column(
-        db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
+        db.String(128), db.ForeignKey("zoom_accounts.account_id"), nullable=False, index=True
     )
  
     # OpenEMR side
@@ -123,7 +130,7 @@ class ProviderMapping(db.Model):
         def __init__(
             self,
             *,
-            zoom_account_id: int | None = ...,
+            zoom_account_id: str | None = ...,
             openemr_fhir_id: str | None = ...,
             openemr_provider_npi: str | None = ...,
             openemr_provider_id: int | None = ...,
@@ -145,7 +152,7 @@ class AppointmentTypeFilter(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     zoom_account_id = db.Column(
-        db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
+        db.String(128), db.ForeignKey("zoom_accounts.account_id"), nullable=False, index=True
     )
 
     openemr_type_id = db.Column(db.String(128), nullable=False)
@@ -160,7 +167,7 @@ class AppointmentTypeFilter(db.Model):
         def __init__(
             self,
             *,
-            zoom_account_id: int | None = ...,
+            zoom_account_id: str | None = ...,
             openemr_type_id: str | None = ...,
             openemr_type_name: str | None = ...,
         ) -> None: ...
@@ -172,16 +179,15 @@ class AppointmentTypeFilter(db.Model):
 class MeetingRecord(db.Model):
     __tablename__ = "meeting_records"
  
-    id = db.Column(db.Integer, primary_key=True)
-    zoom_account_id = db.Column(
-        db.Integer, db.ForeignKey("zoom_accounts.id"), nullable=False
-    )
- 
     # Zoom side
-    zoom_meeting_id = db.Column(db.String(128), unique=True, nullable=False)
+    # Uses Zoom Meeting Number as the primary key
+    zoom_meeting_id = db.Column(db.String(128), primary_key=True, nullable=False)
+
+    zoom_account_id = db.Column(
+        db.String(128), db.ForeignKey("zoom_accounts.account_id"), nullable=False, index=True
+    )
     # start_url is for the host or alternative host — expires after 90 days for API users
     zoom_start_url = db.Column(db.String(1024), nullable=True)
-    # join_url is for the patient — does not expire
     zoom_join_url = db.Column(db.String(1024), nullable=True)
  
     # Alternative host — nullable until config UI is built
@@ -214,19 +220,21 @@ class MeetingRecord(db.Model):
     # Relationships
     patients = db.relationship(
         "MeetingPatient", backref="meeting_record",
-        lazy=True, cascade="all, delete-orphan"
+        lazy=True, cascade="all, delete-orphan",
+        foreign_keys="MeetingPatient.zoom_meeting_id"
     )
     clinical_note = db.relationship(
         "ClinicalNoteRecord", backref="meeting_record",
-        lazy=True, uselist=False, cascade="all, delete-orphan"
+        lazy=True, uselist=False, cascade="all, delete-orphan",
+        foreign_keys="ClinicalNoteRecord.zoom_meeting_id"
     )
 
     if TYPE_CHECKING:
         def __init__(
             self,
             *,
-            zoom_account_id: int | None = ...,
             zoom_meeting_id: str | None = ...,
+            zoom_account_id: str | None = ...,
             zoom_start_url: str | None = ...,
             zoom_join_url: str | None = ...,
             alternative_host_email: str | None = ...,
@@ -244,10 +252,11 @@ class MeetingPatient(db.Model):
     __tablename__ = "meeting_patients"
  
     id = db.Column(db.Integer, primary_key=True)
-    meeting_record_id = db.Column(
-        db.Integer, db.ForeignKey("meeting_records.id", ondelete="CASCADE"),
-        nullable=False
+    zoom_meeting_id = db.Column(
+        db.String(128), db.ForeignKey("meeting_records.zoom_meeting_id", ondelete="CASCADE"),
+        nullable=False, index=True
     )
+
     openemr_patient_id = db.Column(db.String(128), nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
@@ -258,20 +267,21 @@ class MeetingPatient(db.Model):
         def __init__(
             self,
             *,
-            meeting_record_id: int | None = ...,
+            zoom_meeting_id: str | None = ...,
             openemr_patient_id: str | None = ...,
         ) -> None: ...
  
     def __repr__(self):
-        return f"<MeetingPatient meeting={self.meeting_record_id} pid={self.openemr_patient_id}>"
+        return f"<MeetingPatient meeting={self.zoom_meeting_id} pid={self.openemr_patient_id}>"
 
 
 class ClinicalNoteRecord(db.Model):
     __tablename__ = "clinical_note_records"
 
     id = db.Column(db.Integer, primary_key=True)
-    meeting_record_id = db.Column(
-        db.Integer, db.ForeignKey("meeting_records.id"), nullable=False
+    zoom_meeting_id = db.Column(
+        db.String(128), db.ForeignKey("meeting_records.zoom_meeting_id"),
+        nullable=False, index=True
     )
 
     zoom_note_id = db.Column(db.String(128), unique=True, nullable=False)
@@ -294,7 +304,7 @@ class ClinicalNoteRecord(db.Model):
         def __init__(
             self,
             *,
-            meeting_record_id: int | None = ...,
+            zoom_meeting_id: str | None = ...,
             zoom_note_id: str | None = ...,
             zoom_note_title: str | None = ...,
             note_content: str | None = ...,

@@ -80,20 +80,20 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
 
     for mapping in mappings:
         account = ZoomAccount.query.filter_by(
-            id=mapping.zoom_account_id, is_active=True
+            account_id=mapping.zoom_account_id, is_active=True
         ).first()
 
         if not account:
             logger.warning(
                 f"appointment_processor | eid={eid} ProviderMapping id={mapping.id} "
-                f"references inactive or missing ZoomAccount id={mapping.zoom_account_id}, skipping"
+                f"references inactive or missing ZoomAccount account_id={mapping.zoom_account_id}, skipping"
             )
             continue
 
         # Fetch this account's appointment type filter list
         type_filters = (
             AppointmentTypeFilter.query
-            .filter_by(zoom_account_id=account.id)
+            .filter_by(zoom_account_id=account.account_id)
             .all()
         )
 

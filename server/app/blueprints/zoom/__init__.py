@@ -1,7 +1,15 @@
-from flask import Blueprint
+from flask import Blueprint, request
+from app.blueprints.auth.auth_helpers import verify_jwt_request
 
 
 zoom_bp = Blueprint("zoom", __name__, url_prefix="/zoom")
+
+
+@zoom_bp.before_request
+def protect():
+    if request.endpoint == "zoom.fetch_zoom_note" or request.endpoint == "zoom.complete_zoom_note":
+        return
+    return verify_jwt_request()
 
 
 @zoom_bp.route("/")

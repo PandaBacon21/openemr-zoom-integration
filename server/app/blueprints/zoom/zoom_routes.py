@@ -2,7 +2,6 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
 from flask import jsonify, request
-from app.auth.api_key import protect_with_api_key
 from app.models import ZoomAccount, MeetingRecord
 from app.extensions import db, get_openemr_db_engine
 from app.services.audit import write_audit_log
@@ -13,13 +12,6 @@ from app.blueprints.zoom.zoom_route_helper import verify_openemr_signature
 from app.blueprints.zoom import zoom_bp
 
 logger = logging.getLogger(__name__)
-
-
-@zoom_bp.before_request
-def protect():
-    if request.endpoint == "zoom.fetch_zoom_note" or request.endpoint == "zoom.complete_zoom_note":
-        return
-    return protect_with_api_key()
 
 
 @zoom_bp.route("/users", methods=["GET"])
@@ -124,7 +116,7 @@ def fetch_zoom_note(encounter_number: int):
  
     # --- 4. Look up the ZoomAccount for this meeting record ---
     account = ZoomAccount.query.filter_by(
-        id=record.zoom_account_id, is_active=True
+        account_id=record.zoom_account_id, is_active=True
     ).first()
  
     if not account:
@@ -245,7 +237,7 @@ def complete_zoom_note(encounter_number: int):
         write_audit_log(
             event_type="zoom.completion_skipped",
             success=True,
-            zoom_account_id=record.account_id,
+            zoom_account_id=record.zoom_account_id,
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
         )
@@ -253,7 +245,7 @@ def complete_zoom_note(encounter_number: int):
 
     # --- 5. Look up ZoomAccount ---
     account = ZoomAccount.query.filter_by(
-        id=record.zoom_account_id, is_active=True
+        account_id=record.zoom_account_id, is_active=True
     ).first()
 
     if not account:

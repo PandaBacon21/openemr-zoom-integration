@@ -1,7 +1,7 @@
 import logging
 from flask import request, jsonify
 from app.models import ZoomAccount
-from app.services.registration import register_zoom_account, deregister_zoom_account, verify_openemr_token_for_account
+from app.services.registration import register_zoom_account, update_zoom_account, deregister_zoom_account, verify_openemr_token_for_account
 from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
 from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
 
@@ -21,14 +21,13 @@ def register():
 
     Request body (JSON):
     {
+        "nickname":            "Demo Account 1"
         "zoom_account_id":     "abc123",
         "zoom_client_id":      "xyz...",
         "zoom_client_secret":  "secret...",
         "zoom_webhook_secret": "webhook_secret...",
         "contact_email":       "admin@example.com",
         "timezone":            "America/New_York",  // optional
-        "demo_patient_email_override": "demo-patient@example.com",  // optional
-        "demo_patient_phone_override": "+13035550199"  // optional
     }
 
     Responses:
@@ -57,18 +56,18 @@ def register():
 
     try:
         account = register_zoom_account(
+            nickname=data.get("nickname"),
             zoom_account_id=data["zoom_account_id"],
             zoom_client_id=data["zoom_client_id"],
             zoom_client_secret=data["zoom_client_secret"],
             zoom_webhook_secret=data["zoom_webhook_secret"],
             contact_email=data["contact_email"],
             timezone=data.get("timezone", "America/New_York"),
-            demo_patient_email_override=data.get("demo_patient_email_override"),
-            demo_patient_phone_override=data.get("demo_patient_phone_override")
         )
 
         return jsonify({
             "status": "registered",
+            "nickname": account.nickname,
             "zoom_account_id": account.account_id,
             "openemr_client_id": account.openemr_client_id,
             "kid": account.kid,
@@ -86,6 +85,41 @@ def register():
         logger.error(f"Registration failed for {data.get('zoom_account_id')}: {e}")
         return jsonify({"error": "Registration failed", "detail": str(e)}), 500
 
+
+@config_bp.route("/register/<zoom_account_id>", methods=["PATCH"])
+def update_registration(zoom_account_id: str):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    try:
+        account = update_zoom_account(
+            zoom_account_id=zoom_account_id,
+            nickname=data.get("nickname"),
+            zoom_client_secret=data.get("zoom_client_secret"),
+            zoom_webhook_secret=data.get("zoom_webhook_secret"),
+            timezone=data.get("timezone"),
+            demo_patient_override_enabled=data.get("demo_patient_override_enabled"),
+            demo_patient_email_override=data.get("demo_patient_email_override"),
+            demo_patient_phone_override=data.get("demo_patient_phone_override"),
+        )
+        return jsonify({
+            "status": "updated",
+            "zoom_account_id": zoom_account_id,
+            "nickname": account.nickname,
+            "timezone": account.timezone,
+            "demo_patient_override_enabled": account.demo_patient_override_enabled,
+            "demo_patient_email_override": account.demo_patient_email_override,
+            "demo_patient_phone_override": account.demo_patient_phone_override,
+            "updated_at": account.updated_at.isoformat(),
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Update failed for {zoom_account_id}: {e}")
+        return jsonify({"error": "Update failed", "detail": str(e)}), 500
+    
 
 @config_bp.route("/register/<zoom_account_id>", methods=["DELETE"])
 def deregister(zoom_account_id: str):
@@ -131,6 +165,7 @@ def list_registrations():
         "count": len(accounts),
         "registrations": [
             {
+                "nickname": a.nickname,
                 "zoom_account_id": a.account_id,
                 "openemr_client_id": a.openemr_client_id,
                 "kid": a.kid,
@@ -138,6 +173,7 @@ def list_registrations():
                 "has_zoom_token": bool(a.zoom_access_token),
                 "has_openemr_token": bool(a.openemr_access_token),
                 "timezone": a.timezone,
+                "demo_patient_override_enabled": a.demo_patient_override_enabled,
                 "demo_patient_email_override": a.demo_patient_email_override,
                 "demo_patient_phone_override": a.demo_patient_phone_override,
                 "created_at": a.created_at.isoformat(),
@@ -161,6 +197,7 @@ def verify_registration(zoom_account_id: str):
     success = verify_openemr_token_for_account(account)
 
     return jsonify({
+        "nickname": account.nickname,
         "zoom_account_id": zoom_account_id,
         "openemr_verified": success,
         "message": "OpenEMR token verified successfully" if success

@@ -6,7 +6,7 @@ from app.services.zoom import (create_zoom_meeting, get_zoom_meeting, update_zoo
 from app.services.openemr import (write_zoom_urls_to_appointment, filter_appointment_event)
 from app.services.audit import write_audit_log
 from app.extensions import db
-from app.models import MeetingRecord, MeetingPatient
+from app.models import MeetingRecord, MeetingPatient, ZoomAccount
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
         # Check for existing MeetingRecord
         existing_meeting_record = MeetingRecord.query.filter_by(
             openemr_appointment_id=str(eid),
-            zoom_account_id=account.id
+            zoom_account_id=account.account_id
         ).first()
 
         if existing_meeting_record:
@@ -152,7 +152,7 @@ def _handle_new_meeting(match, payload: dict) -> dict:
  
     try:
         meeting_record = MeetingRecord(
-            zoom_account_id=account.id,
+            zoom_account_id=account.account_id,
             zoom_meeting_id=meeting_data["meeting_id"],
             zoom_start_url=meeting_data["start_url"],
             zoom_join_url=meeting_data["join_url"],
@@ -167,7 +167,7 @@ def _handle_new_meeting(match, payload: dict) -> dict:
         pid = payload.get("pid")
         if pid:
             db.session.add(MeetingPatient(
-                meeting_record_id=meeting_record.id,
+                zoom_meeting_id=meeting_data["meeting_id"],
                 openemr_patient_id=str(pid),
             ))
  
@@ -175,8 +175,7 @@ def _handle_new_meeting(match, payload: dict) -> dict:
  
         current_app.logger.info(
             f"webhooks.openemr | eid={eid} account={account.account_id} "
-            f"MeetingRecord created id={meeting_record.id} "
-            f"zoom_meeting_id={meeting_data['meeting_id']}"
+            f"MeetingRecord created zoom_meeting_id={meeting_data['meeting_id']}"
         )
         write_audit_log(
             event_type="meeting.created",
@@ -214,7 +213,6 @@ def _handle_new_meeting(match, payload: dict) -> dict:
             "zoom_meeting_id": meeting_data["meeting_id"],
             "zoom_join_url": meeting_data["join_url"],
             "zoom_start_url": meeting_data["start_url"],
-            "meeting_record_id": meeting_record.id,
         }
  
     except Exception as e:
@@ -239,22 +237,14 @@ def _handle_existing_meeting(
     match,
     payload: dict
 ) -> dict:
-    """
-    Handle an appointment event when a MeetingRecord already exists.
- 
-    Checks if the Zoom meeting still exists:
-    - If deleted in Zoom → create a new meeting, update the record
-    - If exists → patch the meeting with updated fields, update the record
-    """
     account = match.zoom_account
     eid = payload.get("eid")
- 
+
     current_app.logger.info(
-        f"webhooks.openemr | eid={eid} existing MeetingRecord id={record.id} "
+        f"webhooks.openemr | eid={eid} existing MeetingRecord "
         f"zoom_meeting_id={record.zoom_meeting_id} — checking Zoom"
     )
- 
-    # Check if meeting still exists in Zoom
+
     try:
         zoom_meeting = get_zoom_meeting(account, record.zoom_meeting_id)
     except Exception as e:
@@ -263,9 +253,9 @@ def _handle_existing_meeting(
             f"{record.zoom_meeting_id}: {e}"
         )
         return {"error": str(e)}
- 
+
     if zoom_meeting is None:
-        # Meeting was deleted in Zoom — create a new one
+        # Meeting was deleted in Zoom — delete old record, create new one
         current_app.logger.info(
             f"webhooks.openemr | eid={eid} Zoom meeting {record.zoom_meeting_id} "
             "no longer exists — creating replacement"
@@ -277,18 +267,41 @@ def _handle_existing_meeting(
                 f"webhooks.openemr | eid={eid} replacement meeting creation failed: {e}"
             )
             return {"error": str(e)}
- 
+
         try:
-            record.zoom_meeting_id = meeting_data["meeting_id"]
-            record.zoom_start_url = meeting_data["start_url"]
-            record.zoom_join_url = meeting_data["join_url"]
-            record.openemr_appt_status = payload.get("appt_status")
-            record.status = "created"
+            old_meeting_id = record.zoom_meeting_id
+            pid = None
+            old_patient = MeetingPatient.query.filter_by(
+                zoom_meeting_id=old_meeting_id
+            ).first()
+            if old_patient:
+                pid = old_patient.openemr_patient_id
+
+            db.session.delete(record)
+
+            new_record = MeetingRecord(
+                zoom_account_id=account.account_id,
+                zoom_meeting_id=meeting_data["meeting_id"],
+                zoom_start_url=meeting_data["start_url"],
+                zoom_join_url=meeting_data["join_url"],
+                openemr_appointment_id=str(eid),
+                openemr_provider_id=match.provider_mapping.openemr_provider_id,
+                openemr_appt_status=payload.get("appt_status"),
+                status="created",
+            )
+            db.session.add(new_record)
+
+            if pid:
+                db.session.add(MeetingPatient(
+                    zoom_meeting_id=meeting_data["meeting_id"],
+                    openemr_patient_id=pid,
+                ))
+
             db.session.commit()
- 
+
             current_app.logger.info(
-                f"webhooks.openemr | eid={eid} MeetingRecord id={record.id} "
-                f"updated with new zoom_meeting_id={meeting_data['meeting_id']}"
+                f"webhooks.openemr | eid={eid} MeetingRecord recreated "
+                f"old={old_meeting_id} new={meeting_data['meeting_id']}"
             )
             write_audit_log(
                 event_type="meeting.recreated",
@@ -298,20 +311,12 @@ def _handle_existing_meeting(
                 zoom_meeting_id=meeting_data["meeting_id"],
             )
 
-            # Write new URLs back to OpenEMR appointment record
             if eid:
                 success = write_zoom_urls_to_appointment(
                     eid=eid,
                     start_url=meeting_data["start_url"],
                     join_url=meeting_data["join_url"],
                 )
-
-                current_app.logger.info(
-                    f"webhooks.openemr | eid={eid} account={account.account_id} "
-                    f"{'Meeting link written back to OpenEMR' if success else 'Meeting link failed to write back to OpenEMR'} "
-                    f"zoom_meeting_id={meeting_data['meeting_id']}"
-                )
-
                 write_audit_log(
                     event_type="openemr.url_writeback_success" if success else "openemr.url_writeback_failed",
                     success=success,
@@ -319,19 +324,18 @@ def _handle_existing_meeting(
                     openemr_appointment_id=eid,
                     zoom_meeting_id=meeting_data["meeting_id"],
                 )
- 
+
             return {
                 "account_id": account.account_id,
                 "zoom_meeting_id": meeting_data["meeting_id"],
                 "zoom_join_url": meeting_data["join_url"],
                 "zoom_start_url": meeting_data["start_url"],
-                "meeting_record_id": record.id,
                 "action": "recreated",
             }
         except Exception as e:
             db.session.rollback()
             return {"error": str(e)}
- 
+
     else:
         # Meeting exists — patch it with updated fields
         current_app.logger.info(
@@ -346,13 +350,14 @@ def _handle_existing_meeting(
                 f"{record.zoom_meeting_id}: {e}"
             )
             return {"error": str(e)}
- 
+
         try:
             record.openemr_appt_status = payload.get("appt_status")
             db.session.commit()
- 
+
             current_app.logger.info(
-                f"webhooks.openemr | eid={eid} MeetingRecord id={record.id} updated"
+                f"webhooks.openemr | eid={eid} MeetingRecord "
+                f"zoom_meeting_id={record.zoom_meeting_id} updated"
             )
             write_audit_log(
                 event_type="meeting.updated",
@@ -361,19 +366,17 @@ def _handle_existing_meeting(
                 openemr_appointment_id=eid,
                 zoom_meeting_id=record.zoom_meeting_id,
             )
- 
+
             return {
                 "account_id": account.account_id,
                 "zoom_meeting_id": record.zoom_meeting_id,
                 "zoom_join_url": record.zoom_join_url,
                 "zoom_start_url": record.zoom_start_url,
-                "meeting_record_id": record.id,
                 "action": "updated",
             }
         except Exception as e:
             db.session.rollback()
             return {"error": str(e)}
-
 
 # ---------------------------------------------------------------------------
 # Delete handler
@@ -404,7 +407,13 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
     errors = []
  
     for record in records:
-        account = record.zoom_account
+        account = ZoomAccount.query.filter_by(
+            account_id=record.zoom_account_id, is_active=True
+        ).first()
+        if not account:
+            errors.append({"meeting_id": record.zoom_meeting_id, "error": "no active account found"})
+            continue
+
         meeting_id = record.zoom_meeting_id
  
         # Delete from Zoom
@@ -426,8 +435,7 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
             db.session.delete(record)
             db.session.commit()
             current_app.logger.info(
-                f"webhooks.openemr | eid={eid} MeetingRecord id={record.id} "
-                f"and Zoom meeting {meeting_id} deleted"
+                f"webhooks.openemr | eid={eid} MeetingRecord zoom_meeting_id={meeting_id} deleted"
             )
             write_audit_log(
                 event_type="meeting.deleted",
@@ -441,7 +449,7 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
             db.session.rollback()
             current_app.logger.error(
                 f"webhooks.openemr | eid={eid} failed to delete MeetingRecord "
-                f"id={record.id}: {e}"
+                f"zoom_meeting_id={meeting_id}: {e}"
             )
             write_audit_log(
                 event_type="meeting.delete_failed",
