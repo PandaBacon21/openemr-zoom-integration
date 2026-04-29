@@ -56,7 +56,7 @@ def register():
         }), 400
 
     try:
-        account = register_zoom_account(
+        account, config = register_zoom_account(
             nickname=data.get("nickname"),
             zoom_account_id=data["zoom_account_id"],
             zoom_client_id=data["zoom_client_id"],
@@ -70,8 +70,10 @@ def register():
             "status": "registered",
             "nickname": account.nickname,
             "zoom_account_id": account.account_id,
+            "zoom_client_id": account.client_id,
             "openemr_client_id": account.openemr_client_id,
             "kid": account.kid,
+            "timezone": config.timezone,
             "created_at": account.created_at.isoformat(),
         }), 201
 

@@ -20,11 +20,16 @@ import AccountDashboardTab from "./tabs/AccountDashboardTab";
 interface Props {
   account: Registration;
   onAccountUpdated: (account: Registration) => void;
+  onDeregistered: (accountId: string) => void;
 }
 
 type VerifyStatus = "loading" | "verified" | "unverified" | "error";
 
-const AccountDetail: React.FC<Props> = ({ account, onAccountUpdated }) => {
+const AccountDetail: React.FC<Props> = ({
+  account,
+  onAccountUpdated,
+  onDeregistered,
+}) => {
   const [tab, setTab] = useState(0);
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>("loading");
   const [verifyMessage, setVerifyMessage] = useState<string>("");
@@ -168,6 +173,7 @@ const AccountDetail: React.FC<Props> = ({ account, onAccountUpdated }) => {
           account={account}
           isVerified={isVerified}
           onAccountUpdated={onAccountUpdated}
+          onDeregistered={() => onDeregistered(account.zoom_account_id)}
         />
       )}
       {tab === 1 && isVerified && <AccountProvidersTab account={account} />}

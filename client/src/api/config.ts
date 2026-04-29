@@ -3,15 +3,18 @@ import apiClient from "./client";
 export interface Registration {
   nickname: string | null;
   zoom_account_id: string;
+  zoom_client_id: string;
   openemr_client_id: string;
   kid: string;
   is_active: boolean;
   has_zoom_token: boolean;
   has_openemr_token: boolean;
   timezone: string;
-  demo_patient_override_enabled: boolean;
+  demo_patient_email_override_enabled: boolean;
   demo_patient_email_override: string | null;
+  demo_patient_phone_override_enabled: boolean;
   demo_patient_phone_override: string | null;
+  allow_shared_zoom_user: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -86,9 +89,10 @@ export const updateAccount = (
     zoom_client_secret: string;
     zoom_webhook_secret: string;
     timezone: string;
-    demo_patient_override_enabled: boolean;
-    demo_patient_email_override: string;
-    demo_patient_phone_override: string;
+    demo_patient_email_override_enabled: boolean;
+    demo_patient_email_override: string | null;
+    demo_patient_phone_override_enabled: boolean;
+    demo_patient_phone_override: string | null;
   }>,
 ) => apiClient.patch(`/config/register/${zoom_account_id}`, data);
 
@@ -145,9 +149,9 @@ export const deleteAppointmentFilter = (
   );
 
 // OpenEMR lookups
-export const getOpenEMRAppointmentTypes = () =>
+export const getOpenEMRAppointmentTypes = (zoom_account_id: string) =>
   apiClient.get<{ appointment_types: OpenEMRAppointmentType[] }>(
-    "/openemr/appointment-types",
+    `/openemr/appointment-types?zoom_account_id=${zoom_account_id}`,
   );
 
 export const getOpenEMRProviders = (zoom_account_id: string) =>

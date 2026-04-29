@@ -99,7 +99,7 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
           <Divider />
 
           {/* Read-only */}
-          <Typography
+          {/* <Typography
             variant="caption"
             color="text.secondary"
             sx={{
@@ -110,7 +110,7 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
             }}
           >
             Read-only
-          </Typography>
+          </Typography> */}
 
           <TextField
             label="Zoom Account ID"
@@ -119,7 +119,13 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
             slotProps={{ input: { readOnly: true } }}
             sx={{ "& .MuiInputBase-input": { color: "text.secondary" } }}
           />
-
+          <TextField
+            label="Zoom Client ID"
+            value={account.zoom_client_id}
+            fullWidth
+            slotProps={{ input: { readOnly: true } }}
+            sx={{ "& .MuiInputBase-input": { color: "text.secondary" } }}
+          />
           <TextField
             label="OpenEMR Client ID"
             value={account.openemr_client_id}

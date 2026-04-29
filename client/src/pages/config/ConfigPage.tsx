@@ -51,6 +51,14 @@ const ConfigPage: React.FC = () => {
     setSelectedAccountId(account.zoom_account_id);
   };
 
+  const handleDeregistered = (accountId: string) => {
+    const remaining = accounts.filter((a) => a.zoom_account_id !== accountId);
+    setAccounts(remaining);
+    setSelectedAccountId(
+      remaining.length > 0 ? remaining[0].zoom_account_id : "new",
+    );
+  };
+
   const selectedAccount = accounts.find(
     (a) => a.zoom_account_id === selectedAccountId,
   );
@@ -171,6 +179,7 @@ const ConfigPage: React.FC = () => {
                 ),
               );
             }}
+            onDeregistered={handleDeregistered}
           />
         ) : null}
       </Box>

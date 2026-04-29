@@ -97,7 +97,7 @@ def register_zoom_account(
     zoom_webhook_secret: str,
     contact_email: str, 
     timezone: str = "America/New_York",
-) -> ZoomAccount:
+) -> tuple[ZoomAccount, AccountConfig]:
     """
     Full registration flow for a Zoom account.
 
@@ -215,7 +215,7 @@ def register_zoom_account(
         f"Registration complete for account {zoom_account_id}, "
         f"OpenEMR client_id: {openemr_response['client_id']}"
     )
-    return account
+    return account, config
 
 
 def update_zoom_account_credentials(
