@@ -40,19 +40,16 @@ class ZoomAccount(db.Model):
     private_key_path = db.Column(db.String(512), nullable=True)
     kid = db.Column(db.String(256), nullable=True)
 
-    # For appointment time converstion
-    timezone = db.Column(db.String(64), nullable=False, default="America/New_York") 
-
-    # Demo override — if set, all patient communications use these instead of patient record
-    demo_patient_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
-    demo_patient_email_override = db.Column(db.String(256), nullable=True)
-    demo_patient_phone_override = db.Column(db.String(32), nullable=True)
-
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
+    config = db.relationship(
+        "AccountConfig", backref="zoom_account",
+        lazy=True, uselist=False, cascade="all, delete-orphan",
+        foreign_keys="AccountConfig.account_id"
+    )
     provider_mappings = db.relationship(
         "ProviderMapping", backref="zoom_account",
         lazy=True, cascade="all, delete-orphan",
@@ -85,15 +82,55 @@ class ZoomAccount(db.Model):
             private_key_path: str | None = ...,
             kid: str | None = ...,
             key_version: int | None = ...,
-            timezone: str | None = ...,
-            demo_patient_override_enabled: bool | None = ...,
-            demo_patient_email_override: str | None = ...,
-            demo_patient_phone_override: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
 
     def __repr__(self):
         return f"<ZoomAccount {self.account_id}>"
+    
+    
+class AccountConfig(db.Model):
+    __tablename__ = "account_configs"
+
+    account_id = db.Column(
+        db.String(128),
+        db.ForeignKey("zoom_accounts.account_id"),
+        primary_key=True,
+        nullable=False
+    )
+
+    # Scheduling
+    timezone = db.Column(db.String(64), nullable=False, default="America/New_York", server_default="America/New_York")
+
+    # Provider mapping behavior
+    allow_shared_zoom_user = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+
+    # Demo patient contact overrides
+    # Email override
+    demo_patient_email_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    demo_patient_email_override = db.Column(db.String(256), nullable=True)
+    # Phone override
+    demo_patient_phone_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    demo_patient_phone_override = db.Column(db.String(32), nullable=True)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            account_id: str | None = ...,
+            timezone: str | None = ...,
+            allow_shared_zoom_user: bool | None = ...,
+            demo_patient_email_override_enabled: bool | None = ...,
+            demo_patient_email_override: str | None = ...,
+            demo_patient_phone_override_enabled: bool | None = ...,
+            demo_patient_phone_override: str | None = ...,
+        ) -> None: ...
+
+    def __repr__(self):
+        return f"<AccountConfig {self.account_id}>"
 
 
 class ProviderMapping(db.Model):

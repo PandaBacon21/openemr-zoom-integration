@@ -178,7 +178,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         "start_time": start_time_str,
         "duration": duration_minutes,
         # Account timezone — set during registration, defaults to America/New_York if not configured at app registration.
-        "timezone": account.timezone,
+        "timezone": account.config.timezone,
         "settings": {
             "host_video": False,
             "participant_video": False,
@@ -203,7 +203,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
     logger.info(
         f"zoom.create_meeting | Creating meeting for eid={payload.get('eid')} "
         f"provider={mapping.zoom_user_id} start={start_time_str} "
-        f"tz={account.timezone} duration={duration_minutes}min"
+        f"tz={account.config.timezone} duration={duration_minutes}min"
     )
 
     # --- 7. Call Zoom API ---
@@ -367,13 +367,13 @@ def update_zoom_meeting(
         "topic": topic,
         "start_time": start_time_str,
         "duration": duration_minutes,
-        "timezone": zoom_account.timezone,
+        "timezone": zoom_account.config.timezone,
         "agenda": payload.get("comments") or "",
     }
 
     logger.info(
         f"zoom.update_meeting | Updating meeting {meeting_id} "
-        f"start={start_time_str} tz={zoom_account.timezone} duration={duration_minutes}min"
+        f"start={start_time_str} tz={zoom_account.config.timezone} duration={duration_minutes}min"
     )
 
     make_zoom_api_request(
