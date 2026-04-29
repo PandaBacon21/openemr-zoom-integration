@@ -51,16 +51,19 @@ export interface OpenEMRAppointmentType {
 }
 
 export interface OpenEMRProvider {
-  id: string;
   fhir_id: string;
   npi: string;
   name: string;
-  fname: string;
-  lname: string;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  user_id: number;
+  active: boolean;
+  email: string | null;
 }
 
 export interface ZoomUser {
-  id: string;
+  zoom_user_id: string;
   email: string;
   display_name: string;
   type: number;

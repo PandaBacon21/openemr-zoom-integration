@@ -11,8 +11,8 @@ import {
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
-import type { Registration } from "../../api/config";
-import { verifyAccount } from "../../api/config";
+import type { Registration, ProviderMapping } from "../../api/config";
+import { verifyAccount, getProviderMappings } from "../../api/config";
 import AccountConfigTab from "./tabs/AccountConfigTab";
 import AccountProvidersTab from "./tabs/AccountProvidersTab";
 import AccountDashboardTab from "./tabs/AccountDashboardTab";
@@ -33,6 +33,9 @@ const AccountDetail: React.FC<Props> = ({
   const [tab, setTab] = useState(0);
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>("loading");
   const [verifyMessage, setVerifyMessage] = useState<string>("");
+  const [mappings, setMappings] = useState<ProviderMapping[]>([]);
+  const [loadingMappings, setLoadingMappings] = useState(false);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCheckedAccountId = useRef<string | null>(null);
 
@@ -66,7 +69,6 @@ const AccountDetail: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    // Only fire if we're switching to a different account
     if (lastCheckedAccountId.current === account.zoom_account_id) return;
     lastCheckedAccountId.current = account.zoom_account_id;
 
@@ -74,10 +76,17 @@ const AccountDetail: React.FC<Props> = ({
     setVerifyMessage("");
     stopPolling();
     setTab(0);
+    setMappings([]);
+    setLoadingMappings(true);
 
     runVerify(account.zoom_account_id).then((verified) => {
       if (!verified) startPolling(account.zoom_account_id);
     });
+
+    getProviderMappings(account.zoom_account_id)
+      .then((res) => setMappings(res.data.providers))
+      .catch(() => console.error("Failed to load mappings"))
+      .finally(() => setLoadingMappings(false));
 
     return () => stopPolling();
   }, [account.zoom_account_id]);
@@ -162,7 +171,7 @@ const AccountDetail: React.FC<Props> = ({
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab label="Config" />
-          <Tab label="Providers" disabled={!isVerified} />
+          <Tab label="Providers" disabled={!isVerified || loadingMappings} />
           <Tab label="Dashboard" disabled={!isVerified} />
         </Tabs>
       </Box>
@@ -176,7 +185,13 @@ const AccountDetail: React.FC<Props> = ({
           onDeregistered={() => onDeregistered(account.zoom_account_id)}
         />
       )}
-      {tab === 1 && isVerified && <AccountProvidersTab account={account} />}
+      {tab === 1 && isVerified && (
+        <AccountProvidersTab
+          account={account}
+          mappings={mappings}
+          onMappingsChanged={setMappings}
+        />
+      )}
       {tab === 2 && isVerified && <AccountDashboardTab account={account} />}
     </Box>
   );
