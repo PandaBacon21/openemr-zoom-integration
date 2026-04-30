@@ -1,10 +1,14 @@
 import logging
 from flask import request, jsonify
+from werkzeug.security import generate_password_hash
+
 from app.models import ZoomAccount
-from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config, 
+from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config,
                                        deregister_zoom_account, verify_openemr_token_for_account)
 from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
+from app.services.ehr_context import set_ehr_context_credentials
 from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
+
 
 from app.blueprints.config import config_bp
 
@@ -27,6 +31,8 @@ def register():
         "zoom_client_id":      "xyz...",
         "zoom_client_secret":  "secret...",
         "zoom_webhook_secret": "webhook_secret...",
+        "ehr_context_username": "PandaBacon", // optional
+        "ehr_context_password": "1x2y3z...", // optional
         "contact_email":       "admin@example.com",
         "timezone":            "America/New_York",  // optional
     }
@@ -62,6 +68,8 @@ def register():
             zoom_client_id=data["zoom_client_id"],
             zoom_client_secret=data["zoom_client_secret"],
             zoom_webhook_secret=data["zoom_webhook_secret"],
+            ehr_context_username=data.get("ehr_context_username"),
+            ehr_context_password=data.get("ehr_context_password"),
             contact_email=data["contact_email"],
             timezone=data.get("timezone", "America/New_York"),
         )
@@ -72,6 +80,8 @@ def register():
             "zoom_account_id": account.account_id,
             "zoom_client_id": account.client_id,
             "openemr_client_id": account.openemr_client_id,
+            "tenet_id": account.tenant_id,
+            "ehr_context_username": account.ehr_context_username,
             "kid": account.kid,
             "timezone": config.timezone,
             "created_at": account.created_at.isoformat(),
@@ -92,7 +102,7 @@ def update_registration(zoom_account_id: str):
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
-    CREDENTIAL_FIELDS = {"nickname", "zoom_client_secret", "zoom_webhook_secret"}
+    CREDENTIAL_FIELDS = {"nickname", "zoom_client_secret", "zoom_webhook_secret", "ehr_context_username", "ehr_context_password"}
     CONFIG_FIELDS = {"timezone", "allow_shared_zoom_user", "demo_patient_email_override_enabled",
                      "demo_patient_phone_override_enabled", "demo_patient_email_override", "demo_patient_phone_override"}
 
@@ -109,6 +119,8 @@ def update_registration(zoom_account_id: str):
                 nickname=data.get("nickname"),
                 zoom_client_secret=data.get("zoom_client_secret"),
                 zoom_webhook_secret=data.get("zoom_webhook_secret"),
+                ehr_context_username=data.get("ehr_context_username"),
+                ehr_context_password=data.get("ehr_context_password"),
             )
         if has_config_fields:
             update_account_config(
@@ -134,6 +146,7 @@ def update_registration(zoom_account_id: str):
             "zoom_account_id": zoom_account_id,
             "nickname": account.nickname,
             "timezone": config.timezone,
+            "ehr_context_username": account.ehr_context_username,
             "allow_shared_zoom_user": config.allow_shared_zoom_user,
             "demo_patient_email_override_enabled": config.demo_patient_email_override_enabled,
             "demo_patient_email_override": config.demo_patient_email_override,
@@ -147,7 +160,7 @@ def update_registration(zoom_account_id: str):
     except Exception as e:
         logger.error(f"Update failed for {zoom_account_id}: {e}")
         return jsonify({"error": "Update failed", "detail": str(e)}), 500
-    
+
 
 @config_bp.route("/register/<zoom_account_id>", methods=["DELETE"])
 def deregister(zoom_account_id: str):
@@ -195,6 +208,7 @@ def list_registrations():
                 "nickname": a.nickname,
                 "zoom_account_id": a.account_id,
                 "openemr_client_id": a.openemr_client_id,
+                "ehr_context_username": a.ehr_context_username,
                 "kid": a.kid,
                 "is_active": a.is_active,
                 "has_zoom_token": bool(a.zoom_access_token),
@@ -410,3 +424,41 @@ def delete_appointment_filter(type_id: str):
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@config_bp.route("/ehr-credentials", methods=["POST"])
+def set_ehr_context_credentials_route():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    required = ["zoom_account_id", "ehr_context_username", "ehr_context_password"]
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({"error": "Missing required fields", "missing": missing}), 400
+    account_id = data["zoom_account_id"]
+    account = ZoomAccount.query.filter_by(
+        account_id=data[account_id], is_active=True
+            ).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {account_id}"}), 404
+    try:
+        
+        account = set_ehr_context_credentials(
+            account=account,
+            ehr_context_username=data["ehr_context_username"],
+            ehr_context_password=data["ehr_context_password"],
+        )
+        return jsonify({
+            "status": "updated",
+            "zoom_account_id": account.account_id,
+            "ehr_context_username": account.ehr_context_username,
+            "tenant_id": account.tenant_id,
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+    except Exception as e:
+        logger.error(f"set_ehr_credentials | Failed for {data.get('zoom_account_id')}: {e}")
+        return jsonify({"error": "Failed to update credentials", "detail": str(e)}), 500

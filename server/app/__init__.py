@@ -3,8 +3,7 @@ import os
 from logging.handlers import RotatingFileHandler
 from flask import Flask, send_from_directory
 from config import config_by_name
-from .extensions import scheduler
-from .extensions import db
+from .extensions import scheduler, db
 from app.services.keys import build_jwks_for_accounts
 from app.models import ZoomAccount
 
@@ -69,6 +68,7 @@ def _register_blueprints(app: Flask) -> None:
     from .blueprints.zoom import zoom_bp
     from .blueprints.config import config_bp
     from .blueprints.audit import audit_bp
+    from .blueprints.ehr_context import ehr_context_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp)
@@ -76,6 +76,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(zoom_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(audit_bp)
+    app.register_blueprint(ehr_context_bp)
 
 def _register_app_routes(app: Flask) -> None:
 

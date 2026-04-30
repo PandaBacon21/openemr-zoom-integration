@@ -21,6 +21,12 @@ class ZoomAccount(db.Model):
     client_secret = db.Column(EncryptedType(db.String(256), get_encryption_key, AesEngine, "pkcs5"), nullable=False)
     webhook_secret = db.Column(EncryptedType(db.String(256), get_encryption_key, AesEngine, "pkcs5"), nullable=True)
 
+    # Zoom NovelVox ehr_context integration path
+    tenant_id = db.Column(db.String(10), nullable=True, unique=True, index=True)
+
+    ehr_context_username = db.Column(db.String(128), nullable=True)
+    ehr_context_password_hash = db.Column(db.String(256), nullable=True)
+
     # Zoom token cache
     zoom_access_token = db.Column(EncryptedType(db.Text, get_encryption_key, AesEngine, "pkcs5"), nullable=True)
     zoom_token_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -75,6 +81,9 @@ class ZoomAccount(db.Model):
             client_id: str | None = ...,
             client_secret: str | None = ...,
             webhook_secret: str | None = ...,
+            tenant_id: str | None = ...,
+            ehr_context_username: str | None = ...,
+            ehr_context_password_hash: str | None = ...,
             openemr_client_id: str | None = ...,
             openemr_client_secret: str | None = ...,
             openemr_registration_access_token: str | None = ...,

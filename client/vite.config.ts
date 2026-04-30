@@ -12,6 +12,7 @@ export default defineConfig({
       "/openemr": "http://localhost:5000",
       "/webhooks": "http://localhost:5000",
       "/audit": "http://localhost:5000",
+      "/rest": "http://localhost:5000",
     },
   },
   build: {

@@ -398,7 +398,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                 <TableBody>
                   {mappings.map((mapping) => (
                     <TableRow
-                      key={mapping.openemr_provider_id}
+                      key={mapping.id}
                       sx={{
                         bgcolor:
                           editingMapping?.openemr_provider_id ===
