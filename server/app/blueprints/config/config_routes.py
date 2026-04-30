@@ -1,7 +1,8 @@
 import logging
 from flask import request, jsonify
 from app.models import ZoomAccount
-from app.services.registration import register_zoom_account, update_zoom_account, deregister_zoom_account, verify_openemr_token_for_account
+from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config, 
+                                       deregister_zoom_account, verify_openemr_token_for_account)
 from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
 from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
 
@@ -55,7 +56,7 @@ def register():
         }), 400
 
     try:
-        account = register_zoom_account(
+        account, config = register_zoom_account(
             nickname=data.get("nickname"),
             zoom_account_id=data["zoom_account_id"],
             zoom_client_id=data["zoom_client_id"],
@@ -69,11 +70,10 @@ def register():
             "status": "registered",
             "nickname": account.nickname,
             "zoom_account_id": account.account_id,
+            "zoom_client_id": account.client_id,
             "openemr_client_id": account.openemr_client_id,
             "kid": account.kid,
-            "timezone": account.timezone, 
-            "demo_patient_email_override": account.demo_patient_email_override,
-            "demo_patient_phone_override": account.demo_patient_phone_override,
+            "timezone": config.timezone,
             "created_at": account.created_at.isoformat(),
         }), 201
 
@@ -92,25 +92,53 @@ def update_registration(zoom_account_id: str):
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
+    CREDENTIAL_FIELDS = {"nickname", "zoom_client_secret", "zoom_webhook_secret"}
+    CONFIG_FIELDS = {"timezone", "allow_shared_zoom_user", "demo_patient_email_override_enabled",
+                     "demo_patient_phone_override_enabled", "demo_patient_email_override", "demo_patient_phone_override"}
+
+    has_credential_fields = any(k in data for k in CREDENTIAL_FIELDS)
+    has_config_fields = any(k in data for k in CONFIG_FIELDS)
+
+    if not has_credential_fields and not has_config_fields:
+        return jsonify({"error": "No valid fields provided"}), 400
+
     try:
-        account = update_zoom_account(
-            zoom_account_id=zoom_account_id,
-            nickname=data.get("nickname"),
-            zoom_client_secret=data.get("zoom_client_secret"),
-            zoom_webhook_secret=data.get("zoom_webhook_secret"),
-            timezone=data.get("timezone"),
-            demo_patient_override_enabled=data.get("demo_patient_override_enabled"),
-            demo_patient_email_override=data.get("demo_patient_email_override"),
-            demo_patient_phone_override=data.get("demo_patient_phone_override"),
-        )
+        if has_credential_fields:
+            update_zoom_account_credentials(
+                zoom_account_id=zoom_account_id,
+                nickname=data.get("nickname"),
+                zoom_client_secret=data.get("zoom_client_secret"),
+                zoom_webhook_secret=data.get("zoom_webhook_secret"),
+            )
+        if has_config_fields:
+            update_account_config(
+                zoom_account_id=zoom_account_id,
+                timezone=data.get("timezone"),
+                allow_shared_zoom_user=data.get("allow_shared_zoom_user"),
+                demo_patient_email_override_enabled=data.get("demo_patient_email_override_enabled"),
+                demo_patient_email_override=data.get("demo_patient_email_override"),
+                demo_patient_phone_override_enabled=data.get("demo_patient_phone_override_enabled"),
+                demo_patient_phone_override=data.get("demo_patient_phone_override"),
+            )
+
+        account = ZoomAccount.query.filter_by(
+            account_id=zoom_account_id, is_active=True
+        ).first()
+        if not account:
+            raise ValueError(f"No active registration found for account {zoom_account_id}")
+    
+        config = account.config
+
         return jsonify({
             "status": "updated",
             "zoom_account_id": zoom_account_id,
             "nickname": account.nickname,
-            "timezone": account.timezone,
-            "demo_patient_override_enabled": account.demo_patient_override_enabled,
-            "demo_patient_email_override": account.demo_patient_email_override,
-            "demo_patient_phone_override": account.demo_patient_phone_override,
+            "timezone": config.timezone,
+            "allow_shared_zoom_user": config.allow_shared_zoom_user,
+            "demo_patient_email_override_enabled": config.demo_patient_email_override_enabled,
+            "demo_patient_email_override": config.demo_patient_email_override,
+            "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
+            "demo_patient_phone_override": config.demo_patient_phone_override,
             "updated_at": account.updated_at.isoformat(),
         }), 200
 
@@ -160,7 +188,6 @@ def list_registrations():
         200 — list of registrations (may be empty)
     """
     accounts = ZoomAccount.query.order_by(ZoomAccount.created_at.desc()).all()
-
     return jsonify({
         "count": len(accounts),
         "registrations": [
@@ -172,10 +199,12 @@ def list_registrations():
                 "is_active": a.is_active,
                 "has_zoom_token": bool(a.zoom_access_token),
                 "has_openemr_token": bool(a.openemr_access_token),
-                "timezone": a.timezone,
-                "demo_patient_override_enabled": a.demo_patient_override_enabled,
-                "demo_patient_email_override": a.demo_patient_email_override,
-                "demo_patient_phone_override": a.demo_patient_phone_override,
+                "timezone": a.config.timezone if a.config else "America/New_York",
+                "demo_patient_email_override_enabled": a.config.demo_patient_email_override_enabled if a.config else False,
+                "demo_patient_email_override": a.config.demo_patient_email_override if a.config else None,
+                "demo_patient_phone_override_enabled": a.config.demo_patient_phone_override_enabled if a.config else False,
+                "demo_patient_phone_override": a.config.demo_patient_phone_override if a.config else None,
+                "allow_shared_zoom_user": a.config.allow_shared_zoom_user if a.config else False,
                 "created_at": a.created_at.isoformat(),
                 "updated_at": a.updated_at.isoformat(),
             }
@@ -194,14 +223,31 @@ def verify_registration(zoom_account_id: str):
     if not account:
         return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
 
-    success = verify_openemr_token_for_account(account)
+    openemr_success = verify_openemr_token_for_account(account)
+    zoom_success = account.zoom_access_token
+
+    messages = [
+        "OpenEMR and Zoom token verified successfully", 
+        "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again",
+        f"Zoom credential validation failed for account {zoom_account_id}. "
+            "Verify account_id, client_id, and client_secret are correct and "
+            "the app is activated in the Zoom Marketplace.",
+    ]
+
+    message = ""
+    if openemr_success and zoom_success: 
+        message = messages[0]
+    elif not openemr_success: 
+        message = messages[1]
+    elif not zoom_success: 
+        message = messages[2]
 
     return jsonify({
         "nickname": account.nickname,
         "zoom_account_id": zoom_account_id,
-        "openemr_verified": success,
-        "message": "OpenEMR token verified successfully" if success
-                   else "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again"
+        "openemr_verified": openemr_success,
+        "zoom_verified": zoom_success,
+        "message": message
     }), 200
 
 

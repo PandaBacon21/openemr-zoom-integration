@@ -37,6 +37,16 @@ def get_providers():
 
 @openemr_bp.route("/appointment-types", methods=["GET"])
 def get_appointment_types():
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    account = ZoomAccount.query.filter_by(
+        account_id=zoom_account_id, is_active=True
+    ).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+    
     try:
         types = get_appointment_types_list()
         return jsonify({

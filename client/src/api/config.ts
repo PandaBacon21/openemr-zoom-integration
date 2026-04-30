@@ -1,17 +1,21 @@
 import apiClient from "./client";
 
+// Account Registration
 export interface Registration {
   nickname: string | null;
   zoom_account_id: string;
+  zoom_client_id: string;
   openemr_client_id: string;
   kid: string;
   is_active: boolean;
   has_zoom_token: boolean;
   has_openemr_token: boolean;
   timezone: string;
-  demo_patient_override_enabled: boolean;
+  demo_patient_email_override_enabled: boolean;
   demo_patient_email_override: string | null;
+  demo_patient_phone_override_enabled: boolean;
   demo_patient_phone_override: string | null;
+  allow_shared_zoom_user: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +27,7 @@ export interface VerifyResult {
   message: string;
 }
 
+// User Mapping
 export interface ProviderMapping {
   openemr_fhir_id: string;
   openemr_provider_npi: string;
@@ -35,6 +40,26 @@ export interface ProviderMapping {
   created_at: string;
 }
 
+export interface OpenEMRProvider {
+  fhir_id: string;
+  npi: string;
+  name: string;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  user_id: number;
+  active: boolean;
+  email: string | null;
+}
+
+export interface ZoomUser {
+  zoom_user_id: string;
+  email: string;
+  display_name: string;
+  type: number;
+}
+
+// Appointment Type Filter
 export interface AppointmentType {
   zoom_account_id: number;
   openemr_type_id: string;
@@ -47,20 +72,43 @@ export interface OpenEMRAppointmentType {
   name: string;
 }
 
-export interface OpenEMRProvider {
-  id: string;
-  fhir_id: string;
-  npi: string;
-  name: string;
-  fname: string;
-  lname: string;
+// Audit Logs
+export interface AuditLogEntry {
+  id: number;
+  event_type: string;
+  zoom_account_id: string | null;
+  openemr_appointment_id: string | null;
+  openemr_encounter_number: string | null;
+  openemr_provider_id: string | null;
+  openemr_patient_id: string | null;
+  zoom_meeting_id: string | null;
+  zoom_note_id: string | null;
+  success: boolean | null;
+  error_message: string | null;
+  detail: string | null;
+  occurred_at: string;
 }
 
-export interface ZoomUser {
-  id: string;
-  email: string;
-  display_name: string;
-  type: number;
+export interface AuditLogResponse {
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  logs: AuditLogEntry[];
+}
+
+export interface AuditLogFilters {
+  zoom_account_id?: string;
+  event_type?: string;
+  openemr_appointment_id?: string;
+  openemr_encounter_number?: string;
+  zoom_meeting_id?: string;
+  zoom_note_id?: string;
+  success?: boolean;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+  per_page?: number;
 }
 
 // Registrations
@@ -86,9 +134,10 @@ export const updateAccount = (
     zoom_client_secret: string;
     zoom_webhook_secret: string;
     timezone: string;
-    demo_patient_override_enabled: boolean;
-    demo_patient_email_override: string;
-    demo_patient_phone_override: string;
+    demo_patient_email_override_enabled: boolean;
+    demo_patient_email_override: string | null;
+    demo_patient_phone_override_enabled: boolean;
+    demo_patient_phone_override: string | null;
   }>,
 ) => apiClient.patch(`/config/register/${zoom_account_id}`, data);
 
@@ -145,9 +194,9 @@ export const deleteAppointmentFilter = (
   );
 
 // OpenEMR lookups
-export const getOpenEMRAppointmentTypes = () =>
+export const getOpenEMRAppointmentTypes = (zoom_account_id: string) =>
   apiClient.get<{ appointment_types: OpenEMRAppointmentType[] }>(
-    "/openemr/appointment-types",
+    `/openemr/appointment-types?zoom_account_id=${zoom_account_id}`,
   );
 
 export const getOpenEMRProviders = (zoom_account_id: string) =>
@@ -160,3 +209,14 @@ export const getZoomUsers = (zoom_account_id: string) =>
   apiClient.get<{ users: ZoomUser[] }>(
     `/zoom/users?zoom_account_id=${zoom_account_id}`,
   );
+
+// Audit Logs
+export const getAuditLogs = (filters: AuditLogFilters = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.append(key, String(value));
+    }
+  });
+  return apiClient.get<AuditLogResponse>(`/audit/logs?${params.toString()}`);
+};

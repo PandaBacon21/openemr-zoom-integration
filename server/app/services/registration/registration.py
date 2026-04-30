@@ -3,7 +3,7 @@ import requests
 from flask import current_app
 from .reg_verification import trigger_verification_scheduler
 from app.extensions import db
-from app.models import ZoomAccount
+from app.models import ZoomAccount, ZoomAccount, AccountConfig
 from app.services.zoom import validate_zoom_credentials
 from app.services.keys import generate_keypair, delete_keypair
 
@@ -97,7 +97,7 @@ def register_zoom_account(
     zoom_webhook_secret: str,
     contact_email: str, 
     timezone: str = "America/New_York",
-) -> ZoomAccount:
+) -> tuple[ZoomAccount, AccountConfig]:
     """
     Full registration flow for a Zoom account.
 
@@ -168,10 +168,15 @@ def register_zoom_account(
             openemr_registration_client_uri=registration_client_uri,
             private_key_path=private_key_path,
             kid=kid,
-            timezone=timezone,
         )
 
         db.session.add(account)
+
+        config = AccountConfig(
+            account_id=zoom_account_id,
+            timezone=timezone,
+        )
+        db.session.add(config)
         db.session.commit()
 
     except Exception as e:
@@ -210,42 +215,26 @@ def register_zoom_account(
         f"Registration complete for account {zoom_account_id}, "
         f"OpenEMR client_id: {openemr_response['client_id']}"
     )
-    return account
+    return account, config
 
 
-def update_zoom_account(
+def update_zoom_account_credentials(
     zoom_account_id: str,
     nickname: str | None = None,
     zoom_client_secret: str | None = None,
     zoom_webhook_secret: str | None = None,
-    timezone: str | None = None,
-    demo_patient_override_enabled: bool | None = None,
-    demo_patient_email_override: str | None = None,
-    demo_patient_phone_override: str | None = None,
 ) -> ZoomAccount:
-    """
-    Update editable fields on a registered Zoom account.
-    Only fields explicitly passed (not None) are updated.
-
-    Returns the updated ZoomAccount.
-    Raises:
-        ValueError: If the account is not found.
-    """
+    """Update credential fields on ZoomAccount."""
     account = ZoomAccount.query.filter_by(
         account_id=zoom_account_id, is_active=True
     ).first()
-
     if not account:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     FIELD_MAP = {
-        "nickname":                      nickname,
-        "client_secret":                 zoom_client_secret,
-        "webhook_secret":                zoom_webhook_secret,
-        "timezone":                      timezone,
-        "demo_patient_override_enabled": demo_patient_override_enabled,
-        "demo_patient_email_override":   demo_patient_email_override,
-        "demo_patient_phone_override":   demo_patient_phone_override,
+        "nickname":       nickname,
+        "client_secret":  zoom_client_secret,
+        "webhook_secret": zoom_webhook_secret,
     }
 
     updated = []
@@ -261,11 +250,63 @@ def update_zoom_account(
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Update failed for {zoom_account_id}: {e}")
+        logger.error(f"Credential update failed for {zoom_account_id}: {e}")
         raise
 
-    logger.info(f"Updated account {zoom_account_id}: {updated}")
+    logger.info(f"Updated credentials for {zoom_account_id}: {updated}")
     return account
+
+
+def update_account_config(
+    zoom_account_id: str,
+    timezone: str | None = None,
+    allow_shared_zoom_user: bool | None = None,
+    demo_patient_email_override_enabled: bool | None = None,
+    demo_patient_email_override: str | None = None,
+    demo_patient_phone_override_enabled: bool| None = None, 
+    demo_patient_phone_override: str | None = None,
+) -> AccountConfig:
+    """Update config fields on AccountConfig."""
+    from app.models import AccountConfig
+
+    account = ZoomAccount.query.filter_by(
+        account_id=zoom_account_id, is_active=True
+    ).first()
+    if not account:
+        raise ValueError(f"No active registration found for account {zoom_account_id}")
+
+    config = account.config
+    if not config:
+        config = AccountConfig(account_id=zoom_account_id)
+        db.session.add(config)
+
+    FIELD_MAP = {
+        "timezone":                      timezone,
+        "allow_shared_zoom_user":        allow_shared_zoom_user,
+        "demo_patient_email_override_enabled": demo_patient_email_override_enabled,
+        "demo_patient_email_override":   demo_patient_email_override,
+        "demo_patient_phone_override_enabled": demo_patient_phone_override_enabled,
+        "demo_patient_phone_override":   demo_patient_phone_override,
+    }
+
+    updated = []
+    for attr, value in FIELD_MAP.items():
+        if value is not None:
+            setattr(config, attr, value)
+            updated.append(attr)
+
+    if not updated:
+        raise ValueError("No valid fields provided")
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Config update failed for {zoom_account_id}: {e}")
+        raise
+
+    logger.info(f"Updated config for {zoom_account_id}: {updated}")
+    return config
 
 
 def deregister_zoom_account(zoom_account_id: str) -> None:

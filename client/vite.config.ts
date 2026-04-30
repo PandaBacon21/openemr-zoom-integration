@@ -11,6 +11,7 @@ export default defineConfig({
       "/zoom": "http://localhost:5000",
       "/openemr": "http://localhost:5000",
       "/webhooks": "http://localhost:5000",
+      "/audit": "http://localhost:5000",
     },
   },
   build: {

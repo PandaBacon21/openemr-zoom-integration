@@ -14,7 +14,6 @@ import {
 } from "@mui/material";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import SettingsIcon from "@mui/icons-material/Settings";
-import PeopleIcon from "@mui/icons-material/People";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useAuth } from "../context/AuthContext";
 
@@ -23,7 +22,6 @@ const DRAWER_WIDTH = 240;
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
   { label: "Config", path: "/config", icon: <SettingsIcon /> },
-  { label: "Providers", path: "/providers", icon: <PeopleIcon /> },
 ];
 
 const Layout: React.FC = () => {

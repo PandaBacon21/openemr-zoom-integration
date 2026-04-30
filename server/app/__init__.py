@@ -68,13 +68,14 @@ def _register_blueprints(app: Flask) -> None:
     from .blueprints.openemr import openemr_bp
     from .blueprints.zoom import zoom_bp
     from .blueprints.config import config_bp
+    from .blueprints.audit import audit_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(openemr_bp)
     app.register_blueprint(zoom_bp)
     app.register_blueprint(config_bp)
-
+    app.register_blueprint(audit_bp)
 
 def _register_app_routes(app: Flask) -> None:
 

@@ -4,7 +4,6 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ConfigPage from "./pages/config/ConfigPage";
-import ProvidersPage from "./pages/ProvidersPage";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -33,7 +32,6 @@ const App: React.FC = () => {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="config" element={<ConfigPage />} />
-        <Route path="providers" element={<ProvidersPage />} />
       </Route>
     </Routes>
   );

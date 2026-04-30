@@ -51,7 +51,7 @@ const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
       .catch(() => setError("Failed to load enabled appointment types"))
       .finally(() => setLoadingEnabled(false));
 
-    getOpenEMRAppointmentTypes()
+    getOpenEMRAppointmentTypes(zoomAccountId)
       .then((res) => setAllTypes(res.data.appointment_types))
       .catch(() => setError("Failed to load OpenEMR appointment types"))
       .finally(() => setLoadingAll(false));
