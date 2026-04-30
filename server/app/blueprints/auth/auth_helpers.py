@@ -1,7 +1,4 @@
 
-
-
-
 def verify_jwt_request() -> None | tuple:
     """
     Call from before_request guards on protected blueprints.

@@ -388,6 +388,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                   <TableRow sx={{ bgcolor: "background.default" }}>
                     <TableCell sx={{ fontWeight: 600 }}>Provider</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>NPI</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                       Actions
@@ -414,6 +415,13 @@ const AccountProvidersTab: React.FC<Props> = ({
                       <TableCell>
                         <Chip
                           label={mapping.openemr_provider_npi}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={mapping.zoom_user_id}
                           size="small"
                           variant="outlined"
                         />
