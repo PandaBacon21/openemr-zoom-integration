@@ -139,7 +139,27 @@ def test_get_appointment_types_returns_401_for_invalid_jwt(client):
     assert response.get_json() == {"error": "Invalid token"}
 
 
+def test_get_appointment_types_requires_zoom_account_id(client):
+    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
+
+
+def test_get_appointment_types_returns_404_for_unknown_account(client):
+    response = client.get(
+        "/openemr/appointment-types",
+        headers=AUTH_HEADERS,
+        query_string={"zoom_account_id": "missing-account"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "No active registration found for account missing-account"}
+
+
 def test_get_appointment_types_success(client, app, monkeypatch):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+
     monkeypatch.setattr(
         "app.blueprints.openemr.openemr_routes.get_appointment_types_list",
         lambda: [
@@ -153,7 +173,11 @@ def test_get_appointment_types_success(client, app, monkeypatch):
         ],
     )
 
-    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
+    response = client.get(
+        "/openemr/appointment-types",
+        headers=AUTH_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
 
     assert response.status_code == 200
     assert response.get_json() == {
@@ -171,12 +195,19 @@ def test_get_appointment_types_success(client, app, monkeypatch):
 
 
 def test_get_appointment_types_maps_service_error_to_500(client, app, monkeypatch):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+
     monkeypatch.setattr(
         "app.blueprints.openemr.openemr_routes.get_appointment_types_list",
         lambda: (_ for _ in ()).throw(RuntimeError("db unavailable")),
     )
 
-    response = client.get("/openemr/appointment-types", headers=AUTH_HEADERS)
+    response = client.get(
+        "/openemr/appointment-types",
+        headers=AUTH_HEADERS,
+        query_string={"zoom_account_id": "acct-1"},
+    )
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "db unavailable"}

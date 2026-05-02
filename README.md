@@ -12,7 +12,9 @@ Current implemented areas:
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
 - OpenEMR appointment URL writeback (`pc_website`) after meeting create/recreate
 - Audit logging for webhook intake and meeting lifecycle events
-- Per-account nicknames and demo patient contact override controls
+- Paginated audit log API for the admin UI
+- Per-account config records for timezone, shared Zoom user behavior, and demo patient contact overrides
+- Zoom EHR Context auth and appointment lookup endpoints
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
@@ -111,8 +113,12 @@ Appointment filter management (JWT bearer protected):
 OpenEMR and Zoom lookup helpers (JWT bearer protected):
 
 - `GET /openemr/providers?zoom_account_id=...`
-- `GET /openemr/appointment-types`
+- `GET /openemr/appointment-types?zoom_account_id=...`
 - `GET /zoom/users?zoom_account_id=...`
+
+Audit logs (JWT bearer protected):
+
+- `GET /audit/logs?zoom_account_id=...&event_type=...&success=true&page=1&per_page=50`
 
 Protected routes require:
 
@@ -130,6 +136,11 @@ Inbound webhook endpoints:
 - `POST /webhooks/openemr` (`X-Zoomly-Signature` required)
 - `POST /webhooks/zoom` (Zoom webhook signature flow)
 
+Zoom EHR Context endpoints:
+
+- `GET /rest/auth/gettoken` (`Authorization: Basic ...` plus `X-Tenant-ID`)
+- `POST /rest/openendpoint/service/getAppointments` (`Authorization: Bearer ...` plus `X-Tenant-ID`)
+
 ## Testing
 
 Run backend tests from the repository root:
@@ -140,6 +151,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle and updates, provider mappings, appointment filters, appointment event processing/webhooks, audit logging, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS, registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks, audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest run result in this workspace (April 28, 2026): `209 passed`.
+Latest backend run result in this workspace: `221 passed`.

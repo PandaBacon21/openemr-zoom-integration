@@ -8,12 +8,14 @@ from app.services.zoom import zoom, zoom_auth
 
 
 def _make_account(**overrides):
+    timezone_name = overrides.get("timezone", "America/Denver")
     return SimpleNamespace(
         account_id=overrides.get("account_id", "acct-1"),
         client_id=overrides.get("client_id", "cid"),
         client_secret=overrides.get("client_secret", "sec"),
         zoom_access_token=overrides.get("zoom_access_token"),
         zoom_token_expires_at=overrides.get("zoom_token_expires_at"),
+        config=SimpleNamespace(timezone=timezone_name),
     )
 
 
@@ -301,8 +303,7 @@ def test_delete_zoom_meeting_returns_false_on_404(monkeypatch):
 
 def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
     captured = {}
-    account = _make_account(account_id="acct-1")
-    account.timezone = "America/Denver"
+    account = _make_account(account_id="acct-1", timezone="America/Denver")
 
     match = SimpleNamespace(
         provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
@@ -341,8 +342,7 @@ def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
 
 
 def test_update_zoom_meeting_raises_on_unparseable_datetime():
-    account = _make_account(account_id="acct-1")
-    account.timezone = "America/Denver"
+    account = _make_account(account_id="acct-1", timezone="America/Denver")
     match = SimpleNamespace(
         provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
         payload={
