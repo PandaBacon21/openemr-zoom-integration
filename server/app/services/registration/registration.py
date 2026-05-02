@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import ZoomAccount, ZoomAccount, AccountConfig
 from app.services.zoom import validate_zoom_credentials
 from app.services.keys import generate_keypair, delete_keypair
+from app.services.ehr_context import set_ehr_context_credentials, _generate_tenant_id
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,8 @@ def register_zoom_account(
     zoom_client_id: str,
     zoom_client_secret: str,
     zoom_webhook_secret: str,
+    ehr_context_username: str | None, 
+    ehr_context_password: str | None,
     contact_email: str, 
     timezone: str = "America/New_York",
 ) -> tuple[ZoomAccount, AccountConfig]:
@@ -168,7 +171,10 @@ def register_zoom_account(
             openemr_registration_client_uri=registration_client_uri,
             private_key_path=private_key_path,
             kid=kid,
+            tenant_id=_generate_tenant_id(zoom_account_id, zoom_client_id)
         )
+        if ehr_context_username and ehr_context_password:
+            account = set_ehr_context_credentials(account=account, ehr_context_username=ehr_context_username, ehr_context_password=ehr_context_password)
 
         db.session.add(account)
 
@@ -223,18 +229,22 @@ def update_zoom_account_credentials(
     nickname: str | None = None,
     zoom_client_secret: str | None = None,
     zoom_webhook_secret: str | None = None,
+    ehr_context_username: str | None = None,
+    ehr_context_password: str | None = None,
 ) -> ZoomAccount:
     """Update credential fields on ZoomAccount."""
+
     account = ZoomAccount.query.filter_by(
         account_id=zoom_account_id, is_active=True
     ).first()
+
     if not account:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
     FIELD_MAP = {
-        "nickname":       nickname,
-        "client_secret":  zoom_client_secret,
-        "webhook_secret": zoom_webhook_secret,
+        "nickname":             nickname,
+        "client_secret":        zoom_client_secret,
+        "webhook_secret":       zoom_webhook_secret,
     }
 
     updated = []
@@ -242,6 +252,15 @@ def update_zoom_account_credentials(
         if value is not None:
             setattr(account, attr, value)
             updated.append(attr)
+
+    # Password requires hashing — delegate to dedicated service function
+    if ehr_context_username and ehr_context_password:
+        account = set_ehr_context_credentials(
+            account=account,
+            ehr_context_username=ehr_context_username or account.ehr_context_username,
+            ehr_context_password=ehr_context_password,
+        )
+        updated.append("ehr_context_password_hash")
 
     if not updated:
         raise ValueError("No valid fields provided")
@@ -256,7 +275,6 @@ def update_zoom_account_credentials(
     logger.info(f"Updated credentials for {zoom_account_id}: {updated}")
     return account
 
-
 def update_account_config(
     zoom_account_id: str,
     timezone: str | None = None,
@@ -267,7 +285,6 @@ def update_account_config(
     demo_patient_phone_override: str | None = None,
 ) -> AccountConfig:
     """Update config fields on AccountConfig."""
-    from app.models import AccountConfig
 
     account = ZoomAccount.query.filter_by(
         account_id=zoom_account_id, is_active=True
@@ -349,3 +366,5 @@ def deregister_zoom_account(zoom_account_id: str) -> None:
     db.session.commit()
 
     logger.info(f"Deregistration complete for account {zoom_account_id}")
+
+

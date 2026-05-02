@@ -95,7 +95,11 @@ def zoom_webhook():
 
     # --- 6. Route to handler ---
     if event_type == "clinical_notes.note_created":
-        return _handle_cn_created(payload, account)
+        try:
+          return _handle_cn_created(payload, account)
+        except Exception as e:
+            logger.error(f"webhooks.zoom | Unhandled exception in _handle_cn_created: {e}", exc_info=True)
+        return {"error": "internal error"}, 500
     elif event_type in ("meeting.participant_joined_waiting_room", "meeting.participant_jbh_waiting"):
         return _handle_waiting_room_joined(payload, account)
     else:

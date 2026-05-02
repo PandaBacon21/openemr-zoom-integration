@@ -28,6 +28,11 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
   const [webhookSecret, setWebhookSecret] = useState("");
   const [showClientSecret, setShowClientSecret] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [ehrContextUsername, setEhrContextUsername] = useState(
+    account.ehr_context_username ?? "",
+  );
+  const [ehrContextPassword, setEhrContextPassword] = useState("");
+  const [showEhrContextPassword, setShowEhrContextPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -35,6 +40,7 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
   // Reset when account changes
   useEffect(() => {
     setNickname(account.nickname ?? "");
+    setEhrContextUsername(account.ehr_context_username ?? "");
     setClientSecret("");
     setWebhookSecret("");
     setError(null);
@@ -43,6 +49,8 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
 
   const isDirty =
     nickname !== (account.nickname ?? "") ||
+    ehrContextUsername !== (account.ehr_context_username ?? "") ||
+    ehrContextPassword !== "" ||
     clientSecret !== "" ||
     webhookSecret !== "";
 
@@ -55,15 +63,19 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
       if (nickname !== (account.nickname ?? "")) payload.nickname = nickname;
       if (clientSecret) payload.zoom_client_secret = clientSecret;
       if (webhookSecret) payload.zoom_webhook_secret = webhookSecret;
+      if (ehrContextUsername) payload.ehr_context_username = ehrContextUsername;
+      if (ehrContextPassword) payload.ehr_context_password = ehrContextPassword;
 
       await updateAccount(account.zoom_account_id, payload);
 
       onAccountUpdated({
         ...account,
         nickname: nickname || null,
+        ehr_context_username: ehrContextUsername || null,
       });
       setClientSecret("");
       setWebhookSecret("");
+      setEhrContextPassword("");
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
@@ -84,22 +96,10 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
         </Typography>
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
-          {/* Editable */}
-          <TextField
-            label="Nickname"
-            value={nickname}
-            onChange={(e) => {
-              setNickname(e.target.value);
-              setError(null);
-            }}
-            fullWidth
-            helperText="Friendly label shown in the sidebar"
-          />
-
           <Divider />
 
           {/* Read-only */}
-          {/* <Typography
+          <Typography
             variant="caption"
             color="text.secondary"
             sx={{
@@ -110,7 +110,7 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
             }}
           >
             Read-only
-          </Typography> */}
+          </Typography>
 
           <TextField
             label="Zoom Account ID"
@@ -132,6 +132,63 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
             fullWidth
             slotProps={{ input: { readOnly: true } }}
             sx={{ "& .MuiInputBase-input": { color: "text.secondary" } }}
+          />
+
+          <Divider />
+
+          {/* Editable */}
+          <TextField
+            label="Nickname"
+            value={nickname}
+            onChange={(e) => {
+              setNickname(e.target.value);
+              setError(null);
+            }}
+            fullWidth
+            helperText="Friendly label shown in the sidebar"
+          />
+
+          <TextField
+            label="EHR Context Username"
+            value={ehrContextUsername}
+            onChange={(e) => {
+              setEhrContextUsername(e.target.value);
+              setError(null);
+            }}
+            fullWidth
+            placeholder="Enter new value to update"
+          />
+
+          <TextField
+            label="EHR Context Password"
+            type={showEhrContextPassword ? "text" : "password"}
+            value={ehrContextPassword}
+            onChange={(e) => {
+              setEhrContextPassword(e.target.value);
+              setError(null);
+            }}
+            fullWidth
+            placeholder="Enter new value to rotate"
+            helperText="EHR Context credentials used for Zoom EHR context retrieval"
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowEhrContextPassword((p) => !p)}
+                      edge="end"
+                      size="small"
+                    >
+                      {showEhrContextPassword ? (
+                        <VisibilityOffIcon />
+                      ) : (
+                        <VisibilityIcon />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
           />
 
           <Divider />

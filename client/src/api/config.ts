@@ -6,6 +6,7 @@ export interface Registration {
   zoom_account_id: string;
   zoom_client_id: string;
   openemr_client_id: string;
+  ehr_context_username: string | null;
   kid: string;
   is_active: boolean;
   has_zoom_token: boolean;
@@ -133,6 +134,8 @@ export const updateAccount = (
     nickname: string;
     zoom_client_secret: string;
     zoom_webhook_secret: string;
+    ehr_context_username: string;
+    ehr_context_password: string;
     timezone: string;
     demo_patient_email_override_enabled: boolean;
     demo_patient_email_override: string | null;

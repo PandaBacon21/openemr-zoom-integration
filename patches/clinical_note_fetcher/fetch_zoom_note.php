@@ -19,8 +19,6 @@ require_once(__DIR__ . "/../../globals.php");
 require_once(__DIR__ . '/../../../library/zoomly/ZoomBridge.php');
 
 
-use OpenEMR\Common\Acl\AclMain;
-
 // --- 1. Verify OpenEMR session ---
 // Ensures only logged-in OpenEMR users can trigger this.
 // top.restoreSession() in the JS keeps the session alive across form interactions.
@@ -38,18 +36,11 @@ if ($encounterNumber <= 0) {
     exit;
 }
 
-// --- 3. ACL check ---
-// Require the same write permission as the Edit button in forms.php.
-if (!AclMain::aclCheckCore('clinical', 'notes', '', 'write')) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Insufficient permissions']);
-    exit;
-}
 
-// --- 4. POST to Flask bridge ---
+// --- 3. POST to Flask bridge ---
 $result = zoomly_bridge_post('/zoom/encounter/' . $encounterNumber . '/fetch_zoom_note');
  
-// --- 5. Handle cURL errors ---
+// --- 4. Handle cURL errors ---
 if ($result['error']) {
     error_log('[fetch_zoom_note] cURL error for encounter=' . $encounterNumber . ': ' . $result['error']);
     http_response_code(502);
@@ -57,7 +48,7 @@ if ($result['error']) {
     exit;
 }
  
-// --- 6. Forward Flask response to browser ---
+// --- 5. Forward Flask response to browser ---
 // Pass the status code and body through directly.
 // The JS in forms.php checks response.ok and reads data.error on failure.
 http_response_code($result['status']);

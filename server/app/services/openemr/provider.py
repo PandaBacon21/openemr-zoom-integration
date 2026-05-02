@@ -102,7 +102,7 @@ def _normalize_practitioner(resource: dict) -> dict:
     # Look up users.id from OpenEMR DB using NPI.
     # This is the integer used as pc_aid / form_provider in appointment events
     # and needs to be stored on ProviderMapping for the webhook hot path.
-    users_id = None
+    user_id = None
     if npi:
         try:
             engine = get_openemr_db_engine()
@@ -112,7 +112,7 @@ def _normalize_practitioner(resource: dict) -> dict:
                     {"npi": npi}
                 ).fetchone()
                 if row:
-                    users_id = row.id
+                    user_id = row.id
         except Exception as e:
             logger.warning(f"_normalize_practitioner | Failed to look up users.id for npi={npi}: {e}")
 
@@ -124,7 +124,7 @@ def _normalize_practitioner(resource: dict) -> dict:
         "full_name": f"{' '.join(prefix)} {' '.join(given)} {family}".strip(),
         "npi": npi,
         "email": email,
-        "users_id": users_id,
+        "user_id": user_id,
     }
 
 
