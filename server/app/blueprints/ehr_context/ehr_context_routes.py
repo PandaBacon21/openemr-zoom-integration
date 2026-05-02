@@ -1,6 +1,7 @@
 import logging
 import jwt
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from flask import current_app, jsonify, request
 from sqlalchemy import text
 from app.services.ehr_context import _get_account_by_tenant, _verify_basic_auth, _verify_bearer_jwt
@@ -114,7 +115,7 @@ def get_appointments():
         Header  Authorization:  Bearer <jwt>
         Header  X-Tenant-ID:    <tenant_id>
         Body    {
-                    "dateTime":   "2026-04-27T10:00:00",
+                    "dateTime":   "2026-04-27T15:00:00",  (UTC)
                     "zoomUserId": "abc123xyz"
                 }
 
@@ -124,8 +125,8 @@ def get_appointments():
                 "appointmentId":   "391",
                 "providerId":      "10",
                 "patientId":       "109",
-                "startTime":       "2026-04-27T09:00:00",
-                "endTime":         "2026-04-27T09:30:00",
+                "startTime":       "2026-04-27T15:00:00",  (UTC)
+                "endTime":         "2026-04-27T15:30:00",  (UTC)
                 "serviceType":     "Zoom Telehealth",
                 "name":            "Aisha Johnson",
                 "dob":             "1993-01-25",
@@ -138,19 +139,19 @@ def get_appointments():
     # --- 1. Validate X-Tenant-ID ---
     tenant_id = request.headers.get("X-Tenant-ID", "").strip()
     if not tenant_id:
-        logger.warning("ehr.getAppointments | Missing X-Tenant-ID header")
+        logger.warning("ehr_context.getAppointments | Missing X-Tenant-ID header")
         return jsonify({"error": "Missing X-Tenant-ID header"}), 401
 
     account = _get_account_by_tenant(tenant_id)
     if not account:
-        logger.warning(f"ehr.getAppointments | No active account for tenant_id={tenant_id}")
+        logger.warning(f"ehr_context.getAppointments | No active account for tenant_id={tenant_id}")
         return jsonify({"error": "Unknown tenant"}), 404
 
     # --- 2. Verify Bearer JWT ---
     authorization = request.headers.get("Authorization", "")
     if not _verify_bearer_jwt(authorization, tenant_id):
         logger.warning(
-            f"ehr.getAppointments | JWT verification failed for tenant_id={tenant_id}"
+            f"ehr_context.getAppointments | JWT verification failed for tenant_id={tenant_id}"
         )
         return jsonify({"error": "Invalid or expired token"}), 401
 
@@ -165,7 +166,7 @@ def get_appointments():
     if not date_time_str or not zoom_user_id:
         return jsonify({"error": "Missing required fields: dateTime, zoomUserId"}), 400
 
-    # Parse dateTime — Zoom sends ISO 8601 local time without timezone
+    # Parse dateTime — Zoom sends UTC
     try:
         query_dt = datetime.fromisoformat(date_time_str)
     except ValueError:
@@ -180,7 +181,7 @@ def get_appointments():
 
     if not mapping:
         logger.warning(
-            f"ehr.getAppointments | No ProviderMapping for "
+            f"ehr_context.getAppointments | No ProviderMapping for "
             f"zoom_user_id={zoom_user_id} account={account.account_id}"
         )
         return jsonify({"error": f"No provider mapping found for zoomUserId={zoom_user_id}"}), 404
@@ -188,14 +189,21 @@ def get_appointments():
     provider_id = mapping.openemr_provider_id
     if not provider_id:
         logger.warning(
-            f"ehr.getAppointments | ProviderMapping has no openemr_provider_id "
+            f"ehr_context.getAppointments | ProviderMapping has no openemr_provider_id "
             f"for zoom_user_id={zoom_user_id}"
         )
         return jsonify({"error": "Provider mapping incomplete — missing OpenEMR provider ID"}), 404
 
     # --- 5. Query appointments ±2 hours around query_dt ---
-    window_start = query_dt - timedelta(hours=2)
-    window_end   = query_dt + timedelta(hours=2)
+    # Zoom sends dateTime in UTC. OpenEMR stores times in local (account) time.
+    # Convert the UTC window to the account's local timezone before querying.
+    account_tz = ZoneInfo(
+        account.config.timezone if hasattr(account, 'config') and account.config
+        else "America/Denver"
+    )
+    query_dt_local = query_dt.replace(tzinfo=timezone.utc).astimezone(account_tz).replace(tzinfo=None)
+    window_start = query_dt_local - timedelta(hours=2)
+    window_end   = query_dt_local + timedelta(hours=2)
 
     # Build datetime strings for MariaDB comparison
     # pc_eventDate is DATE, pc_startTime is TIME — combine for comparison
@@ -246,10 +254,11 @@ def get_appointments():
                 }
             ).fetchall()
     except Exception as e:
-        logger.error(f"ehr.getAppointments | DB error for provider_id={provider_id}: {e}")
+        logger.error(f"ehr_context.getAppointments | DB error for provider_id={provider_id}: {e}")
         return jsonify({"error": "Database error querying appointments"}), 500
-    
+
     # --- 6. Build response ---
+    # Times stored in local (account) time — convert to UTC for response
     appointments = []
     for row in rows:
         # Build start datetime — pc_startTime comes back as timedelta from PyMySQL
@@ -262,10 +271,13 @@ def get_appointments():
                     row.pc_eventDate.year,
                     row.pc_eventDate.month,
                     row.pc_eventDate.day,
-                    hours, minutes, seconds
-                )
+                    hours, minutes, seconds,
+                    tzinfo=account_tz
+                ).astimezone(timezone.utc).replace(tzinfo=None)
             else:
-                start_dt = datetime.combine(row.pc_eventDate, row.pc_startTime)
+                start_dt = datetime.combine(
+                    row.pc_eventDate, row.pc_startTime
+                ).replace(tzinfo=account_tz).astimezone(timezone.utc).replace(tzinfo=None)
         except Exception:
             start_dt = None
 
@@ -289,9 +301,13 @@ def get_appointments():
         })
 
     logger.info(
-        f"ehr.getAppointments | Returning {len(appointments)} appointments "
+        f"ehr_context.getAppointments | Returning {len(appointments)} appointments "
         f"for provider_id={provider_id} zoom_user_id={zoom_user_id} "
         f"window={window_start.isoformat()} to {window_end.isoformat()}"
     )
+    response = {
+        "status": 200, 
+        "response": appointments
+    }
 
-    return jsonify(appointments), 200
+    return jsonify(response), 200

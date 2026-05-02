@@ -160,13 +160,20 @@ def _validate_and_process_note(
     note_title: str | None,
 ) -> tuple[dict, int]:
     """
-    Validate note's meeting_number against stored MeetingRecords.
+    Validate and process a clinical note webhook event.
+ 
+    When EHR context is available in the note (provider selected an appointment
+    in Zoom), use appointment_id/patient_id/provider_id directly from the note
+    rather than relying on MeetingRecord lookup.
+ 
+    Falls back to MeetingRecord lookup when EHR context is not available.
     """
+    # --- 1. Look up MeetingRecord ---
     record = MeetingRecord.query.filter_by(
         zoom_meeting_id=str(meeting_number),
         zoom_account_id=account.account_id,
     ).first()
-
+ 
     if not record:
         current_app.logger.warning(
             f"zoom_webhook | meeting_number={meeting_number} "
@@ -181,19 +188,19 @@ def _validate_and_process_note(
             error_message="no matching MeetingRecord",
         )
         return {"status": "dropped", "reason": "no matching meeting"}, 200
-
-    # Persist note ID immediately so we can retry later if needed
+ 
+    # --- 2. Persist ClinicalNoteRecord immediately ---
     clinical_note = ClinicalNoteRecord.query.filter_by(zoom_note_id=note_id).first()
     if not clinical_note:
         clinical_note = ClinicalNoteRecord(
-            zoom_meeting_id=record.zoom_meeting_id,
+            zoom_meeting_id=record.zoom_meeting_id,  # FK to MeetingRecord, not zoom_meeting_id
             zoom_note_id=note_id,
             zoom_note_title=note_title or "",
             is_written_to_openemr=False,
         )
         db.session.add(clinical_note)
         db.session.commit()
-
+ 
         write_audit_log(
             event_type="note.record_created",
             success=True,
@@ -201,15 +208,15 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
         )
-
+ 
     current_app.logger.info(
         f"zoom_webhook | meeting_number={meeting_number} "
-        f"matched MeetingRecord id={record.id} eid={record.openemr_appointment_id}"
+        f"matched MeetingRecord id={record.zoom_meeting_id} eid={record.openemr_appointment_id}"
     )
-
-    # Retrieve note content from Zoom API
+ 
+    # --- 3. Retrieve note content from Zoom API ---
     note_data = get_zoom_clinical_note(account, note_id)
-
+ 
     if not note_data:
         current_app.logger.warning(
             f"zoom_webhook | note_id={note_id} not found in Zoom API"
@@ -224,43 +231,57 @@ def _validate_and_process_note(
             error_message="note not found in Zoom API",
         )
         return {"status": "error", "reason": "note not found"}, 500
-
+ 
+    # --- 4. Extract EHR context if available ---
+    # When the provider selected an appointment in Zoom, the note contains
+    # appointment_id, patient_id, provider_id directly — use these over
+    # MeetingRecord fields to avoid encounter duplication issues.
+    ehr_context = note_data.get("ehr_context")
+ 
+    if ehr_context:
+        eid         = int(ehr_context.get("appointment_id", record.openemr_appointment_id))
+        pid         = int(ehr_context.get("patient_id")) if ehr_context.get("patient_id") else None
+        provider_id = int(ehr_context.get("provider_id")) if ehr_context.get("provider_id") else None
+        current_app.logger.info(
+            f"zoom_webhook | Using EHR context: eid={eid} pid={pid} provider_id={provider_id}"
+        )
+    else:
+        # Fall back to MeetingRecord + MeetingPatient
+        eid = int(record.openemr_appointment_id)
+        provider_id = int(record.openemr_provider_id) if record.openemr_provider_id else None
+        pid = None
+        patient = MeetingPatient.query.filter_by(zoom_meeting_id=record.zoom_meeting_id).first()
+        if patient:
+            pid = int(patient.openemr_patient_id)
+        current_app.logger.info(
+            f"zoom_webhook | No EHR context — using MeetingRecord: eid={eid} pid={pid} provider_id={provider_id}"
+        )
+ 
     write_audit_log(
         event_type="note.retrieved",
         success=True,
         zoom_account_id=account.account_id,
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
-        openemr_appointment_id=str(record.openemr_appointment_id),
-        detail={"note_title": note_data.get("note_title")},
+        openemr_appointment_id=str(eid),
+        detail={
+            "note_title": note_data.get("note_title"),
+            "ehr_context": bool(ehr_context),
+        },
     )
-
-    current_app.logger.info(
-        f"zoom_webhook | note_id={note_id} retrieved successfully"
-    )
-    db.session.commit()
-
-    # Get patient and provider from MeetingRecord
-    pid = None
-    patient = MeetingPatient.query.filter_by(zoom_meeting_id=record.zoom_meeting_id).first()
-    if patient:
-        pid = int(patient.openemr_patient_id)
-
-    provider_id = int(record.openemr_provider_id) if record.openemr_provider_id else None
-    eid = int(record.openemr_appointment_id)
-
+ 
     if not pid or not provider_id:
         current_app.logger.warning(
             f"zoom_webhook | missing pid={pid} or provider_id={provider_id} "
-            f"for MeetingRecord id={record.id}"
+            f"for MeetingRecord id={record.zoom_meeting_id}"
         )
         return {"status": "error", "reason": "missing patient or provider"}, 500
-
-    # Find existing encounter or create one
+ 
+    # --- 5. Find existing encounter or create one ---
     encounter_number = find_encounter_for_appointment(eid, pid, provider_id)
-
+ 
     if encounter_number:
-        # Ensure external_id is set for fetch_zoom_note lookup
+        # Stamp external_id if not already set (e.g. manually created encounter)
         engine = get_openemr_db_engine()
         with engine.begin() as conn:
             conn.execute(
@@ -272,12 +293,11 @@ def _validate_and_process_note(
                 """),
                 {"external_id": f"zoom_eid_{eid}", "encounter": encounter_number}
             )
-
+ 
     if not encounter_number:
         current_app.logger.info(
             f"zoom_webhook | no encounter found for eid={eid} — creating"
         )
-
         appt = get_appointment_details(eid)
         if appt:
             encounter_number = create_encounter(
@@ -287,12 +307,11 @@ def _validate_and_process_note(
                 pc_catid=appt["pc_catid"],
                 eid=eid,
             )
-
+ 
     if not encounter_number:
         current_app.logger.error(
             f"zoom_webhook | failed to find or create encounter for eid={eid}"
         )
-
         write_audit_log(
             event_type="note.encounter_failed",
             success=False,
@@ -303,15 +322,14 @@ def _validate_and_process_note(
             error_message="could not find or create encounter",
         )
         return {"status": "error", "reason": "could not find or create encounter"}, 500
-
+ 
     current_app.logger.info(
-        f"zoom_webhook | S5-05 | using encounter={encounter_number} for eid={eid}"
+        f"zoom_webhook | using encounter={encounter_number} for eid={eid}"
     )
-
-    # Get provider username for forms.user field
+ 
+    # --- 6. Write note to encounter ---
     provider_username = get_provider_username(provider_id) or "admin"
-
-    # Write note to encounter
+ 
     success = write_note_to_encounter(
         encounter_number=encounter_number,
         pid=pid,
@@ -321,12 +339,12 @@ def _validate_and_process_note(
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
     )
+ 
     if success:
         clinical_note.is_written_to_openemr = True
         clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
-        
         db.session.commit()
-
+ 
     write_audit_log(
         event_type="note.written" if success else "note.write_failed",
         success=success,
@@ -334,15 +352,15 @@ def _validate_and_process_note(
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
         openemr_appointment_id=str(eid),
-        detail={"encounter": encounter_number}
+        detail={"encounter": encounter_number, "ehr_context": bool(ehr_context)}
     )
-
+ 
     return {
         "status": "written" if success else "write_failed",
         "encounter": encounter_number,
         "zoom_meeting_id": record.zoom_meeting_id,
     }, 200 if success else 500
-
+ 
 
 def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     """

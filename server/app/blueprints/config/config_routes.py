@@ -1,6 +1,5 @@
 import logging
 from flask import request, jsonify
-from werkzeug.security import generate_password_hash
 
 from app.models import ZoomAccount
 from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config,
@@ -207,6 +206,7 @@ def list_registrations():
             {
                 "nickname": a.nickname,
                 "zoom_account_id": a.account_id,
+                "zoom_client_id": a.client_id,
                 "openemr_client_id": a.openemr_client_id,
                 "ehr_context_username": a.ehr_context_username,
                 "kid": a.kid,
