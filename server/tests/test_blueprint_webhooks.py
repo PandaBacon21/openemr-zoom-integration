@@ -35,7 +35,7 @@ def _signature(body: bytes, secret: str) -> str:
 
 def _create_zoom_account(account_id: str):
     from app.extensions import db
-    from app.models import ZoomAccount
+    from app.models import AccountConfig, ZoomAccount
 
     account = ZoomAccount(
         account_id=account_id,
@@ -45,10 +45,10 @@ def _create_zoom_account(account_id: str):
         openemr_client_id=f"openemr-{account_id}",
         private_key_path=f"/tmp/{account_id}/private.pem",
         kid=f"zoomly-{account_id}",
-        timezone="America/Denver",
         is_active=True,
     )
     db.session.add(account)
+    db.session.add(AccountConfig(account_id=account_id, timezone="America/Denver"))
     db.session.commit()
     return account
 

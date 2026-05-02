@@ -97,7 +97,7 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "full_name": "Dr Jane Doe",
             "npi": "1234567890",
             "email": "jane@example.com",
-            "users_id": 10,
+            "user_id": 10,
         },
         {
             "fhir_id": "pract-2",
@@ -107,7 +107,7 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "full_name": "John Smith",
             "npi": None,
             "email": None,
-            "users_id": None,
+            "user_id": None,
         },
     ]
 
@@ -151,7 +151,7 @@ def test_get_practitioners_single_resource_fetch(app, monkeypatch):
             "full_name": "Elena Rodriguez",
             "npi": None,
             "email": None,
-            "users_id": None,
+            "user_id": None,
         }
     ]
 
@@ -180,7 +180,7 @@ def test_normalize_practitioner_defaults_for_missing_fields():
         "full_name": "",
         "npi": None,
         "email": None,
-        "users_id": None,
+        "user_id": None,
     }
 
 

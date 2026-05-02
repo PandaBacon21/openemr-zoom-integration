@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.models import AppointmentTypeFilter, ProviderMapping, ZoomAccount
+from app.models import AccountConfig, AppointmentTypeFilter, ProviderMapping, ZoomAccount
 from app.services.openemr.appointments import appointment_processor
 
 
@@ -27,10 +27,10 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
         openemr_client_id="openemr-client-id",
         private_key_path=f"/tmp/keys/{account_id}/private.pem",
         kid=f"zoomly-{account_id}",
-        timezone="America/Denver",
         is_active=is_active,
     )
     db.session.add(account)
+    db.session.add(AccountConfig(account_id=account_id, timezone="America/Denver"))
     db.session.commit()
     return account
 

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from auth_utils import AUTH_HEADERS
 from app.extensions import db
-from app.models import ZoomAccount
+from app.models import AccountConfig, ZoomAccount
 
 
 def _create_account(app, account_id: str, *, is_active: bool = True) -> ZoomAccount:
@@ -17,11 +17,44 @@ def _create_account(app, account_id: str, *, is_active: bool = True) -> ZoomAcco
             openemr_client_id="openemr-client-id",
             private_key_path=f"/tmp/keys/{account_id}/private.pem",
             kid=f"zoomly-{account_id}",
+            tenant_id=f"t{account_id[-9:]}",
             is_active=is_active,
         )
         db.session.add(account)
+        db.session.add(
+            AccountConfig(
+                account_id=account_id,
+                timezone="America/New_York",
+            )
+        )
         db.session.commit()
         return account
+
+
+def _fake_registration_result(
+    *,
+    nickname=None,
+    account_id="acct-1",
+    client_id="client-id",
+    openemr_client_id="openemr-client-id",
+    tenant_id="tenant-123",
+    ehr_context_username=None,
+    kid="zoomly-acct-1",
+    timezone_name="America/New_York",
+):
+    return (
+        SimpleNamespace(
+            nickname=nickname,
+            account_id=account_id,
+            client_id=client_id,
+            openemr_client_id=openemr_client_id,
+            tenant_id=tenant_id,
+            ehr_context_username=ehr_context_username,
+            kid=kid,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        ),
+        SimpleNamespace(timezone=timezone_name),
+    )
 
 
 def test_register_endpoint_requires_json_body(client):
@@ -47,17 +80,12 @@ def test_register_endpoint_requires_all_fields(client):
 
 
 def test_register_endpoint_success(client, monkeypatch):
-    fake_account = SimpleNamespace(
+    fake_result = _fake_registration_result(
         nickname="Demo Account",
-        account_id="acct-1",
-        openemr_client_id="openemr-client-id",
-        kid="zoomly-acct-1",
-        timezone="America/New_York",
-        demo_patient_email_override=None,
-        demo_patient_phone_override=None,
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        tenant_id="tenant-abc",
+        ehr_context_username="ehr-user",
     )
-    monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", lambda **kwargs: fake_account)
+    monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", lambda **kwargs: fake_result)
 
     response = client.post(
         "/config/register",
@@ -69,6 +97,8 @@ def test_register_endpoint_success(client, monkeypatch):
             "zoom_webhook_secret": "webhook-secret",
             "contact_email": "admin@example.com",
             "nickname": "Demo Account",
+            "ehr_context_username": "ehr-user",
+            "ehr_context_password": "ehr-pass",
         },
     )
 
@@ -77,11 +107,12 @@ def test_register_endpoint_success(client, monkeypatch):
         "status": "registered",
         "nickname": "Demo Account",
         "zoom_account_id": "acct-1",
+        "zoom_client_id": "client-id",
         "openemr_client_id": "openemr-client-id",
+        "tenet_id": "tenant-abc",
+        "ehr_context_username": "ehr-user",
         "kid": "zoomly-acct-1",
         "timezone": "America/New_York",
-        "demo_patient_email_override": None,
-        "demo_patient_phone_override": None,
         "created_at": "2026-01-01T00:00:00+00:00",
     }
 
@@ -133,16 +164,7 @@ def test_register_endpoint_passes_timezone_to_service(client, monkeypatch):
 
     def fake_register(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(
-            nickname=None,
-            account_id="acct-1",
-            openemr_client_id="openemr-client-id",
-            kid="zoomly-acct-1",
-            timezone=kwargs["timezone"],
-            demo_patient_email_override=None,
-            demo_patient_phone_override=None,
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        )
+        return _fake_registration_result(timezone_name=kwargs["timezone"])
 
     monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", fake_register)
 
@@ -169,16 +191,7 @@ def test_register_endpoint_defaults_timezone_when_missing(client, monkeypatch):
 
     def fake_register(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(
-            nickname=None,
-            account_id="acct-1",
-            openemr_client_id="openemr-client-id",
-            kid="zoomly-acct-1",
-            timezone=kwargs["timezone"],
-            demo_patient_email_override=None,
-            demo_patient_phone_override=None,
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        )
+        return _fake_registration_result(timezone_name=kwargs["timezone"])
 
     monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", fake_register)
 
@@ -204,15 +217,9 @@ def test_register_endpoint_passes_nickname_to_service(client, monkeypatch):
 
     def fake_register(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(
+        return _fake_registration_result(
             nickname=kwargs["nickname"],
-            account_id="acct-1",
-            openemr_client_id="openemr-client-id",
-            kid="zoomly-acct-1",
-            timezone=kwargs["timezone"],
-            demo_patient_email_override=None,
-            demo_patient_phone_override=None,
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            timezone_name=kwargs["timezone"],
         )
 
     monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", fake_register)
@@ -241,21 +248,8 @@ def test_update_registration_requires_json_body(client):
     assert response.get_json() == {"error": "Request body must be JSON"}
 
 
-def test_update_registration_success(client, monkeypatch):
-    captured = {}
-
-    def fake_update(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(
-            nickname="South Clinic",
-            timezone="America/Denver",
-            demo_patient_override_enabled=True,
-            demo_patient_email_override="demo-patient@example.com",
-            demo_patient_phone_override="+13035550199",
-            updated_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
-        )
-
-    monkeypatch.setattr("app.blueprints.config.config_routes.update_zoom_account", fake_update)
+def test_update_registration_success(client, app):
+    _create_account(app, "acct-1", is_active=True)
 
     response = client.patch(
         "/config/register/acct-1",
@@ -264,69 +258,46 @@ def test_update_registration_success(client, monkeypatch):
             "nickname": "South Clinic",
             "zoom_client_secret": "new-client-secret",
             "zoom_webhook_secret": "new-webhook-secret",
+            "ehr_context_username": "ehr-user",
+            "ehr_context_password": "ehr-pass",
             "timezone": "America/Denver",
-            "demo_patient_override_enabled": True,
+            "allow_shared_zoom_user": True,
+            "demo_patient_email_override_enabled": True,
             "demo_patient_email_override": "demo-patient@example.com",
+            "demo_patient_phone_override_enabled": True,
             "demo_patient_phone_override": "+13035550199",
         },
     )
 
     assert response.status_code == 200
-    assert captured == {
-        "zoom_account_id": "acct-1",
-        "nickname": "South Clinic",
-        "zoom_client_secret": "new-client-secret",
-        "zoom_webhook_secret": "new-webhook-secret",
-        "timezone": "America/Denver",
-        "demo_patient_override_enabled": True,
-        "demo_patient_email_override": "demo-patient@example.com",
-        "demo_patient_phone_override": "+13035550199",
-    }
-    assert response.get_json() == {
-        "status": "updated",
-        "zoom_account_id": "acct-1",
-        "nickname": "South Clinic",
-        "timezone": "America/Denver",
-        "demo_patient_override_enabled": True,
-        "demo_patient_email_override": "demo-patient@example.com",
-        "demo_patient_phone_override": "+13035550199",
-        "updated_at": "2026-01-06T00:00:00+00:00",
-    }
+    body = response.get_json()
+    assert body["status"] == "updated"
+    assert body["zoom_account_id"] == "acct-1"
+    assert body["nickname"] == "South Clinic"
+    assert body["timezone"] == "America/Denver"
+    assert body["ehr_context_username"] == "ehr-user"
+    assert body["allow_shared_zoom_user"] is True
+    assert body["demo_patient_email_override_enabled"] is True
+    assert body["demo_patient_email_override"] == "demo-patient@example.com"
+    assert body["demo_patient_phone_override_enabled"] is True
+    assert body["demo_patient_phone_override"] == "+13035550199"
+    assert isinstance(body["updated_at"], str)
 
 
-def test_update_registration_passes_false_override_flag(client, monkeypatch):
-    captured = {}
-
-    def fake_update(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(
-            nickname=None,
-            timezone="America/New_York",
-            demo_patient_override_enabled=False,
-            demo_patient_email_override=None,
-            demo_patient_phone_override=None,
-            updated_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
-        )
-
-    monkeypatch.setattr("app.blueprints.config.config_routes.update_zoom_account", fake_update)
+def test_update_registration_passes_false_override_flag(client, app):
+    _create_account(app, "acct-1", is_active=True)
 
     response = client.patch(
         "/config/register/acct-1",
         headers=AUTH_HEADERS,
-        json={"demo_patient_override_enabled": False},
+        json={"demo_patient_email_override_enabled": False},
     )
 
     assert response.status_code == 200
-    assert captured["demo_patient_override_enabled"] is False
-    assert response.get_json()["demo_patient_override_enabled"] is False
+    assert response.get_json()["demo_patient_email_override_enabled"] is False
 
 
 def test_update_registration_maps_value_error_to_400(client, monkeypatch):
-    monkeypatch.setattr(
-        "app.blueprints.config.config_routes.update_zoom_account",
-        lambda **kwargs: (_ for _ in ()).throw(ValueError("No valid fields provided")),
-    )
-
     response = client.patch(
         "/config/register/acct-1",
         headers=AUTH_HEADERS,
@@ -339,7 +310,7 @@ def test_update_registration_maps_value_error_to_400(client, monkeypatch):
 
 def test_update_registration_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes.update_zoom_account",
+        "app.blueprints.config.config_routes.update_zoom_account_credentials",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -394,11 +365,18 @@ def test_list_registrations_returns_summary(client, app):
                 kid="zoomly-acct-1",
                 zoom_access_token="zoom-token",
                 openemr_access_token="openemr-token",
-                timezone="America/Denver",
-                demo_patient_override_enabled=True,
-                demo_patient_email_override="demo-patient+acct1@example.com",
-                demo_patient_phone_override="+13035550111",
                 is_active=True,
+            )
+        )
+        db.session.add(
+            AccountConfig(
+                account_id="acct-1",
+                timezone="America/Denver",
+                demo_patient_email_override_enabled=True,
+                demo_patient_email_override="demo-patient+acct1@example.com",
+                demo_patient_phone_override_enabled=True,
+                demo_patient_phone_override="+13035550111",
+                allow_shared_zoom_user=True,
             )
         )
         db.session.add(
@@ -411,13 +389,10 @@ def test_list_registrations_returns_summary(client, app):
                 openemr_client_id="openemr-client-id-2",
                 private_key_path="/tmp/keys/acct-2/private.pem",
                 kid="zoomly-acct-2",
-                timezone="America/New_York",
-                demo_patient_override_enabled=False,
-                demo_patient_email_override=None,
-                demo_patient_phone_override=None,
                 is_active=False,
             )
         )
+        db.session.add(AccountConfig(account_id="acct-2", timezone="America/New_York"))
         db.session.commit()
 
     response = client.get("/config/registrations", headers=AUTH_HEADERS)
@@ -437,9 +412,11 @@ def test_list_registrations_returns_summary(client, app):
     assert acct1["has_zoom_token"] is True
     assert acct1["has_openemr_token"] is True
     assert acct1["timezone"] == "America/Denver"
-    assert acct1["demo_patient_override_enabled"] is True
+    assert acct1["demo_patient_email_override_enabled"] is True
     assert acct1["demo_patient_email_override"] == "demo-patient+acct1@example.com"
+    assert acct1["demo_patient_phone_override_enabled"] is True
     assert acct1["demo_patient_phone_override"] == "+13035550111"
+    assert acct1["allow_shared_zoom_user"] is True
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
 
@@ -448,9 +425,11 @@ def test_list_registrations_returns_summary(client, app):
     assert acct2["has_zoom_token"] is False
     assert acct2["has_openemr_token"] is False
     assert acct2["timezone"] == "America/New_York"
-    assert acct2["demo_patient_override_enabled"] is False
+    assert acct2["demo_patient_email_override_enabled"] is False
     assert acct2["demo_patient_email_override"] is None
+    assert acct2["demo_patient_phone_override_enabled"] is False
     assert acct2["demo_patient_phone_override"] is None
+    assert acct2["allow_shared_zoom_user"] is False
 
 
 def test_verify_registration_returns_404_for_unknown_account(client):
@@ -461,6 +440,10 @@ def test_verify_registration_returns_404_for_unknown_account(client):
 
 def test_verify_registration_returns_success_true(client, app, monkeypatch):
     _create_account(app, "acct-verify", is_active=True)
+    with app.app_context():
+        account = ZoomAccount.query.filter_by(account_id="acct-verify").first()
+        account.zoom_access_token = "zoom-token"
+        db.session.commit()
     monkeypatch.setattr(
         "app.blueprints.config.config_routes.verify_openemr_token_for_account",
         lambda account: True,
@@ -473,7 +456,8 @@ def test_verify_registration_returns_success_true(client, app, monkeypatch):
         "nickname": None,
         "zoom_account_id": "acct-verify",
         "openemr_verified": True,
-        "message": "OpenEMR token verified successfully",
+        "zoom_verified": "zoom-token",
+        "message": "OpenEMR and Zoom token verified successfully",
     }
 
 
@@ -491,6 +475,7 @@ def test_verify_registration_returns_success_false(client, app, monkeypatch):
         "nickname": None,
         "zoom_account_id": "acct-verify",
         "openemr_verified": False,
+        "zoom_verified": None,
         "message": "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again",
     }
 

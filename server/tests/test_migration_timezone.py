@@ -1,15 +1,16 @@
 from pathlib import Path
 
 
-def test_timezone_migration_adds_expected_column():
+def test_account_config_migration_moves_timezone_to_config_table():
     migration_path = (
         Path(__file__).resolve().parents[1]
         / "migrations"
         / "versions"
-        / "5ecd2a942ca3_current_schema_with_string_primary_keys.py"
+        / "77ba73f9eedb_add_account_config_table_move_config_.py"
     )
     text = migration_path.read_text(encoding="utf-8")
 
-    assert "op.create_table('zoom_accounts'" in text
+    assert "op.create_table('account_configs'" in text
     assert "'timezone'" in text
     assert "sa.String(length=64)" in text
+    assert "op.drop_column('zoom_accounts', 'timezone')" in text

@@ -2,7 +2,7 @@ import requests
 import pytest
 
 from app.extensions import db
-from app.models import ZoomAccount
+from app.models import AccountConfig, ZoomAccount
 from app.services.registration import registration
 
 
@@ -19,13 +19,24 @@ def _create_account(account_id: str, *, is_active: bool = True, **overrides) -> 
         openemr_registration_client_uri=overrides.get("openemr_registration_client_uri", "http://openemr.internal/client/1"),
         private_key_path=overrides.get("private_key_path", "/tmp/private.pem"),
         kid=overrides.get("kid", f"zoomly-{account_id}"),
-        timezone=overrides.get("timezone", "America/New_York"),
-        demo_patient_override_enabled=overrides.get("demo_patient_override_enabled", False),
-        demo_patient_email_override=overrides.get("demo_patient_email_override"),
-        demo_patient_phone_override=overrides.get("demo_patient_phone_override"),
         is_active=is_active,
     )
     db.session.add(account)
+    db.session.add(
+        AccountConfig(
+            account_id=account_id,
+            timezone=overrides.get("timezone", "America/New_York"),
+            demo_patient_email_override_enabled=overrides.get(
+                "demo_patient_email_override_enabled", False
+            ),
+            demo_patient_email_override=overrides.get("demo_patient_email_override"),
+            demo_patient_phone_override_enabled=overrides.get(
+                "demo_patient_phone_override_enabled", False
+            ),
+            demo_patient_phone_override=overrides.get("demo_patient_phone_override"),
+            allow_shared_zoom_user=overrides.get("allow_shared_zoom_user", False),
+        )
+    )
     db.session.commit()
     return account
 
@@ -106,6 +117,8 @@ def test_register_zoom_account_rejects_invalid_zoom_credentials(app, monkeypatch
                 "zoom-client-id",
                 "zoom-client-secret",
                 "webhook-secret",
+                None,
+                None,
                 "admin@example.com",
             )
         record = ZoomAccount.query.filter_by(account_id="acct-invalid").first()
@@ -130,6 +143,8 @@ def test_register_zoom_account_rejects_duplicate_active(app, monkeypatch):
                 "zoom-client-id",
                 "zoom-client-secret",
                 "webhook-secret",
+                None,
+                None,
                 "admin@example.com",
             )
 
@@ -151,19 +166,23 @@ def test_register_zoom_account_replaces_inactive_record(app, monkeypatch):
             },
         )
 
-        account = registration.register_zoom_account(
+        account, config = registration.register_zoom_account(
             None,
             "acct-inactive",
             "zoom-client-id",
             "zoom-client-secret",
             "webhook-secret",
+            None,
+            None,
             "admin@example.com",
         )
         records = ZoomAccount.query.filter_by(account_id="acct-inactive").all()
+        config_account_id = config.account_id
 
     assert len(records) == 1
     assert records[0].account_id == account.account_id
     assert account.is_active is True
+    assert config_account_id == "acct-inactive"
 
 
 def test_register_zoom_account_cleans_up_keys_when_openemr_registration_fails(app, monkeypatch):
@@ -182,6 +201,8 @@ def test_register_zoom_account_cleans_up_keys_when_openemr_registration_fails(ap
                 "zoom-client-id",
                 "zoom-client-secret",
                 "webhook-secret",
+                None,
+                None,
                 "admin@example.com",
             )
 
@@ -218,6 +239,8 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
                 "zoom-client-id",
                 "zoom-client-secret",
                 "webhook-secret",
+                None,
+                None,
                 "admin@example.com",
             )
 
@@ -241,24 +264,29 @@ def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, m
             },
         )
 
-        account = registration.register_zoom_account(
+        account, config = registration.register_zoom_account(
             "Main Clinic",
             "acct-success",
             "zoom-client-id",
             "zoom-client-secret",
             "webhook-secret",
+            None,
+            None,
             "admin@example.com",
         )
 
         stored = ZoomAccount.query.filter_by(account_id="acct-success").first()
+        config_timezone = config.timezone
+        stored_config_exists = stored.config is not None
 
     assert account.account_id == "acct-success"
     assert account.openemr_client_id == "openemr-client-id"
     assert account.nickname == "Main Clinic"
     assert account.kid == "zoomly-acct-success"
-    assert account.timezone == "America/New_York"
+    assert config_timezone == "America/New_York"
     assert account.openemr_registration_client_uri == "http://openemr.internal/oauth2/default/client/abc"
     assert stored is not None
+    assert stored_config_exists is True
 
 
 def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
@@ -283,12 +311,14 @@ def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
             "zoom-client-id",
             "zoom-client-secret",
             "webhook-secret",
+            None,
+            None,
             "admin@example.com",
             timezone="America/Los_Angeles",
         )
         stored = ZoomAccount.query.filter_by(account_id="acct-custom-tz").first()
         assert stored is not None
-        assert stored.timezone == "America/Los_Angeles"
+        assert stored.config.timezone == "America/Los_Angeles"
 
 
 def test_update_zoom_account_updates_editable_fields(app):
@@ -297,58 +327,82 @@ def test_update_zoom_account_updates_editable_fields(app):
             "acct-update",
             nickname="Old Clinic",
             timezone="America/New_York",
-            demo_patient_override_enabled=False,
+            demo_patient_email_override_enabled=False,
+            demo_patient_phone_override_enabled=False,
             demo_patient_email_override=None,
             demo_patient_phone_override=None,
         )
 
-        account = registration.update_zoom_account(
+        account = registration.update_zoom_account_credentials(
             zoom_account_id="acct-update",
             nickname="New Clinic",
             zoom_client_secret="new-client-secret",
             zoom_webhook_secret="new-webhook-secret",
+        )
+        config = registration.update_account_config(
+            zoom_account_id="acct-update",
             timezone="America/Denver",
-            demo_patient_override_enabled=True,
+            demo_patient_email_override_enabled=True,
             demo_patient_email_override="demo-patient@example.com",
+            demo_patient_phone_override_enabled=True,
             demo_patient_phone_override="+13035550199",
+            allow_shared_zoom_user=True,
         )
 
         stored = ZoomAccount.query.filter_by(account_id="acct-update").first()
+        config_values = {
+            "timezone": config.timezone,
+            "demo_patient_email_override_enabled": config.demo_patient_email_override_enabled,
+            "demo_patient_email_override": config.demo_patient_email_override,
+            "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
+            "demo_patient_phone_override": config.demo_patient_phone_override,
+            "allow_shared_zoom_user": config.allow_shared_zoom_user,
+        }
 
     assert stored is not None
     assert account.account_id == stored.account_id
     assert stored.nickname == "New Clinic"
     assert stored.client_secret == "new-client-secret"
     assert stored.webhook_secret == "new-webhook-secret"
-    assert stored.timezone == "America/Denver"
-    assert stored.demo_patient_override_enabled is True
-    assert stored.demo_patient_email_override == "demo-patient@example.com"
-    assert stored.demo_patient_phone_override == "+13035550199"
+    assert config_values["timezone"] == "America/Denver"
+    assert config_values["demo_patient_email_override_enabled"] is True
+    assert config_values["demo_patient_email_override"] == "demo-patient@example.com"
+    assert config_values["demo_patient_phone_override_enabled"] is True
+    assert config_values["demo_patient_phone_override"] == "+13035550199"
+    assert config_values["allow_shared_zoom_user"] is True
 
 
-def test_update_zoom_account_updates_false_boolean(app):
+def test_update_account_config_updates_false_boolean(app):
     with app.app_context():
-        _create_account("acct-update-false", demo_patient_override_enabled=True)
+        _create_account("acct-update-false", demo_patient_email_override_enabled=True)
 
-        account = registration.update_zoom_account(
+        config = registration.update_account_config(
             zoom_account_id="acct-update-false",
-            demo_patient_override_enabled=False,
+            demo_patient_email_override_enabled=False,
         )
-        assert account.demo_patient_override_enabled is False
+        assert config.demo_patient_email_override_enabled is False
 
 
-def test_update_zoom_account_raises_when_missing(app):
+def test_update_zoom_account_credentials_raises_when_missing(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found"):
-            registration.update_zoom_account("missing-account", nickname="New Clinic")
+            registration.update_zoom_account_credentials("missing-account", nickname="New Clinic")
 
 
-def test_update_zoom_account_raises_when_no_valid_fields(app):
+def test_update_zoom_account_credentials_raises_when_no_valid_fields(app):
     with app.app_context():
         _create_account("acct-update-empty")
 
         with pytest.raises(ValueError, match="No valid fields provided"):
-            registration.update_zoom_account("acct-update-empty")
+            registration.update_zoom_account_credentials("acct-update-empty")
+
+
+def test_update_account_config_raises_when_no_valid_fields(app):
+    with app.app_context():
+        _create_account("acct-config-empty")
+
+        with pytest.raises(ValueError, match="No valid fields provided"):
+            registration.update_account_config("acct-config-empty")
 
 
 def test_deregister_zoom_account_raises_when_missing(app):

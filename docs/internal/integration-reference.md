@@ -15,6 +15,9 @@ This is a working reference for model contracts, webhook payload expectations, a
 | `client_id` | `String(128)` | yes | Zoom OAuth client ID |
 | `client_secret` | `EncryptedType(String(256))` | yes | Zoom OAuth client secret (encrypted at rest) |
 | `webhook_secret` | `EncryptedType(String(256))` | no | Zoom webhook secret (encrypted at rest) |
+| `tenant_id` | `String(10)` | no | Zoom EHR Context tenant ID used in `X-Tenant-ID` |
+| `ehr_context_username` | `String(128)` | no | Basic Auth username for Zoom EHR Context token exchange |
+| `ehr_context_password_hash` | `String(256)` | no | Hashed EHR Context Basic Auth password |
 | `zoom_access_token` | `EncryptedType(Text)` | no | Cached Zoom token (encrypted at rest) |
 | `zoom_token_expires_at` | `DateTime(timezone=True)` | no | Zoom token expiry |
 | `openemr_client_id` | `String(256)` | no | Dynamic registration client ID from OpenEMR |
@@ -25,18 +28,29 @@ This is a working reference for model contracts, webhook payload expectations, a
 | `openemr_token_expires_at` | `DateTime(timezone=True)` | no | OpenEMR token expiry |
 | `private_key_path` | `String(512)` | no | Filesystem path to per-account private key |
 | `kid` | `String(256)` | no | JWKS key id used for private_key_jwt |
-| `timezone` | `String(64)` | yes | IANA timezone; default `America/New_York` |
-| `demo_patient_override_enabled` | `Boolean` | yes | Enables use of demo patient contact overrides |
-| `demo_patient_email_override` | `String(256)` | no | Optional demo override for patient email communications |
-| `demo_patient_phone_override` | `String(32)` | no | Optional demo override for patient phone/SMS communications |
 | `is_active` | `Boolean` | yes | Soft-active registration state |
 | `created_at` | `DateTime(timezone=True)` | yes | Created timestamp (UTC) |
 | `updated_at` | `DateTime(timezone=True)` | yes | Updated timestamp (UTC) |
 
 Relationships:
+- `config` -> `AccountConfig | None`
 - `provider_mappings` -> `ProviderMapping[]`
 - `appointment_type_filters` -> `AppointmentTypeFilter[]`
 - `meeting_records` -> `MeetingRecord[]`
+
+### `account_configs` (`AccountConfig`)
+
+| Column | Type | Required | Notes |
+|---|---|---|---|
+| `account_id` | `String(128, FK)` | yes | Primary key and FK to `zoom_accounts.account_id` |
+| `timezone` | `String(64)` | yes | IANA timezone used for Zoom meeting scheduling and EHR appointment window conversion; default `America/New_York` |
+| `allow_shared_zoom_user` | `Boolean` | yes | Allows shared Zoom user behavior in config workflows; default `false` |
+| `demo_patient_email_override_enabled` | `Boolean` | yes | Enables demo patient email override |
+| `demo_patient_email_override` | `String(256)` | no | Optional demo override for patient email communications |
+| `demo_patient_phone_override_enabled` | `Boolean` | yes | Enables demo patient phone override |
+| `demo_patient_phone_override` | `String(32)` | no | Optional demo override for patient phone/SMS communications |
+| `created_at` | `DateTime(timezone=True)` | no | Created timestamp (UTC) |
+| `updated_at` | `DateTime(timezone=True)` | no | Updated timestamp (UTC) |
 
 ### `provider_mappings` (`ProviderMapping`)
 
@@ -119,6 +133,7 @@ Relationships:
 | `event_type` | `String(128)` | yes | Event category |
 | `zoom_account_id` | `String(128)` | no | Context field |
 | `openemr_appointment_id` | `String(128)` | no | Context field |
+| `openemr_encounter_number` | `String(128)` | no | Context field |
 | `openemr_provider_id` | `String(128)` | no | Context field |
 | `openemr_patient_id` | `String(128)` | no | Context field |
 | `zoom_meeting_id` | `String(128)` | no | Context field |
@@ -148,6 +163,7 @@ JWT-protected blueprints:
 - `/config/*`
 - `/openemr/*`
 - `/zoom/*`, except OpenEMR-signed note endpoints
+- `/audit/*`
 
 Webhook routes keep their own signature contracts and do not use the config JWT.
 
@@ -165,19 +181,100 @@ Required JSON fields:
 Optional JSON fields:
 - `nickname`
 - `timezone` (defaults to `America/New_York`)
+- `ehr_context_username`
+- `ehr_context_password`
 
-`PATCH /config/register/<zoom_account_id>` updates editable registration fields. Only fields sent with non-null values are updated; `false` is valid for `demo_patient_override_enabled`.
+Registration returns the saved `ZoomAccount` identity fields plus the created `AccountConfig.timezone`. EHR Context credentials are stored on `ZoomAccount`; timezone and demo override settings are stored on `AccountConfig`.
+
+`PATCH /config/register/<zoom_account_id>` updates editable registration and account config fields. Only fields sent with non-null values are updated; `false` is valid for boolean settings.
 
 Editable JSON fields:
 - `nickname`
 - `zoom_client_secret`
 - `zoom_webhook_secret`
+- `ehr_context_username`
+- `ehr_context_password`
 - `timezone`
-- `demo_patient_override_enabled`
+- `allow_shared_zoom_user`
+- `demo_patient_email_override_enabled`
 - `demo_patient_email_override`
+- `demo_patient_phone_override_enabled`
 - `demo_patient_phone_override`
 
-`GET /config/registrations` includes `nickname`, `demo_patient_override_enabled`, and the demo patient contact override values in each registration summary. `POST /config/register/<zoom_account_id>/verify` includes `nickname` in its response.
+`GET /config/registrations` includes `nickname`, EHR Context username, token status, `AccountConfig.timezone`, `allow_shared_zoom_user`, and the split demo patient contact override flags/values in each registration summary. `POST /config/register/<zoom_account_id>/verify` includes `nickname`, OpenEMR verification, Zoom verification, and a combined status message.
+
+## Lookup And Audit API Contracts
+
+JWT-protected lookup helpers:
+- `GET /openemr/providers?zoom_account_id=...&search=...&id=...`
+- `GET /openemr/appointment-types?zoom_account_id=...`
+- `GET /zoom/users?zoom_account_id=...&search=...`
+
+All three require an active `ZoomAccount` for the supplied `zoom_account_id`. OpenEMR provider responses include `user_id`, the OpenEMR `users.id` value that should be stored on `ProviderMapping.openemr_provider_id` for webhook matching and EHR Context appointment lookups.
+
+JWT-protected audit log endpoint:
+- `GET /audit/logs`
+
+Supported filters:
+- `zoom_account_id`
+- `event_type`
+- `openemr_appointment_id`
+- `openemr_encounter_number`
+- `zoom_meeting_id`
+- `zoom_note_id`
+- `success` (`true` or `false`)
+- `date_from` / `date_to` ISO datetimes
+- `page` / `per_page` pagination (`per_page` max 200)
+
+Response shape:
+
+```json
+{
+  "total": 1,
+  "page": 1,
+  "per_page": 50,
+  "pages": 1,
+  "logs": []
+}
+```
+
+## Zoom EHR Context API Contract
+
+These `/rest/*` routes are called by Zoom's EHR integration and are not config-JWT protected.
+
+`GET /rest/auth/gettoken`
+- Requires `X-Tenant-ID: <tenant_id>`
+- Requires Basic Auth credentials matching `ZoomAccount.ehr_context_username` and `ehr_context_password_hash`
+- Returns `{"token": "...", "token_type": "Bearer", "expires_in": 3600}`
+- Token is an HS256 JWT signed with Flask `SECRET_KEY` and includes `sub` and `tid` claims set to the tenant ID
+
+`POST /rest/openendpoint/service/getAppointments`
+- Requires the same `X-Tenant-ID`
+- Requires `Authorization: Bearer <token-from-gettoken>`
+- Body: `{"dateTime": "2026-04-27T16:00:00", "zoomUserId": "..."}` where `dateTime` is UTC
+- Resolves `zoomUserId` through `ProviderMapping.zoom_user_id`
+- Requires `ProviderMapping.openemr_provider_id`
+- Converts the UTC query time into `AccountConfig.timezone`, queries OpenEMR appointments within +/- 2 hours, and returns Zoom's expected appointment list wrapper:
+
+```json
+{
+  "status": 200,
+  "response": [
+    {
+      "appointmentId": "391",
+      "providerId": "10",
+      "patientId": "109",
+      "startTime": "2026-04-27T16:00:00",
+      "endTime": "2026-04-27T16:30:00",
+      "serviceType": "Zoom Telehealth",
+      "name": "Aisha Johnson",
+      "dob": "1993-01-25",
+      "gender": "Female",
+      "appointmentType": "Telehealth Zoom"
+    }
+  ]
+}
+```
 
 ## OpenEMR Appointment Webhook Contract
 
@@ -271,17 +368,27 @@ ORDER BY seq;
 Current migration chain:
 - `0d3e2936f4b1_initial_schema` (baseline/stamp)
 - `5ecd2a942ca3_current_schema_with_string_primary_keys`
+- `77ba73f9eedb_add_account_config_table_move_config_`
+- `d7de11bd0c97_split_demo_patient_override_enabled_`
+- `585c85c5c79c_add_ehr_auth_fields_to_zoom_accounts`
 
 The current schema migration uses natural string primary keys for the core integration relationships:
 - `zoom_accounts.account_id`
 - `meeting_records.zoom_meeting_id`
 - foreign keys from provider mappings, appointment filters, meeting records, patients, and clinical notes point at those natural IDs.
 
+Recent config/auth migrations:
+- move per-account scheduling/demo settings from `zoom_accounts` to `account_configs`
+- split the old single demo patient override flag into separate email and phone enabled flags
+- add EHR Context tenant ID, username, and password hash fields to `zoom_accounts`
+
 ## Test Coverage Pointers
 
 Primary files for this integration slice:
+- `server/tests/test_blueprint_audit.py`
 - `server/tests/test_blueprint_auth.py`
 - `server/tests/test_blueprint_webhooks.py`
+- `server/tests/test_blueprint_ehr_context.py`
 - `server/tests/test_blueprint_openemr.py`
 - `server/tests/test_blueprint_zoom.py`
 - `server/tests/test_services_appointment_processor.py`
