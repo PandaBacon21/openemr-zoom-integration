@@ -17,6 +17,7 @@ export interface Registration {
   demo_patient_phone_override_enabled: boolean;
   demo_patient_phone_override: string | null;
   allow_shared_zoom_user: boolean;
+  note_writeback_mode: "both" | "clinical_note_only" | "soap_only";
   created_at: string;
   updated_at: string;
 }

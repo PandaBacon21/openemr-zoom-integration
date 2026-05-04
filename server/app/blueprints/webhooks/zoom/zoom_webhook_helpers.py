@@ -210,6 +210,9 @@ def _validate_and_process_note(
         )
         db.session.add(clinical_note)
         db.session.commit()
+
+        record.status = "note_received"
+        db.session.commit()
  
         write_audit_log(
             event_type="note.record_created",
@@ -367,11 +370,13 @@ def _validate_and_process_note(
         note_content=note_data.get("note_content", ""),
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
+        note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
  
     if success:
         clinical_note.is_written_to_openemr = True
         clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
+        record.status = "note_written" 
         db.session.commit()
  
     write_audit_log(
@@ -460,3 +465,55 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
         )
 
     return {"status": "ok", "eid": eid}, 200
+
+
+def _handle_meeting_started(payload: dict, account: ZoomAccount):
+    """
+    Handle meeting.started event.
+    Updates MeetingRecord status to 'started' and sets meeting_started_at.
+    Used to resolve which provider is active when multiple providers share
+    a Zoom user license.
+    """
+
+    obj = payload.get("payload", {}).get("object", {})
+    meeting_id = str(obj.get("id", ""))
+    host_id = obj.get("host_id")
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.started | meeting_id={meeting_id} host_id={host_id}"
+    )
+
+    if not meeting_id:
+        current_app.logger.warning("zoom_webhook | meeting.started | missing meeting id")
+        return {"error": "missing meeting id"}, 400
+
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=meeting_id,
+        zoom_account_id=account.account_id,
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | meeting.started | no MeetingRecord for meeting_id={meeting_id}"
+        )
+        return {"status": "no_record"}, 200
+
+    record.status = "started"
+    record.meeting_started_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    write_audit_log(
+        event_type="meeting.started",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_id,
+        openemr_appointment_id=record.openemr_appointment_id,
+        openemr_provider_id=record.openemr_provider_id,
+    )
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.started | meeting_id={meeting_id} "
+        f"provider_id={record.openemr_provider_id} status=started"
+    )
+
+    return {"status": "ok"}, 200

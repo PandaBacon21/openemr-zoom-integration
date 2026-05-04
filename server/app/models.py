@@ -122,6 +122,8 @@ class AccountConfig(db.Model):
     demo_patient_phone_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     demo_patient_phone_override = db.Column(db.String(32), nullable=True)
 
+    note_writeback_mode = db.Column(db.String(32), nullable=False, default="both", server_default="both")
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

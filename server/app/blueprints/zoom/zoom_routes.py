@@ -145,6 +145,7 @@ def fetch_zoom_note(encounter_number: int):
         note_content=note_content,
         note_title=note_title,
         note_id=note_id,
+        note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
  
     if not success:

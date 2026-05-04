@@ -283,6 +283,7 @@ def update_account_config(
     demo_patient_email_override: str | None = None,
     demo_patient_phone_override_enabled: bool| None = None, 
     demo_patient_phone_override: str | None = None,
+    note_writeback_mode: str | None = None,
 ) -> AccountConfig:
     """Update config fields on AccountConfig."""
 
@@ -304,6 +305,7 @@ def update_account_config(
         "demo_patient_email_override":   demo_patient_email_override,
         "demo_patient_phone_override_enabled": demo_patient_phone_override_enabled,
         "demo_patient_phone_override":   demo_patient_phone_override,
+        "note_writeback_mode": note_writeback_mode,
     }
 
     updated = []

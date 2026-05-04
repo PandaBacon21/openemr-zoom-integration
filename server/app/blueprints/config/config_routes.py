@@ -39,6 +39,7 @@ CONFIG_FIELDS = {
     "demo_patient_phone_override_enabled",
     "demo_patient_email_override",
     "demo_patient_phone_override",
+    "note_writeback_mode",
 }
 
 
@@ -122,6 +123,7 @@ def register():
             "openemr_client_id": account.openemr_client_id,
             "tenet_id": account.tenant_id,
             "ehr_context_username": account.ehr_context_username,
+            "note_writeback_mode": config.note_writeback_mode,
             "kid": account.kid,
             "timezone": config.timezone,
             "created_at": account.created_at.isoformat(),
@@ -167,6 +169,7 @@ def update_registration(zoom_account_id: str):
                 demo_patient_email_override=data.get("demo_patient_email_override"),
                 demo_patient_phone_override_enabled=data.get("demo_patient_phone_override_enabled"),
                 demo_patient_phone_override=data.get("demo_patient_phone_override"),
+                note_writeback_mode=data.get("note_writeback_mode"),
             )
 
         account = ZoomAccount.query.filter_by(
@@ -197,6 +200,7 @@ def update_registration(zoom_account_id: str):
             "demo_patient_email_override": config.demo_patient_email_override,
             "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
             "demo_patient_phone_override": config.demo_patient_phone_override,
+            "note_writeback_mode": config.note_writeback_mode,
             "updated_at": account.updated_at.isoformat(),
         }), 200
 

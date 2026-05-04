@@ -34,6 +34,7 @@ const EVENT_TYPE_OPTIONS = [
   "meeting.update_failed",
   "meeting.deleted",
   "meeting.delete_failed",
+  "meeting.started",
   "note.received",
   "note.record_created",
   "note.retrieved",
@@ -115,7 +116,8 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
         else if (currentFilters.accountId) {
           filters.zoom_account_id = currentFilters.accountId;
         }
-        if (currentFilters.eventType) filters.event_type = currentFilters.eventType;
+        if (currentFilters.eventType)
+          filters.event_type = currentFilters.eventType;
         if (currentFilters.appointmentId) {
           filters.openemr_appointment_id = currentFilters.appointmentId;
         }
@@ -419,21 +421,13 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell
-                  colSpan={columnCount}
-                  align="center"
-                  sx={{ py: 4 }}
-                >
+                <TableCell colSpan={columnCount} align="center" sx={{ py: 4 }}>
                   <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
             ) : (logs ?? []).length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={columnCount}
-                  align="center"
-                  sx={{ py: 4 }}
-                >
+                <TableCell colSpan={columnCount} align="center" sx={{ py: 4 }}>
                   <Typography
                     variant="body2"
                     color="text.secondary"

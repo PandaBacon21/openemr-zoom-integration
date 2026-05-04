@@ -129,6 +129,7 @@ def write_note_to_encounter(
     note_content: str,
     note_title: str,
     note_id: str,
+    note_writeback_mode: str = "both",
     ) -> bool:
     """
     Write Zoom clinical note into an OpenEMR encounter.
@@ -161,31 +162,33 @@ def write_note_to_encounter(
  
     try:
         with engine.begin() as conn:
-            _upsert_soap_form(
-                conn=conn,
-                encounter_number=encounter_number,
-                pid=pid,
-                provider_id=provider_id,
-                provider_username=provider_username,
-                soap=soap,
-                now=now,
-            )
-            _upsert_clinical_note_form(
-                conn=conn,
-                encounter_number=encounter_number,
-                pid=pid,
-                provider_id=provider_id,
-                provider_username=provider_username,
-                note_content=note_content,
-                note_title=note_title,
-                note_id=note_id,
-                now=now,
-                today=today,
-            )
- 
+            if note_writeback_mode in ("both", "soap_only"):
+                _upsert_soap_form(
+                    conn=conn,
+                    encounter_number=encounter_number,
+                    pid=pid,
+                    provider_id=provider_id,
+                    provider_username=provider_username,
+                    soap=soap,
+                    now=now,
+                )
+            if note_writeback_mode in ("both", "clinical_note_only"):
+                _upsert_clinical_note_form(
+                    conn=conn,
+                    encounter_number=encounter_number,
+                    pid=pid,
+                    provider_id=provider_id,
+                    provider_username=provider_username,
+                    note_content=note_content,
+                    note_title=note_title,
+                    note_id=note_id,
+                    now=now,
+                    today=today,
+                )
+
         logger.info(
-            f"openemr.write_note_to_encounter | Upserted SOAP + Clinical Notes "
-            f"to encounter={encounter_number} pid={pid} note_id={note_id}"
+            f"openemr.write_note_to_encounter | mode={note_writeback_mode} "
+            f"encounter={encounter_number} pid={pid} note_id={note_id}"
         )
         return True
  
