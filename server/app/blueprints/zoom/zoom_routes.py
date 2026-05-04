@@ -240,6 +240,9 @@ def complete_zoom_note(encounter_number: int):
             zoom_account_id=record.zoom_account_id,
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=row.provider_id,
+            openemr_patient_id=row.pid,
         )
         return jsonify({"status": "already_completed"}), 200
 
@@ -254,7 +257,7 @@ def complete_zoom_note(encounter_number: int):
 
     # --- 6. Mark note completed in Zoom ---
     try:
-        mark_zoom_note_completed(account, clinical_note.zoom_note_id)
+        completion_success = mark_zoom_note_completed(account, clinical_note.zoom_note_id)
     except Exception as e:
         logger.error(f"complete_zoom_note | Zoom API error for note_id={clinical_note.zoom_note_id}: {e}")
         write_audit_log(
@@ -263,7 +266,24 @@ def complete_zoom_note(encounter_number: int):
             zoom_account_id=account.account_id,
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=row.provider_id,
+            openemr_patient_id=row.pid,
             error_message=str(e),
+        )
+        return jsonify({"status": "error", "reason": "zoom api error"}), 200
+    if not completion_success:
+        logger.error(f"complete_zoom_note | Zoom API returned failure for note_id={clinical_note.zoom_note_id}")
+        write_audit_log(
+            event_type="zoom.completion_error",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_note_id=clinical_note.zoom_note_id,
+            openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=row.provider_id,
+            openemr_patient_id=row.pid,
+            error_message="Zoom note completion failed",
         )
         return jsonify({"status": "error", "reason": "zoom api error"}), 200
 
@@ -279,7 +299,9 @@ def complete_zoom_note(encounter_number: int):
             zoom_account_id=account.account_id,
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
-            detail={"encounter": encounter_number}
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=row.provider_id,
+            openemr_patient_id=row.pid,
         )
     except Exception as e:
         logger.error(f"complete_zoom_note | Failed to update ClinicalNoteRecord for note_id={clinical_note.zoom_note_id}: {e}")

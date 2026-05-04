@@ -17,6 +17,8 @@ def get_audit_logs():
         event_type              — filter by event type string
         openemr_appointment_id  — filter by appointment ID
         openemr_encounter_number— filter by encounter number
+        openemr_provider_id     — filter by OpenEMR provider ID
+        openemr_patient_id      — filter by OpenEMR patient ID
         zoom_meeting_id         — filter by Zoom meeting ID
         zoom_note_id            — filter by Zoom note ID
         success                 — filter by success (true/false)
@@ -44,6 +46,14 @@ def get_audit_logs():
     openemr_encounter_number = request.args.get("openemr_encounter_number")
     if openemr_encounter_number:
         query = query.filter(AuditLog.openemr_encounter_number == openemr_encounter_number)
+
+    openemr_provider_id = request.args.get("openemr_provider_id")
+    if openemr_provider_id:
+        query = query.filter(AuditLog.openemr_provider_id == openemr_provider_id)
+
+    openemr_patient_id = request.args.get("openemr_patient_id")
+    if openemr_patient_id:
+        query = query.filter(AuditLog.openemr_patient_id == openemr_patient_id)
 
     zoom_meeting_id = request.args.get("zoom_meeting_id")
     if zoom_meeting_id:

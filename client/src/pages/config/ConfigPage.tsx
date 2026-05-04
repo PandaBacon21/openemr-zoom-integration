@@ -43,7 +43,8 @@ const ConfigPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchAccounts();
+    const timeoutId = window.setTimeout(fetchAccounts, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [fetchAccounts]);
 
   const handleRegistrationSuccess = (account: Registration) => {
@@ -64,7 +65,7 @@ const ConfigPage: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: "flex", height: "100%", gap: 0 }}>
+    <Box sx={{ display: "flex", height: "100%", gap: 0, minWidth: 0 }}>
       {/* Inner sidebar */}
       <Box
         sx={{
@@ -166,7 +167,15 @@ const ConfigPage: React.FC = () => {
       </Box>
 
       {/* Main content area */}
-      <Box sx={{ flexGrow: 1, p: 3, overflowY: "auto" }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          p: 3,
+          overflowX: "hidden",
+          overflowY: "auto",
+        }}
+      >
         {selectedAccountId === "new" ? (
           <RegisterAccountForm onSuccess={handleRegistrationSuccess} />
         ) : selectedAccount ? (

@@ -148,6 +148,16 @@ def _handle_new_meeting(match, payload: dict) -> dict:
             f"webhooks.openemr | eid={eid} account={account.account_id} "
             f"Zoom meeting creation failed: {e}"
         )
+        write_audit_log(
+            event_type="meeting.create_failed",
+            success=False,
+            zoom_account_id=account.account_id,
+            openemr_appointment_id=eid,
+            openemr_provider_id=mapping.openemr_provider_id,
+            openemr_patient_id=payload.get("pid"),
+            error_message=str(e),
+            detail={"stage": "zoom_create"},
+        )
         return {"error": str(e)}
  
     try:
@@ -205,7 +215,10 @@ def _handle_new_meeting(match, payload: dict) -> dict:
                 success=success,
                 zoom_account_id=account.account_id,
                 openemr_appointment_id=eid,
+                openemr_provider_id=mapping.openemr_provider_id,
+                openemr_patient_id=pid,
                 zoom_meeting_id=meeting_data["meeting_id"],
+                error_message=None if success else "Zoom URL writeback failed",
             )   
  
         return {
@@ -226,7 +239,11 @@ def _handle_new_meeting(match, payload: dict) -> dict:
             success=False,
             zoom_account_id=account.account_id,
             openemr_appointment_id=eid,
+            openemr_provider_id=mapping.openemr_provider_id,
+            openemr_patient_id=payload.get("pid"),
+            zoom_meeting_id=meeting_data.get("meeting_id"),
             error_message=str(e),
+            detail={"stage": "local_record_create"},
         )
 
         return {"error": str(e)}
@@ -238,7 +255,9 @@ def _handle_existing_meeting(
     payload: dict
 ) -> dict:
     account = match.zoom_account
+    mapping = match.provider_mapping
     eid = payload.get("eid")
+    payload_pid = payload.get("pid")
 
     current_app.logger.info(
         f"webhooks.openemr | eid={eid} existing MeetingRecord "
@@ -251,6 +270,17 @@ def _handle_existing_meeting(
         current_app.logger.error(
             f"webhooks.openemr | eid={eid} failed to check Zoom meeting "
             f"{record.zoom_meeting_id}: {e}"
+        )
+        write_audit_log(
+            event_type="meeting.update_failed",
+            success=False,
+            zoom_account_id=account.account_id,
+            openemr_appointment_id=eid,
+            openemr_provider_id=mapping.openemr_provider_id,
+            openemr_patient_id=payload_pid,
+            zoom_meeting_id=record.zoom_meeting_id,
+            error_message=str(e),
+            detail={"stage": "zoom_lookup"},
         )
         return {"error": str(e)}
 
@@ -265,6 +295,17 @@ def _handle_existing_meeting(
         except Exception as e:
             current_app.logger.error(
                 f"webhooks.openemr | eid={eid} replacement meeting creation failed: {e}"
+            )
+            write_audit_log(
+                event_type="meeting.recreate_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=mapping.openemr_provider_id,
+                openemr_patient_id=payload_pid,
+                zoom_meeting_id=record.zoom_meeting_id,
+                error_message=str(e),
+                detail={"stage": "zoom_create_replacement"},
             )
             return {"error": str(e)}
 
@@ -285,7 +326,7 @@ def _handle_existing_meeting(
                 zoom_start_url=meeting_data["start_url"],
                 zoom_join_url=meeting_data["join_url"],
                 openemr_appointment_id=str(eid),
-                openemr_provider_id=match.provider_mapping.openemr_provider_id,
+                openemr_provider_id=mapping.openemr_provider_id,
                 openemr_appt_status=payload.get("appt_status"),
                 status="created",
             )
@@ -322,7 +363,10 @@ def _handle_existing_meeting(
                     success=success,
                     zoom_account_id=account.account_id,
                     openemr_appointment_id=eid,
+                    openemr_provider_id=mapping.openemr_provider_id,
+                    openemr_patient_id=pid,
                     zoom_meeting_id=meeting_data["meeting_id"],
+                    error_message=None if success else "Zoom URL writeback failed",
                 )
 
             return {
@@ -334,6 +378,17 @@ def _handle_existing_meeting(
             }
         except Exception as e:
             db.session.rollback()
+            write_audit_log(
+                event_type="meeting.recreate_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=mapping.openemr_provider_id,
+                openemr_patient_id=pid,
+                zoom_meeting_id=meeting_data.get("meeting_id"),
+                error_message=str(e),
+                detail={"stage": "local_record_recreate"},
+            )
             return {"error": str(e)}
 
     else:
@@ -348,6 +403,17 @@ def _handle_existing_meeting(
             current_app.logger.error(
                 f"webhooks.openemr | eid={eid} failed to update Zoom meeting "
                 f"{record.zoom_meeting_id}: {e}"
+            )
+            write_audit_log(
+                event_type="meeting.update_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=mapping.openemr_provider_id,
+                openemr_patient_id=payload_pid,
+                zoom_meeting_id=record.zoom_meeting_id,
+                error_message=str(e),
+                detail={"stage": "zoom_update"},
             )
             return {"error": str(e)}
 
@@ -376,6 +442,17 @@ def _handle_existing_meeting(
             }
         except Exception as e:
             db.session.rollback()
+            write_audit_log(
+                event_type="meeting.update_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=mapping.openemr_provider_id,
+                openemr_patient_id=payload_pid,
+                zoom_meeting_id=record.zoom_meeting_id,
+                error_message=str(e),
+                detail={"stage": "local_record_update"},
+            )
             return {"error": str(e)}
 
 # ---------------------------------------------------------------------------
@@ -407,10 +484,25 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
     errors = []
  
     for record in records:
+        patient = MeetingPatient.query.filter_by(
+            zoom_meeting_id=record.zoom_meeting_id
+        ).first()
+        patient_id = patient.openemr_patient_id if patient else None
         account = ZoomAccount.query.filter_by(
             account_id=record.zoom_account_id, is_active=True
         ).first()
         if not account:
+            write_audit_log(
+                event_type="meeting.delete_failed",
+                success=False,
+                zoom_account_id=record.zoom_account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=record.openemr_provider_id,
+                openemr_patient_id=patient_id,
+                zoom_meeting_id=record.zoom_meeting_id,
+                error_message="no active account found",
+                detail={"stage": "account_lookup"},
+            )
             errors.append({"meeting_id": record.zoom_meeting_id, "error": "no active account found"})
             continue
 
@@ -423,6 +515,17 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
             current_app.logger.error(
                 f"webhooks.openemr | eid={eid} failed to delete Zoom meeting "
                 f"{meeting_id}: {e}"
+            )
+            write_audit_log(
+                event_type="meeting.delete_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=record.openemr_provider_id,
+                openemr_patient_id=patient_id,
+                zoom_meeting_id=meeting_id,
+                error_message=str(e),
+                detail={"stage": "zoom_delete"},
             )
             errors.append({"meeting_id": meeting_id, "error": str(e)})
             # Mark record as error but continue — still remove from DB
@@ -456,8 +559,11 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
                 success=False,
                 zoom_account_id=account.account_id,
                 openemr_appointment_id=eid,
+                openemr_provider_id=record.openemr_provider_id,
+                openemr_patient_id=patient_id,
                 zoom_meeting_id=meeting_id,
                 error_message=str(e),
+                detail={"stage": "local_record_delete"},
             )
             errors.append({"meeting_id": meeting_id, "error": str(e)})
  
@@ -469,5 +575,3 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
         "eid": eid,
         "deleted_meetings": deleted_meetings
     }, 200
-
-

@@ -140,7 +140,14 @@ const Layout: React.FC = () => {
       </Drawer>
 
       {/* Main content */}
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         <AppBar
           position="static"
           color="inherit"
@@ -159,7 +166,10 @@ const Layout: React.FC = () => {
           </Toolbar>
         </AppBar>
 
-        <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+        <Box
+          component="main"
+          sx={{ flexGrow: 1, p: 3, minWidth: 0, overflowX: "hidden" }}
+        >
           <Outlet />
         </Box>
       </Box>

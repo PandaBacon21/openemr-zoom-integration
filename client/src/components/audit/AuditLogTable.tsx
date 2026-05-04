@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Table,
@@ -16,7 +16,6 @@ import {
   Pagination,
   CircularProgress,
   Alert,
-  Stack,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { getAuditLogs } from "../../api/config";
@@ -26,10 +25,15 @@ import AuditLogRow from "./AuditLogRow";
 const EVENT_TYPE_OPTIONS = [
   "appointment.received",
   "appointment.dropped",
+  "appointment.patient_arrived",
   "meeting.created",
+  "meeting.create_failed",
   "meeting.recreated",
+  "meeting.recreate_failed",
   "meeting.updated",
+  "meeting.update_failed",
   "meeting.deleted",
+  "meeting.delete_failed",
   "note.received",
   "note.record_created",
   "note.retrieved",
@@ -37,6 +41,8 @@ const EVENT_TYPE_OPTIONS = [
   "note.write_failed",
   "note.dropped",
   "note.encounter_failed",
+  "note.context_missing",
+  "zoom.webhook_signature_failed",
   "zoom.completion_success",
   "zoom.completion_error",
   "zoom.completion_skipped",
@@ -44,10 +50,26 @@ const EVENT_TYPE_OPTIONS = [
   "openemr.write_error",
   "openemr.url_writeback_success",
   "openemr.url_writeback_failed",
+  "config.registration_created",
+  "config.registration_updated",
+  "config.registration_deleted",
+  "config.ehr_credentials_updated",
 ];
 
+interface AuditFilterValues {
+  accountId: string;
+  eventType: string;
+  appointmentId: string;
+  encounterId: string;
+  providerId: string;
+  patientId: string;
+  meetingId: string;
+  noteId: string;
+  successFilter: string;
+}
+
 interface Props {
-  lockedAccountId?: string; // if set, zoom_account_id filter is locked and hidden
+  lockedAccountId?: string;
 }
 
 const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
@@ -57,33 +79,67 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
   const [page, setPage] = useState(1);
   const [eventType, setEventType] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [appointmentId, setAppointmentId] = useState("");
   const [encounterId, setEncounterId] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const [patientId, setPatientId] = useState("");
   const [meetingId, setMeetingId] = useState("");
   const [noteId, setNoteId] = useState("");
   const [successFilter, setSuccessFilter] = useState("");
 
   const fetchLogs = useCallback(
-    async (currentPage = page) => {
+    async (
+      currentPage = page,
+      filterOverrides: Partial<AuditFilterValues> = {},
+    ) => {
       setLoading(true);
       setError(null);
       try {
+        const currentFilters = {
+          accountId,
+          eventType,
+          appointmentId,
+          encounterId,
+          providerId,
+          patientId,
+          meetingId,
+          noteId,
+          successFilter,
+          ...filterOverrides,
+        };
         const filters: AuditLogFilters = { page: currentPage, per_page: 50 };
         if (lockedAccountId) filters.zoom_account_id = lockedAccountId;
-        if (eventType) filters.event_type = eventType;
-        if (appointmentId) filters.openemr_appointment_id = appointmentId;
-        if (encounterId) filters.openemr_encounter_number = encounterId;
-        if (meetingId) filters.zoom_meeting_id = meetingId;
-        if (noteId) filters.zoom_note_id = noteId;
-        if (successFilter !== "") filters.success = successFilter === "true";
+        else if (currentFilters.accountId) {
+          filters.zoom_account_id = currentFilters.accountId;
+        }
+        if (currentFilters.eventType) filters.event_type = currentFilters.eventType;
+        if (currentFilters.appointmentId) {
+          filters.openemr_appointment_id = currentFilters.appointmentId;
+        }
+        if (currentFilters.encounterId) {
+          filters.openemr_encounter_number = currentFilters.encounterId;
+        }
+        if (currentFilters.providerId) {
+          filters.openemr_provider_id = currentFilters.providerId;
+        }
+        if (currentFilters.patientId) {
+          filters.openemr_patient_id = currentFilters.patientId;
+        }
+        if (currentFilters.meetingId) {
+          filters.zoom_meeting_id = currentFilters.meetingId;
+        }
+        if (currentFilters.noteId) filters.zoom_note_id = currentFilters.noteId;
+        if (currentFilters.successFilter !== "") {
+          filters.success = currentFilters.successFilter === "true";
+        }
 
         const res = await getAuditLogs(filters);
-        setLogs(res.data.logs);
-        setTotal(res.data.total);
-        setPages(res.data.pages);
+        setLogs(res.data.logs ?? []);
+        setTotal(res.data.total ?? 0);
+        setPages(res.data.pages ?? 1);
       } catch {
         setError("Failed to load audit logs");
       } finally {
@@ -92,19 +148,30 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
     },
     [
       lockedAccountId,
+      accountId,
       eventType,
       appointmentId,
       encounterId,
+      providerId,
+      patientId,
       meetingId,
       noteId,
       successFilter,
       page,
     ],
   );
+  const fetchLogsRef = useRef(fetchLogs);
 
   useEffect(() => {
-    fetchLogs(1);
-    setPage(1);
+    fetchLogsRef.current = fetchLogs;
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      fetchLogsRef.current(1);
+      setPage(1);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [lockedAccountId]);
 
   const handleSearch = () => {
@@ -114,13 +181,26 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
 
   const handleClear = () => {
     setEventType("");
+    setAccountId("");
     setAppointmentId("");
     setEncounterId("");
+    setProviderId("");
+    setPatientId("");
     setMeetingId("");
     setNoteId("");
     setSuccessFilter("");
     setPage(1);
-    fetchLogs(1);
+    fetchLogs(1, {
+      accountId: "",
+      eventType: "",
+      appointmentId: "",
+      encounterId: "",
+      providerId: "",
+      patientId: "",
+      meetingId: "",
+      noteId: "",
+      successFilter: "",
+    });
   };
 
   const handlePageChange = (_: unknown, value: number) => {
@@ -128,8 +208,21 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
     fetchLogs(value);
   };
 
+  const showAccountColumn = !lockedAccountId;
+  const columnCount = showAccountColumn ? 11 : 10;
+  const tableMinWidth = showAccountColumn ? 1680 : 1520;
+
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+      }}
+    >
       {/* Filters */}
       <Box component={Paper} variant="outlined" sx={{ p: 2 }}>
         <Typography
@@ -145,7 +238,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
         >
           Filters
         </Typography>
-        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1.5 }}>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
           <TextField
             label="Event Type"
             select
@@ -163,38 +256,6 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
           </TextField>
 
           <TextField
-            label="Appointment ID"
-            value={appointmentId}
-            onChange={(e) => setAppointmentId(e.target.value)}
-            size="small"
-            sx={{ width: 150 }}
-          />
-
-          <TextField
-            label="Encounter #"
-            value={encounterId}
-            onChange={(e) => setEncounterId(e.target.value)}
-            size="small"
-            sx={{ width: 130 }}
-          />
-
-          <TextField
-            label="Meeting ID"
-            value={meetingId}
-            onChange={(e) => setMeetingId(e.target.value)}
-            size="small"
-            sx={{ width: 150 }}
-          />
-
-          <TextField
-            label="Note ID"
-            value={noteId}
-            onChange={(e) => setNoteId(e.target.value)}
-            size="small"
-            sx={{ width: 150 }}
-          />
-
-          <TextField
             label="Status"
             select
             value={successFilter}
@@ -206,6 +267,64 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
             <MenuItem value="true">Success</MenuItem>
             <MenuItem value="false">Failed</MenuItem>
           </TextField>
+
+          {showAccountColumn && (
+            <TextField
+              label="Account ID"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              size="small"
+              sx={{ width: 160 }}
+            />
+          )}
+
+          <TextField
+            label="Meeting ID"
+            value={meetingId}
+            onChange={(e) => setMeetingId(e.target.value)}
+            size="small"
+            sx={{ width: 150 }}
+          />
+
+          <TextField
+            label="Appointment ID"
+            value={appointmentId}
+            onChange={(e) => setAppointmentId(e.target.value)}
+            size="small"
+            sx={{ width: 130 }}
+          />
+
+          <TextField
+            label="Encounter #"
+            value={encounterId}
+            onChange={(e) => setEncounterId(e.target.value)}
+            size="small"
+            sx={{ width: 120 }}
+          />
+
+          <TextField
+            label="Provider ID"
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+            size="small"
+            sx={{ width: 130 }}
+          />
+
+          <TextField
+            label="Patient ID"
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+            size="small"
+            sx={{ width: 130 }}
+          />
+
+          <TextField
+            label="Note ID"
+            value={noteId}
+            onChange={(e) => setNoteId(e.target.value)}
+            size="small"
+            sx={{ width: 150 }}
+          />
 
           <Button
             variant="contained"
@@ -230,7 +349,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
           >
             <RefreshIcon fontSize="small" />
           </IconButton>
-        </Stack>
+        </Box>
       </Box>
 
       {/* Results summary */}
@@ -242,36 +361,79 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          {loading
-            ? "Loading..."
-            : `${(total ?? 0).toLocaleString()} events`}{" "}
+          {loading ? "Loading..." : `${(total ?? 0).toLocaleString()} events`}
         </Typography>
       </Box>
 
       {error && <Alert severity="error">{error}</Alert>}
 
       {/* Table */}
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
+      <TableContainer
+        component={Paper}
+        variant="outlined"
+        sx={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          overflowX: "auto",
+        }}
+      >
+        <Table size="small" sx={{ minWidth: tableMinWidth }}>
           <TableHead>
             <TableRow sx={{ bgcolor: "background.default" }}>
-              <TableCell sx={{ width: 32 }} />
-              <TableCell sx={{ fontWeight: 600, width: 160 }}>Time</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Event</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Meeting ID</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Appointment ID</TableCell>
+              <TableCell sx={{ minWidth: 48 }} />
+              <TableCell sx={{ fontWeight: 600, minWidth: 170 }}>
+                Time
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 240 }}>
+                Event
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 80 }}>
+                Status
+              </TableCell>
+              {showAccountColumn && (
+                <TableCell sx={{ fontWeight: 600, minWidth: 160 }}>
+                  Account
+                </TableCell>
+              )}
+              <TableCell sx={{ fontWeight: 600, minWidth: 170 }}>
+                Meeting ID
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 140 }}>
+                Appt ID
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>
+                Encounter #
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>
+                Provider ID
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>
+                Patient ID
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, minWidth: 170 }}>
+                Note ID
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                <TableCell
+                  colSpan={columnCount}
+                  align="center"
+                  sx={{ py: 4 }}
+                >
                   <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
             ) : (logs ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                <TableCell
+                  colSpan={columnCount}
+                  align="center"
+                  sx={{ py: 4 }}
+                >
                   <Typography
                     variant="body2"
                     color="text.secondary"
@@ -282,7 +444,13 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
                 </TableCell>
               </TableRow>
             ) : (
-              logs.map((log) => <AuditLogRow key={log.id} log={log} />)
+              logs.map((log) => (
+                <AuditLogRow
+                  key={log.id}
+                  log={log}
+                  showAccountColumn={showAccountColumn}
+                />
+              ))
             )}
           </TableBody>
         </Table>

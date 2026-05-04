@@ -103,6 +103,8 @@ export interface AuditLogFilters {
   event_type?: string;
   openemr_appointment_id?: string;
   openemr_encounter_number?: string;
+  openemr_provider_id?: string;
+  openemr_patient_id?: string;
   zoom_meeting_id?: string;
   zoom_note_id?: string;
   success?: boolean;

@@ -250,8 +250,9 @@ class MeetingRecord(db.Model):
     openemr_appt_status = db.Column(db.String(16), nullable=True)
  
     # Status progression:
-    # created → note_received → note_written → completed → error | cancelled
+    # created → started → note_received → note_written → completed → error | cancelled
     status = db.Column(db.String(64), default="created", nullable=False)
+    meeting_started_at = db.Column(db.DateTime(timezone=True), nullable=True)
  
     created_at = db.Column(
         db.DateTime(timezone=True),
