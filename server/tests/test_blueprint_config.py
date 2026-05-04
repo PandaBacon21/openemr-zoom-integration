@@ -117,6 +117,53 @@ def test_register_endpoint_success(client, monkeypatch):
     }
 
 
+def test_register_endpoint_audits_without_secret_values(client, monkeypatch):
+    fake_result = _fake_registration_result(
+        account_id="acct-1",
+        client_id="client-id",
+        ehr_context_username="ehr-user",
+    )
+    calls = []
+    monkeypatch.setattr("app.blueprints.config.config_routes.register_zoom_account", lambda **kwargs: fake_result)
+    monkeypatch.setattr("app.blueprints.config.config_routes.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    response = client.post(
+        "/config/register",
+        headers=AUTH_HEADERS,
+        json={
+            "zoom_account_id": "acct-1",
+            "zoom_client_id": "client-id",
+            "zoom_client_secret": "client-secret-value",
+            "zoom_webhook_secret": "webhook-secret-value",
+            "contact_email": "admin@example.com",
+            "ehr_context_username": "ehr-user",
+            "ehr_context_password": "ehr-password-value",
+            "timezone": "America/Denver",
+        },
+    )
+
+    assert response.status_code == 201
+    audit_call = calls[0]
+    assert audit_call["event_type"] == "config.registration_created"
+    assert audit_call["success"] is True
+    assert audit_call["zoom_account_id"] == "acct-1"
+    assert audit_call["detail"] == {
+        "credential_fields": [
+            "contact_email",
+            "ehr_context_password",
+            "ehr_context_username",
+            "zoom_client_id",
+            "zoom_client_secret",
+            "zoom_webhook_secret",
+        ],
+        "config_fields": ["timezone"],
+    }
+    detail_text = str(audit_call["detail"])
+    assert "client-secret-value" not in detail_text
+    assert "webhook-secret-value" not in detail_text
+    assert "ehr-password-value" not in detail_text
+
+
 def test_register_endpoint_maps_value_error_to_400(client, monkeypatch):
     def _raise(**kwargs):
         raise ValueError("duplicate account")
@@ -284,6 +331,46 @@ def test_update_registration_success(client, app):
     assert isinstance(body["updated_at"], str)
 
 
+def test_update_registration_audits_changed_fields_without_secret_values(client, app, monkeypatch):
+    _create_account(app, "acct-1", is_active=True)
+    calls = []
+    monkeypatch.setattr("app.blueprints.config.config_routes.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    response = client.patch(
+        "/config/register/acct-1",
+        headers=AUTH_HEADERS,
+        json={
+            "nickname": "South Clinic",
+            "zoom_client_secret": "new-client-secret-value",
+            "zoom_webhook_secret": "new-webhook-secret-value",
+            "ehr_context_username": "ehr-user",
+            "ehr_context_password": "new-ehr-password-value",
+            "timezone": "America/Denver",
+            "allow_shared_zoom_user": True,
+        },
+    )
+
+    assert response.status_code == 200
+    audit_call = calls[0]
+    assert audit_call["event_type"] == "config.registration_updated"
+    assert audit_call["success"] is True
+    assert audit_call["zoom_account_id"] == "acct-1"
+    assert audit_call["detail"] == {
+        "credential_fields": [
+            "ehr_context_password",
+            "ehr_context_username",
+            "nickname",
+            "zoom_client_secret",
+            "zoom_webhook_secret",
+        ],
+        "config_fields": ["allow_shared_zoom_user", "timezone"],
+    }
+    detail_text = str(audit_call["detail"])
+    assert "new-client-secret-value" not in detail_text
+    assert "new-webhook-secret-value" not in detail_text
+    assert "new-ehr-password-value" not in detail_text
+
+
 def test_update_registration_passes_false_override_flag(client, app):
     _create_account(app, "acct-1", is_active=True)
 
@@ -325,10 +412,19 @@ def test_update_registration_maps_unexpected_error_to_500(client, monkeypatch):
 
 
 def test_deregister_endpoint_success(client, monkeypatch):
+    calls = []
     monkeypatch.setattr("app.blueprints.config.config_routes.deregister_zoom_account", lambda account_id: None)
+    monkeypatch.setattr("app.blueprints.config.config_routes.write_audit_log", lambda **kwargs: calls.append(kwargs))
     response = client.delete("/config/register/acct-1", headers=AUTH_HEADERS)
     assert response.status_code == 200
     assert response.get_json() == {"status": "deregistered", "zoom_account_id": "acct-1"}
+    assert calls == [
+        {
+            "event_type": "config.registration_deleted",
+            "success": True,
+            "zoom_account_id": "acct-1",
+        }
+    ]
 
 
 def test_deregister_endpoint_maps_not_found_to_404(client, monkeypatch):
@@ -913,3 +1009,40 @@ def test_delete_appointment_filter_maps_unexpected_error_to_500(client, monkeypa
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "db down"}
+
+
+def test_set_ehr_context_credentials_audits_without_password_value(client, app, monkeypatch):
+    _create_account(app, "acct-ehr", is_active=True)
+    calls = []
+    monkeypatch.setattr("app.blueprints.config.config_routes.write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    response = client.post(
+        "/config/ehr-credentials",
+        headers=AUTH_HEADERS,
+        json={
+            "zoom_account_id": "acct-ehr",
+            "ehr_context_username": "ehr-user",
+            "ehr_context_password": "ehr-password-value",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "updated",
+        "zoom_account_id": "acct-ehr",
+        "ehr_context_username": "ehr-user",
+        "tenant_id": "tacct-ehr",
+    }
+    audit_call = calls[0]
+    assert audit_call["event_type"] == "config.ehr_credentials_updated"
+    assert audit_call["success"] is True
+    assert audit_call["zoom_account_id"] == "acct-ehr"
+    assert audit_call["detail"] == {
+        "credential_fields": ["ehr_context_password", "ehr_context_username"],
+    }
+    assert "ehr-password-value" not in str(audit_call["detail"])
+
+    with app.app_context():
+        account = ZoomAccount.query.filter_by(account_id="acct-ehr").first()
+        assert account.ehr_context_username == "ehr-user"
+        assert account.ehr_context_password_hash

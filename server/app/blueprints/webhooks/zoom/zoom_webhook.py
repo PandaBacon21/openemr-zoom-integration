@@ -4,8 +4,7 @@ from flask import request
 from app.services.audit import write_audit_log
 from app.models import ZoomAccount
 from app.blueprints.webhooks.zoom.zoom_webhook_helpers import (_get_account, _handle_url_validation, _verify_zoom_signature, 
-                           _handle_cn_created, _handle_waiting_room_joined)
-
+                           _handle_cn_created, _handle_waiting_room_joined, _handle_meeting_started)
 from app.blueprints.webhooks import webhooks_bp
 
 logger = logging.getLogger(__name__)
@@ -96,13 +95,14 @@ def zoom_webhook():
     # --- 6. Route to handler ---
     if event_type == "clinical_notes.note_created":
         try:
-          return _handle_cn_created(payload, account)
+            return _handle_cn_created(payload, account)
         except Exception as e:
             logger.error(f"webhooks.zoom | Unhandled exception in _handle_cn_created: {e}", exc_info=True)
-        return {"error": "internal error"}, 500
+            return {"error": "internal error"}, 500
+    elif event_type == "meeting.started":
+        return _handle_meeting_started(payload, account)
     elif event_type in ("meeting.participant_joined_waiting_room", "meeting.participant_jbh_waiting"):
         return _handle_waiting_room_joined(payload, account)
     else:
         logger.debug(f"webhooks.zoom | Unhandled event type: {event_type}")
         return {"status": "ignored", "event": event_type}, 200
-

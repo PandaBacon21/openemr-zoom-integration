@@ -11,6 +11,7 @@ def test_write_audit_log_persists_entry_and_normalizes_context_fields(app):
             success=True,
             zoom_account_id="acct-1",
             openemr_appointment_id=999,
+            openemr_encounter_number=555001,
             openemr_provider_id=10,
             openemr_patient_id=1,
             zoom_meeting_id=123456789,
@@ -23,6 +24,7 @@ def test_write_audit_log_persists_entry_and_normalizes_context_fields(app):
     assert entry.success is True
     assert entry.zoom_account_id == "acct-1"
     assert entry.openemr_appointment_id == "999"
+    assert entry.openemr_encounter_number == "555001"
     assert entry.openemr_provider_id == "10"
     assert entry.openemr_patient_id == "1"
     assert entry.zoom_meeting_id == "123456789"

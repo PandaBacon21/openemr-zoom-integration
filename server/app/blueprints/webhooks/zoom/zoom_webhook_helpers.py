@@ -5,9 +5,14 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 from flask import current_app
 from app.services.zoom import get_zoom_clinical_note
-from app.services.openemr import (create_encounter, get_appointment_details, 
-                                  update_appointment_status, get_provider_username, find_encounter_for_appointment, 
-                                  create_encounter, write_note_to_encounter, get_appointment_details)
+from app.services.openemr import (
+    create_encounter,
+    find_encounter_for_appointment,
+    get_appointment_details,
+    get_provider_username,
+    update_appointment_status,
+    write_note_to_encounter,
+)
 from app.services.audit import write_audit_log
 from app.extensions import db, get_openemr_db_engine
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount, ClinicalNoteRecord
@@ -32,6 +37,11 @@ def _get_account(payload: dict) -> ZoomAccount | None:
         return None
     
     return ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
+
+
+def _get_meeting_patient_id(meeting_id: str | int) -> str | None:
+    patient = MeetingPatient.query.filter_by(zoom_meeting_id=str(meeting_id)).first()
+    return patient.openemr_patient_id if patient else None
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +210,9 @@ def _validate_and_process_note(
         )
         db.session.add(clinical_note)
         db.session.commit()
+
+        record.status = "note_received"
+        db.session.commit()
  
         write_audit_log(
             event_type="note.record_created",
@@ -213,6 +226,7 @@ def _validate_and_process_note(
         f"zoom_webhook | meeting_number={meeting_number} "
         f"matched MeetingRecord id={record.zoom_meeting_id} eid={record.openemr_appointment_id}"
     )
+    record_patient_id = _get_meeting_patient_id(record.zoom_meeting_id)
  
     # --- 3. Retrieve note content from Zoom API ---
     note_data = get_zoom_clinical_note(account, note_id)
@@ -228,6 +242,8 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
             openemr_appointment_id=str(record.openemr_appointment_id),
+            openemr_provider_id=record.openemr_provider_id,
+            openemr_patient_id=record_patient_id,
             error_message="note not found in Zoom API",
         )
         return {"status": "error", "reason": "note not found"}, 500
@@ -249,13 +265,13 @@ def _validate_and_process_note(
         # Fall back to MeetingRecord + MeetingPatient
         eid = int(record.openemr_appointment_id)
         provider_id = int(record.openemr_provider_id) if record.openemr_provider_id else None
-        pid = None
-        patient = MeetingPatient.query.filter_by(zoom_meeting_id=record.zoom_meeting_id).first()
-        if patient:
-            pid = int(patient.openemr_patient_id)
+        pid = int(record_patient_id) if record_patient_id else None
         current_app.logger.info(
             f"zoom_webhook | No EHR context — using MeetingRecord: eid={eid} pid={pid} provider_id={provider_id}"
         )
+
+    openemr_provider_id = str(provider_id) if provider_id is not None else None
+    openemr_patient_id = str(pid) if pid is not None else None
  
     write_audit_log(
         event_type="note.retrieved",
@@ -264,16 +280,30 @@ def _validate_and_process_note(
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
         openemr_appointment_id=str(eid),
+        openemr_provider_id=openemr_provider_id,
+        openemr_patient_id=openemr_patient_id,
         detail={
             "note_title": note_data.get("note_title"),
             "ehr_context": bool(ehr_context),
         },
     )
  
-    if not pid or not provider_id:
+    if pid is None or provider_id is None:
         current_app.logger.warning(
             f"zoom_webhook | missing pid={pid} or provider_id={provider_id} "
             f"for MeetingRecord id={record.zoom_meeting_id}"
+        )
+        write_audit_log(
+            event_type="note.context_missing",
+            success=False,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=openemr_provider_id,
+            openemr_patient_id=openemr_patient_id,
+            error_message="missing patient or provider",
+            detail={"ehr_context": bool(ehr_context)},
         )
         return {"status": "error", "reason": "missing patient or provider"}, 500
  
@@ -319,6 +349,8 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
             openemr_appointment_id=str(eid),
+            openemr_provider_id=str(provider_id),
+            openemr_patient_id=str(pid),
             error_message="could not find or create encounter",
         )
         return {"status": "error", "reason": "could not find or create encounter"}, 500
@@ -338,11 +370,13 @@ def _validate_and_process_note(
         note_content=note_data.get("note_content", ""),
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
+        note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
  
     if success:
         clinical_note.is_written_to_openemr = True
         clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
+        record.status = "note_written" 
         db.session.commit()
  
     write_audit_log(
@@ -352,7 +386,11 @@ def _validate_and_process_note(
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
         openemr_appointment_id=str(eid),
-        detail={"encounter": encounter_number, "ehr_context": bool(ehr_context)}
+        openemr_encounter_number=str(encounter_number),
+        openemr_provider_id=str(provider_id),
+        openemr_patient_id=str(pid),
+        error_message=None if success else "OpenEMR note write failed",
+        detail={"ehr_context": bool(ehr_context)}
     )
  
     return {
@@ -394,6 +432,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
         return {"status": "no_record"}, 200
 
     eid = record.openemr_appointment_id
+    patient_id = _get_meeting_patient_id(record.zoom_meeting_id)
 
     # Update appointment status to Arrived
     success = update_appointment_status(int(eid), "@")
@@ -403,7 +442,10 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
         success=success,
         zoom_account_id=account.account_id,
         openemr_appointment_id=eid,
+        openemr_provider_id=record.openemr_provider_id,
+        openemr_patient_id=patient_id,
         zoom_meeting_id=meeting_id,
+        error_message=None if success else "OpenEMR appointment status update failed",
         detail={"participant": participant_name, "trigger": event_type}
     )
 
@@ -414,7 +456,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     # Get appointment details for encounter creation
     appt = get_appointment_details(int(eid))
     if appt:
-        encounter_number = create_encounter(
+        create_encounter(
             pid=appt["pid"],
             provider_id=appt["provider_id"],
             facility_id=appt["facility_id"],
@@ -423,3 +465,55 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
         )
 
     return {"status": "ok", "eid": eid}, 200
+
+
+def _handle_meeting_started(payload: dict, account: ZoomAccount):
+    """
+    Handle meeting.started event.
+    Updates MeetingRecord status to 'started' and sets meeting_started_at.
+    Used to resolve which provider is active when multiple providers share
+    a Zoom user license.
+    """
+
+    obj = payload.get("payload", {}).get("object", {})
+    meeting_id = str(obj.get("id", ""))
+    host_id = obj.get("host_id")
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.started | meeting_id={meeting_id} host_id={host_id}"
+    )
+
+    if not meeting_id:
+        current_app.logger.warning("zoom_webhook | meeting.started | missing meeting id")
+        return {"error": "missing meeting id"}, 400
+
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=meeting_id,
+        zoom_account_id=account.account_id,
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | meeting.started | no MeetingRecord for meeting_id={meeting_id}"
+        )
+        return {"status": "no_record"}, 200
+
+    record.status = "started"
+    record.meeting_started_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    write_audit_log(
+        event_type="meeting.started",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_id,
+        openemr_appointment_id=record.openemr_appointment_id,
+        openemr_provider_id=record.openemr_provider_id,
+    )
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.started | meeting_id={meeting_id} "
+        f"provider_id={record.openemr_provider_id} status=started"
+    )
+
+    return {"status": "ok"}, 200

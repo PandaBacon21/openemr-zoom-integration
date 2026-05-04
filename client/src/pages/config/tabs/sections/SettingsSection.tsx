@@ -11,6 +11,8 @@ import {
   Alert,
   CircularProgress,
   Switch,
+  ToggleButtonGroup,
+  ToggleButton,
   FormControlLabel,
 } from "@mui/material";
 
@@ -64,6 +66,9 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
   const [allowSharedZoomUser, setAllowSharedZoomUser] = useState(
     account.allow_shared_zoom_user ?? false,
   );
+  const [noteWritebackMode, setNoteWritebackMode] = useState<
+    "both" | "clinical_note_only" | "soap_only"
+  >(account.note_writeback_mode ?? "both");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +91,7 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
     setCustomEmail(account.demo_patient_email_override ?? "");
     setCustomPhone(account.demo_patient_phone_override ?? "");
     setAllowSharedZoomUser(account.allow_shared_zoom_user ?? false);
+    setNoteWritebackMode(account.note_writeback_mode ?? "both");
     setError(null);
     setSuccess(false);
   }, [account.zoom_account_id]);
@@ -93,6 +99,7 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
   const isDirty =
     timezone !== account.timezone ||
     allowSharedZoomUser !== (account.allow_shared_zoom_user ?? false) ||
+    noteWritebackMode !== (account.note_writeback_mode ?? "both") ||
     (emailMode === "custom") !==
       (account.demo_patient_email_override_enabled ?? false) ||
     (emailMode === "custom" &&
@@ -132,6 +139,7 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
       effectivePhoneMode === "custom" ? customPhone.trim() : null;
 
     payload.allow_shared_zoom_user = allowSharedZoomUser;
+    payload.note_writeback_mode = noteWritebackMode;
 
     try {
       await updateAccount(account.zoom_account_id, payload);
@@ -145,6 +153,7 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
         demo_patient_phone_override:
           effectivePhoneMode === "custom" ? customPhone.trim() : null,
         allow_shared_zoom_user: allowSharedZoomUser,
+        note_writeback_mode: noteWritebackMode,
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -235,6 +244,58 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
               </Box>
             }
           />
+
+          <Divider />
+
+          {/* Note writeback mode */}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+            }}
+          >
+            Clinical Note Writeback
+          </Typography>
+
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <ToggleButtonGroup
+              value={noteWritebackMode}
+              exclusive
+              onChange={(_, val) => {
+                if (val) {
+                  setNoteWritebackMode(val);
+                  setError(null);
+                }
+              }}
+              size="small"
+              sx={{
+                "& .MuiToggleButton-root": {
+                  textTransform: "none",
+                  fontSize: "0.8rem",
+                  px: 2,
+                },
+                "& .MuiToggleButton-root.Mui-selected": {
+                  bgcolor: "primary.main",
+                  color: "white",
+                  "&:hover": { bgcolor: "primary.dark" },
+                },
+              }}
+            >
+              <ToggleButton value="clinical_note_only">
+                Clinical Note
+              </ToggleButton>
+              <ToggleButton value="both">Both</ToggleButton>
+              <ToggleButton value="soap_only">SOAP Only</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+          <Typography variant="caption" color="text.secondary">
+            Controls which forms are written when a Zoom clinical note is
+            received
+          </Typography>
+
           <Divider />
 
           {/* Patient notifications */}

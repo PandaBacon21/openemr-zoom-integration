@@ -38,3 +38,22 @@ def test_meeting_patients_migration_creates_expected_table():
     assert "['meeting_records.zoom_meeting_id']" in text
     assert "ondelete='CASCADE'" in text
     assert "op.drop_table('meeting_patients')" in text
+
+
+def test_meeting_started_at_migration_adds_meeting_timestamp_and_tenant_index():
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "18c6821766b3_add_meeting_started_at_to_meeting_.py"
+    )
+    text = migration_path.read_text(encoding="utf-8")
+
+    assert "op.add_column('meeting_records', sa.Column('meeting_started_at'" in text
+    assert "sa.DateTime(timezone=True)" in text
+    assert "nullable=True" in text
+    assert "op.create_index(op.f('ix_zoom_accounts_tenant_id')" in text
+    assert "['tenant_id']" in text
+    assert "unique=True" in text
+    assert "op.drop_index(op.f('ix_zoom_accounts_tenant_id')" in text
+    assert "op.drop_column('meeting_records', 'meeting_started_at')" in text

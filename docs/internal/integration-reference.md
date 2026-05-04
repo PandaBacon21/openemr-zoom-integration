@@ -93,6 +93,7 @@ Relationships:
 | `openemr_provider_id` | `String(128)` | yes | OpenEMR provider id (`users.id`) |
 | `openemr_appt_status` | `String(16)` | no | OpenEMR `apptstat`/`pc_apptstatus` code |
 | `status` | `String(64)` | yes | Internal progression status (for workflow orchestration) |
+| `meeting_started_at` | `DateTime(timezone=True)` | no | Timestamp for when the Zoom meeting/arrival flow marks the meeting started |
 | `created_at` | `DateTime(timezone=True)` | no | Created timestamp (UTC) |
 | `updated_at` | `DateTime(timezone=True)` | no | Updated timestamp (UTC) |
 
@@ -220,6 +221,8 @@ Supported filters:
 - `event_type`
 - `openemr_appointment_id`
 - `openemr_encounter_number`
+- `openemr_provider_id`
+- `openemr_patient_id`
 - `zoom_meeting_id`
 - `zoom_note_id`
 - `success` (`true` or `false`)
@@ -326,6 +329,8 @@ Audit events emitted by webhook handlers:
 - `meeting.created`, `meeting.updated`, `meeting.recreated`, `meeting.deleted` on successful meeting lifecycle actions
 - `meeting.create_failed`, `meeting.delete_failed` on handled failure paths
 - `openemr.url_writeback_success`, `openemr.url_writeback_failed` for appointment URL writeback outcomes
+- `note.received`, `note.record_created`, `note.retrieved`, `note.written`, and `note.write_failed` for Zoom clinical note processing
+- `note.written` and `note.write_failed` include `openemr_encounter_number` when an encounter is found or created
 
 ## OpenEMR Patch Module (PHP)
 
@@ -371,6 +376,7 @@ Current migration chain:
 - `77ba73f9eedb_add_account_config_table_move_config_`
 - `d7de11bd0c97_split_demo_patient_override_enabled_`
 - `585c85c5c79c_add_ehr_auth_fields_to_zoom_accounts`
+- `18c6821766b3_add_meeting_started_at_to_meeting_`
 
 The current schema migration uses natural string primary keys for the core integration relationships:
 - `zoom_accounts.account_id`
@@ -381,6 +387,7 @@ Recent config/auth migrations:
 - move per-account scheduling/demo settings from `zoom_accounts` to `account_configs`
 - split the old single demo patient override flag into separate email and phone enabled flags
 - add EHR Context tenant ID, username, and password hash fields to `zoom_accounts`
+- add the unique `zoom_accounts.tenant_id` index and nullable `meeting_records.meeting_started_at`
 
 ## Test Coverage Pointers
 

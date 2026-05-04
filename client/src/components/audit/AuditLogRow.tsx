@@ -11,9 +11,20 @@ import {
 } from "@mui/material";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import RemoveIcon from "@mui/icons-material/Remove";
 import type { AuditLogEntry } from "../../api/config";
 
-const getEventChipColor = (eventType: string, success: boolean | null) => {
+interface Props {
+  log: AuditLogEntry;
+  showAccountColumn: boolean;
+}
+
+const getEventChipColor = (
+  eventType: string,
+  success: boolean | null,
+): "error" | "success" | "warning" | "default" => {
   if (success === false) return "error";
   if (eventType.includes("error") || eventType.includes("failed"))
     return "error";
@@ -38,20 +49,31 @@ const formatDateTime = (iso: string) => {
   });
 };
 
-interface RowProps {
-  log: AuditLogEntry;
-}
+const MonoCell: React.FC<{ value: string | null; minWidth?: number }> = ({
+  value,
+  minWidth = 140,
+}) => (
+  <TableCell
+    sx={{
+      fontSize: "0.75rem",
+      fontFamily: "monospace",
+      color: value ? "text.primary" : "text.disabled",
+      minWidth,
+      whiteSpace: "nowrap",
+    }}
+  >
+    {value ?? "—"}
+  </TableCell>
+);
 
-const AuditLogRow: React.FC<RowProps> = ({ log }) => {
+const AuditLogRow: React.FC<Props> = ({ log, showAccountColumn }) => {
   const [open, setOpen] = useState(false);
 
   const hasDetail =
     log.error_message ||
     log.detail ||
-    log.openemr_encounter_number ||
     log.openemr_provider_id ||
-    log.openemr_patient_id ||
-    log.zoom_note_id;
+    log.openemr_patient_id;
 
   let parsedDetail: Record<string, unknown> | null = null;
   if (log.detail) {
@@ -61,6 +83,8 @@ const AuditLogRow: React.FC<RowProps> = ({ log }) => {
       parsedDetail = null;
     }
   }
+
+  const colSpan = showAccountColumn ? 11 : 10;
 
   return (
     <>
@@ -72,6 +96,7 @@ const AuditLogRow: React.FC<RowProps> = ({ log }) => {
         }}
         onClick={() => hasDetail && setOpen((p) => !p)}
       >
+        {/* Expand toggle */}
         <TableCell sx={{ width: 32, p: 1 }}>
           {hasDetail && (
             <IconButton
@@ -89,16 +114,21 @@ const AuditLogRow: React.FC<RowProps> = ({ log }) => {
             </IconButton>
           )}
         </TableCell>
+
+        {/* Time */}
         <TableCell
           sx={{
             whiteSpace: "nowrap",
             fontSize: "0.75rem",
             color: "text.secondary",
+            minWidth: 170,
           }}
         >
           {formatDateTime(log.occurred_at)}
         </TableCell>
-        <TableCell>
+
+        {/* Event type */}
+        <TableCell sx={{ minWidth: 240, whiteSpace: "nowrap" }}>
           <Chip
             label={log.event_type}
             size="small"
@@ -107,18 +137,58 @@ const AuditLogRow: React.FC<RowProps> = ({ log }) => {
             sx={{ fontSize: "0.7rem", height: 22 }}
           />
         </TableCell>
-        <TableCell sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}>
-          {log.zoom_meeting_id ?? "—"}
+
+        {/* Status icon */}
+        <TableCell sx={{ minWidth: 80 }}>
+          {log.success === true ? (
+            <CheckCircleIcon
+              fontSize="small"
+              sx={{ color: "success.main", verticalAlign: "middle" }}
+            />
+          ) : log.success === false ? (
+            <ErrorIcon
+              fontSize="small"
+              sx={{ color: "error.main", verticalAlign: "middle" }}
+            />
+          ) : (
+            <RemoveIcon
+              fontSize="small"
+              sx={{ color: "text.disabled", verticalAlign: "middle" }}
+            />
+          )}
         </TableCell>
-        <TableCell sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}>
-          {log.openemr_appointment_id ?? "—"}
-        </TableCell>
+
+        {/* Account ID (hidden for account dashboard) */}
+        {showAccountColumn && (
+          <MonoCell value={log.zoom_account_id} minWidth={160} />
+        )}
+
+        {/* Meeting ID */}
+        <MonoCell value={log.zoom_meeting_id} minWidth={170} />
+
+        {/* Appointment ID */}
+        <MonoCell value={log.openemr_appointment_id} minWidth={140} />
+
+        {/* Encounter # */}
+        <MonoCell value={log.openemr_encounter_number} minWidth={130} />
+
+        {/* Provider ID */}
+        <MonoCell value={log.openemr_provider_id} minWidth={130} />
+
+        {/* Patient ID */}
+        <MonoCell value={log.openemr_patient_id} minWidth={130} />
+
+        {/* Note ID */}
+        <MonoCell value={log.zoom_note_id} minWidth={170} />
       </TableRow>
 
       {/* Expanded detail row */}
       {hasDetail && (
         <TableRow>
-          <TableCell colSpan={5} sx={{ py: 0, bgcolor: "rgba(0,0,0,0.015)" }}>
+          <TableCell
+            colSpan={colSpan}
+            sx={{ py: 0, bgcolor: "rgba(0,0,0,0.015)" }}
+          >
             <Collapse in={open} timeout="auto" unmountOnExit>
               <Box
                 sx={{
@@ -135,40 +205,6 @@ const AuditLogRow: React.FC<RowProps> = ({ log }) => {
                   </Alert>
                 )}
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                  {log.zoom_note_id && (
-                    <Box>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontWeight: 600 }}
-                      >
-                        Note ID
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
-                      >
-                        {log.zoom_note_id}
-                      </Typography>
-                    </Box>
-                  )}
-                  {log.openemr_encounter_number && (
-                    <Box>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontWeight: 600 }}
-                      >
-                        Encounter
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
-                      >
-                        {log.openemr_encounter_number}
-                      </Typography>
-                    </Box>
-                  )}
                   {log.openemr_provider_id && (
                     <Box>
                       <Typography

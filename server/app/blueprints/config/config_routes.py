@@ -7,12 +7,44 @@ from app.services.registration import (register_zoom_account, update_zoom_accoun
 from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
 from app.services.ehr_context import set_ehr_context_credentials
 from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
+from app.services.audit import write_audit_log
+from app.extensions import db
 
 
 from app.blueprints.config import config_bp
 
 
 logger = logging.getLogger(__name__)
+
+REGISTRATION_CREDENTIAL_FIELDS = {
+    "nickname",
+    "zoom_client_id",
+    "zoom_client_secret",
+    "zoom_webhook_secret",
+    "ehr_context_username",
+    "ehr_context_password",
+    "contact_email",
+}
+UPDATE_CREDENTIAL_FIELDS = {
+    "nickname",
+    "zoom_client_secret",
+    "zoom_webhook_secret",
+    "ehr_context_username",
+    "ehr_context_password",
+}
+CONFIG_FIELDS = {
+    "timezone",
+    "allow_shared_zoom_user",
+    "demo_patient_email_override_enabled",
+    "demo_patient_phone_override_enabled",
+    "demo_patient_email_override",
+    "demo_patient_phone_override",
+    "note_writeback_mode",
+}
+
+
+def _requested_fields(data: dict, allowed_fields: set[str]) -> list[str]:
+    return sorted(field for field in allowed_fields if field in data)
 
 
 @config_bp.route("/register", methods=["POST"])
@@ -73,6 +105,16 @@ def register():
             timezone=data.get("timezone", "America/New_York"),
         )
 
+        write_audit_log(
+            event_type="config.registration_created",
+            success=True,
+            zoom_account_id=account.account_id,
+            detail={
+                "credential_fields": _requested_fields(data, REGISTRATION_CREDENTIAL_FIELDS),
+                "config_fields": _requested_fields(data, CONFIG_FIELDS),
+            },
+        )
+
         return jsonify({
             "status": "registered",
             "nickname": account.nickname,
@@ -81,6 +123,7 @@ def register():
             "openemr_client_id": account.openemr_client_id,
             "tenet_id": account.tenant_id,
             "ehr_context_username": account.ehr_context_username,
+            "note_writeback_mode": config.note_writeback_mode,
             "kid": account.kid,
             "timezone": config.timezone,
             "created_at": account.created_at.isoformat(),
@@ -101,11 +144,7 @@ def update_registration(zoom_account_id: str):
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
-    CREDENTIAL_FIELDS = {"nickname", "zoom_client_secret", "zoom_webhook_secret", "ehr_context_username", "ehr_context_password"}
-    CONFIG_FIELDS = {"timezone", "allow_shared_zoom_user", "demo_patient_email_override_enabled",
-                     "demo_patient_phone_override_enabled", "demo_patient_email_override", "demo_patient_phone_override"}
-
-    has_credential_fields = any(k in data for k in CREDENTIAL_FIELDS)
+    has_credential_fields = any(k in data for k in UPDATE_CREDENTIAL_FIELDS)
     has_config_fields = any(k in data for k in CONFIG_FIELDS)
 
     if not has_credential_fields and not has_config_fields:
@@ -130,6 +169,7 @@ def update_registration(zoom_account_id: str):
                 demo_patient_email_override=data.get("demo_patient_email_override"),
                 demo_patient_phone_override_enabled=data.get("demo_patient_phone_override_enabled"),
                 demo_patient_phone_override=data.get("demo_patient_phone_override"),
+                note_writeback_mode=data.get("note_writeback_mode"),
             )
 
         account = ZoomAccount.query.filter_by(
@@ -139,6 +179,15 @@ def update_registration(zoom_account_id: str):
             raise ValueError(f"No active registration found for account {zoom_account_id}")
     
         config = account.config
+        write_audit_log(
+            event_type="config.registration_updated",
+            success=True,
+            zoom_account_id=zoom_account_id,
+            detail={
+                "credential_fields": _requested_fields(data, UPDATE_CREDENTIAL_FIELDS),
+                "config_fields": _requested_fields(data, CONFIG_FIELDS),
+            },
+        )
 
         return jsonify({
             "status": "updated",
@@ -151,6 +200,7 @@ def update_registration(zoom_account_id: str):
             "demo_patient_email_override": config.demo_patient_email_override,
             "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
             "demo_patient_phone_override": config.demo_patient_phone_override,
+            "note_writeback_mode": config.note_writeback_mode,
             "updated_at": account.updated_at.isoformat(),
         }), 200
 
@@ -175,6 +225,11 @@ def deregister(zoom_account_id: str):
     """
     try:
         deregister_zoom_account(zoom_account_id)
+        write_audit_log(
+            event_type="config.registration_deleted",
+            success=True,
+            zoom_account_id=zoom_account_id,
+        )
         return jsonify({
             "status": "deregistered",
             "zoom_account_id": zoom_account_id
@@ -438,7 +493,7 @@ def set_ehr_context_credentials_route():
         return jsonify({"error": "Missing required fields", "missing": missing}), 400
     account_id = data["zoom_account_id"]
     account = ZoomAccount.query.filter_by(
-        account_id=data[account_id], is_active=True
+        account_id=account_id, is_active=True
             ).first()
     if not account:
         return jsonify({"error": f"No active registration found for account {account_id}"}), 404
@@ -448,6 +503,15 @@ def set_ehr_context_credentials_route():
             account=account,
             ehr_context_username=data["ehr_context_username"],
             ehr_context_password=data["ehr_context_password"],
+        )
+        db.session.commit()
+        write_audit_log(
+            event_type="config.ehr_credentials_updated",
+            success=True,
+            zoom_account_id=account.account_id,
+            detail={
+                "credential_fields": ["ehr_context_password", "ehr_context_username"],
+            },
         )
         return jsonify({
             "status": "updated",

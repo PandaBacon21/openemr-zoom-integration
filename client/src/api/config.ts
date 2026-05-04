@@ -17,6 +17,7 @@ export interface Registration {
   demo_patient_phone_override_enabled: boolean;
   demo_patient_phone_override: string | null;
   allow_shared_zoom_user: boolean;
+  note_writeback_mode: "both" | "clinical_note_only" | "soap_only";
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +104,8 @@ export interface AuditLogFilters {
   event_type?: string;
   openemr_appointment_id?: string;
   openemr_encounter_number?: string;
+  openemr_provider_id?: string;
+  openemr_patient_id?: string;
   zoom_meeting_id?: string;
   zoom_note_id?: string;
   success?: boolean;
