@@ -3,6 +3,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+OPENEMR_DB_URI = (
+        f"mysql+pymysql://"
+        f"{os.environ.get('OPENEMR_DB_USER', 'openemr')}:"
+        f"{os.environ.get('OPENEMR_DB_PASS', 'openemr')}@"
+        f"{os.environ.get('OPENEMR_DB_HOST', 'mariadb')}:"
+        f"{os.environ.get('OPENEMR_DB_PORT', '3306')}/"
+        f"{os.environ.get('OPENEMR_DB_NAME', 'openemr')}"
+    )
+
+def _db_url():
+        # Database — SQLite (dev) and Postgres (staging/prod - for now. May change)
+        _db_url = os.environ.get("DATABASE_URL", "sqlite:///zoomly.db")
+        if _db_url.startswith("postgres://"):
+            _db_url = _db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif _db_url.startswith("postgresql://"):
+            _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return _db_url
+
 class Config:
     # Security 
     KEYS_BASE_DIR = os.environ.get("KEYS_BASE_DIR", "/app/keys")
@@ -16,27 +34,17 @@ class Config:
     DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
 
     # Database
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///zoomly.db")
+    SQLALCHEMY_DATABASE_URI = _db_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-
-    # Zoom
-    ZOOM_TOKEN_URL = os.environ.get("ZOOM_TOKEN_URL")
-    ZOOM_API_BASE_URL = os.environ.get("ZOOM_API_BASE_URL")
 
     # OpenEMR
     OPENEMR_BASE_URL = os.environ.get("OPENEMR_BASE_URL", "http://localhost:8300")
     OPENEMR_FHIR_BASE_URL = os.environ.get("OPENEMR_FHIR_BASE_URL", "http://localhost:8300/apis/default/fhir")
     OPENEMR_CLIENT_ID = os.environ.get("OPENEMR_CLIENT_ID")
     OPENEMR_PUBLIC_URL = os.environ.get("OPENEMR_PUBLIC_URL")
+
     # OpenEMR for direct database connection for appointment type retrieval
-    OPENEMR_DB_URI = (
-        f"mysql+pymysql://"
-        f"{os.environ.get('OPENEMR_DB_USER', 'openemr')}:"
-        f"{os.environ.get('OPENEMR_DB_PASS', 'openemr')}@"
-        f"{os.environ.get('OPENEMR_DB_HOST', 'mariadb')}:"
-        f"{os.environ.get('OPENEMR_DB_PORT', '3306')}/"
-        f"{os.environ.get('OPENEMR_DB_NAME', 'openemr')}"
-    )
+    OPENEMR_DB_URI = OPENEMR_DB_URI
 
     OPENEMR_SCOPES = os.environ.get("OPENEMR_SCOPES", "").split()
     # SMART / JWKS

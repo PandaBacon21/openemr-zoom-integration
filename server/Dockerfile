@@ -1,11 +1,11 @@
-FROM python:3.13-slim
+FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
-# Install system dependencies.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv 
@@ -20,14 +20,8 @@ RUN uv sync --frozen --no-dev
 # Copy the rest of the application code.
 COPY . .
 
-
-COPY ../scripts/entrypoint.sh ./
-RUN chmod +x entrypoint.sh
-
-
-# Create directories used by mounted volumes.
 RUN mkdir -p /app/instance /app/keys /app/logs
 
 EXPOSE 5000
 
-CMD ["./entrypoint.sh"]
+CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "run:app"]
