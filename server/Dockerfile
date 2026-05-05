@@ -1,3 +1,15 @@
+# ─── Stage 1: Build React frontend ───────────────────────────────────────────
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /client
+
+COPY client/package.json client/package-lock.json* ./
+RUN npm ci
+
+COPY client/ ./
+RUN npm run build
+
+# ─── Stage 2: Python application ─────────────────────────────────────────────
 FROM python:3.13-slim-bookworm
 
 WORKDIR /app
@@ -8,17 +20,16 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency manifest files first.
-COPY pyproject.toml uv.lock* ./
+COPY server/pyproject.toml server/uv.lock* ./
 
-# Install dependencies.
 RUN uv sync --frozen --no-dev
 
-# Copy the rest of the application code.
-COPY . .
+COPY server/ .
+
+# Copy built React static files from Stage 1
+COPY --from=frontend-builder /server/app/static ./app/static/
 
 RUN mkdir -p /app/instance /app/keys /app/logs
 

@@ -26,14 +26,10 @@ logs
 
 # uv / packaging
 build/
-dist/
 wheels/
 *.egg-info/.DS_Store
 **/.uv-cache/
 **/.DS_Store
-
-# Vite build output
-server/app/static/
 
 # dev
 *.temp
@@ -49,10 +45,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+
+# Vite dev artifacts only
 *.local
+dist-ssr
+
+node_modules
 
 # Editor directories and files
 .vscode/*
