@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from flask import current_app
 from app.services.zoom import get_zoom_clinical_note
@@ -14,7 +14,7 @@ from app.services.openemr import (
     write_note_to_encounter,
 )
 from app.services.audit import write_audit_log
-from app.extensions import db, get_openemr_db_engine
+from app.extensions import db, get_openemr_db_engine, scheduler
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount, ClinicalNoteRecord
 
 
@@ -107,6 +107,80 @@ def _handle_url_validation(payload: dict, secret: str):
 
 
 # ---------------------------------------------------------------------------
+# clinical_notes async fetch
+# ---------------------------------------------------------------------------
+
+def _process_note_async(app, account_id: str, note_id: str, meeting_number: str, note_title: str | None):
+    """
+    Background job to fetch and write a clinical note.
+    Scheduled by the webhook handler to run after a delay,
+    avoiding Zoom's 3-second response timeout requirement.
+    """
+    with app.app_context():
+        app.logger.info(f"zoom_helpers | async note job starting | note_id={note_id}")
+        account = ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
+        if not account:
+            app.logger.error(f"zoom_helpers | async note job | no account for {account_id}")
+            return
+        _validate_and_process_note(
+            account=account,
+            meeting_number=meeting_number,
+            note_id=note_id,
+            note_title=note_title,
+        )
+        app.logger.info(f"zoom_helpers | async note job complete | note_id={note_id}")
+
+
+def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int = 3, delay_seconds: int = 30) -> dict | None:
+    """
+    Fetch a Zoom clinical note with retry logic to handle Zoom's known bug
+    where note_content is empty or whitespace-only immediately after the
+    note_created webhook fires.
+
+    Retries up to max_attempts times with delay_seconds between each attempt.
+
+    Returns the note dict when content is available, or the last response
+    (even if empty) after max_attempts are exhausted.
+    """
+    note_data = None
+    for attempt in range(1, max_attempts + 1):
+        note_data = get_zoom_clinical_note(account, note_id)
+
+        if not note_data:
+            current_app.logger.warning(
+                f"zoom_helpers | note_id={note_id} not found in Zoom API "
+                f"(attempt {attempt}/{max_attempts})"
+            )
+            return None
+
+        content = note_data.get("note_content", "")
+        if content and content.strip():
+            current_app.logger.info(
+                f"zoom_helpers | note_id={note_id} content available "
+                f"(attempt {attempt}/{max_attempts})"
+            )
+            return note_data
+
+        current_app.logger.warning(
+            f"zoom_helpers | note_id={note_id} content empty on attempt "
+            f"{attempt}/{max_attempts} — "
+            + (f"retrying in {delay_seconds}s" if attempt < max_attempts else "giving up")
+        )
+        if attempt == max_attempts and not (content and content.strip()):
+            write_audit_log(
+                event_type="note.content_empty",
+                success=False,
+                zoom_account_id=account.account_id,
+                zoom_note_id=note_id,
+                error_message=f"note content empty after {max_attempts} attempts",
+            )
+        if attempt < max_attempts:
+            time.sleep(delay_seconds)
+
+    # Return whatever we have after max attempts — caller decides what to do
+    return note_data
+
+# ---------------------------------------------------------------------------
 # clinical_notes.note_created handler
 # ---------------------------------------------------------------------------
 
@@ -154,13 +228,31 @@ def _handle_cn_created(payload: dict, account: ZoomAccount):
         }
     )
 
-    # Validate meeting_number against MeetingRecord
-    return _validate_and_process_note(
-        account=account,
-        meeting_number=meeting_number,
-        note_id=note_id,
-        note_title=note_title,
+    # Schedule async processing — respond immediately to Zoom to avoid timeout
+    app = current_app._get_current_object() # type: ignore[attr-defined]
+    scheduler.add_job(
+        func=_process_note_async,
+        args=[app, account.account_id, note_id, str(meeting_number), note_title],
+        trigger="date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=30),
+        id=f"note_{note_id}",
+        replace_existing=True,
+        misfire_grace_time=60,
     )
+    write_audit_log(
+        event_type="note.processing_scheduled",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=str(meeting_number),
+        zoom_note_id=note_id,
+        detail={"delay_seconds": 30, "max_attempts": 3},
+    )
+    current_app.logger.info(
+        f"zoom_helpers | note_id={note_id} scheduled for async processing at "
+        f"{(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()}"
+    )
+
+    return {"status": "accepted", "note_id": note_id}, 200
 
 
 def _validate_and_process_note(
@@ -229,7 +321,8 @@ def _validate_and_process_note(
     record_patient_id = _get_meeting_patient_id(record.zoom_meeting_id)
  
     # --- 3. Retrieve note content from Zoom API ---
-    note_data = get_zoom_clinical_note(account, note_id)
+    # note_data = get_zoom_clinical_note(account, note_id)
+    note_data = _fetch_note_with_retry(account, note_id, max_attempts=3, delay_seconds=30)
  
     if not note_data:
         current_app.logger.warning(

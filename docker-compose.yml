@@ -33,10 +33,10 @@ services:
     environment:
       MYSQL_HOST: mariadb
       MYSQL_ROOT_PASS: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_USER: ${OPENEMR_DB_USER:-openemr}
-      MYSQL_PASS: ${OPENEMR_DB_PASS:-openemr}
-      OE_USER: ${OPENEMR_ADMIN_USER:-admin}
-      OE_PASS: ${OPENEMR_ADMIN_PASS:-pass}
+      MYSQL_USER: ${OPENEMR_DB_USER}
+      MYSQL_PASS: ${OPENEMR_DB_PASS}
+      OE_USER: ${OPENEMR_ADMIN_USER}
+      OE_PASS: ${OPENEMR_ADMIN_PASS}
       # Enable REST and FHIR APIs
       OPENEMR_SETTING_rest_api: 1
       OPENEMR_SETTING_rest_fhir_api: 1
@@ -73,7 +73,7 @@ services:
       # Patch for Encounter Form to include a Retrieve Clinical Note Button
       - ./patches/clinical_note_fetcher/forms.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/forms.php
       - ./patches/clinical_note_fetcher/fetch_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/fetch_zoom_note.php
-      - ./patches/clinical_note_fetcher/complete_zoom_note.php.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/complete_zoom_note.php
+      - ./patches/clinical_note_fetcher/complete_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/complete_zoom_note.php
       # Patch for shared helper function
       - ./patches/library/zoomly/ZoomBridge.php:/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
     networks:
@@ -159,6 +159,26 @@ services:
     networks:
       - integration_net
 
+  # ─── Postgres Integration Server DB ────────────────────────────────────────────
+  # DB for integration service
+  postgres:
+    image: postgres:16
+    container_name: zoomly-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zoomly}
+      POSTGRES_USER: ${POSTGRES_USER:-zoomly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - integration_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zoomly}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ─── Flask Integration Server ─────────────────────────────────────────────────
   # Built from server/ directory. Reaches OpenEMR by container name on the
   # internal network
@@ -171,25 +191,25 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - openemr
+      openemr:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       OPENEMR_BASE_URL: http://openemr:80
       OPENEMR_FHIR_BASE_URL: http://openemr:80/apis/default/fhir
       APP_INTERNAL_URL: http://zoom-bridge:5000
-      # Secret for OpenEMR -> Flask App
       OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
+      FLASK_ENV: production
     volumes:
       - ./server/instance:/app/instance
       - ./keys:/app/keys
       - ./server/logs:/app/logs
-
       - ./server/migrations:/app/migrations
       - ./server/alembic.ini:/app/alembic.ini
-
-      # for dev only
-      - ./server/app:/app/app
     networks:
       - integration_net
     healthcheck:
@@ -201,6 +221,7 @@ services:
 # ─── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   db_data:
+  postgres_data:
   openemr_sites:
   openemr_logs:
   openemr_public:

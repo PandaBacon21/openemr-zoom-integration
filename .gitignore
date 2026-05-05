@@ -39,6 +39,7 @@ server/app/static/
 *.temp
 **/unused/
 *docx
+*.override.yml
 
 # React client
 # Logs
