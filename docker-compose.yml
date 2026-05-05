@@ -184,8 +184,8 @@ services:
   # internal network
   app:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     container_name: zoom-bridge
     restart: unless-stopped
     ports:
