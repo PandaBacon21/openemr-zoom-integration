@@ -41,6 +41,7 @@ def write_audit_log(
 
     Event types for clinical note pipeline:
       note.received             — clinical note webhook received from Zoom
+      note.processing_scheduled - note retrieval process scheduled in background process
       note.retrieved            — note content fetched from Zoom API
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
