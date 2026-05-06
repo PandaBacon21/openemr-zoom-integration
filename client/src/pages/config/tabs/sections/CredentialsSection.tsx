@@ -133,6 +133,14 @@ const CredentialsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
             slotProps={{ input: { readOnly: true } }}
             sx={{ "& .MuiInputBase-input": { color: "text.secondary" } }}
           />
+          <TextField
+            label="X-Tenant-ID"
+            value={account.tenant_id}
+            fullWidth
+            slotProps={{ input: { readOnly: true } }}
+            sx={{ "& .MuiInputBase-input": { color: "text.secondary" } }}
+            helperText="Used with EHR Context credentials"
+          />
 
           <Divider />
 

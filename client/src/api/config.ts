@@ -7,6 +7,7 @@ export interface Registration {
   zoom_client_id: string;
   openemr_client_id: string;
   ehr_context_username: string | null;
+  tenant_id: string;
   kid: string;
   is_active: boolean;
   has_zoom_token: boolean;
