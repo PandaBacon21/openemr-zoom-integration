@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from auth_utils import AUTH_HEADERS, INVALID_AUTH_HEADERS
 from app.extensions import db
-from app.models import ClinicalNoteRecord, MeetingRecord, ZoomAccount
+from app.models import AccountConfig, ClinicalNoteRecord, MeetingRecord, ZoomAccount
 
 
 def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
@@ -19,6 +19,7 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
         is_active=is_active,
     )
     db.session.add(account)
+    db.session.add(AccountConfig(account_id=account_id, timezone="America/Denver"))
     db.session.commit()
     return account
 
@@ -184,6 +185,54 @@ def test_get_users_maps_service_error_to_500(client, app, monkeypatch):
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "zoom unavailable"}
+
+
+def test_fetch_zoom_note_uses_account_writeback_mode(client, app, monkeypatch):
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
+    with app.app_context():
+        account, _record = _create_meeting_with_note("acct-fetch-mode")
+        account.config.note_writeback_mode = "soap_only"
+        db.session.commit()
+
+    captured = {}
+    monkeypatch.setattr(
+        "app.blueprints.zoom.zoom_routes.get_openemr_db_engine",
+        lambda: _fake_encounter_engine(
+            SimpleNamespace(pid=1, provider_id=10, external_id="zoom_eid_999")
+        ),
+    )
+    monkeypatch.setattr(
+        "app.blueprints.zoom.zoom_routes.get_zoom_clinical_note",
+        lambda account, note_id: {
+            "note_title": "Zoom Clinical Note",
+            "note_content": "Subjective\nDoing well",
+        },
+    )
+    monkeypatch.setattr(
+        "app.blueprints.zoom.zoom_routes.get_provider_username",
+        lambda provider_id: "provider-user",
+    )
+    monkeypatch.setattr(
+        "app.blueprints.zoom.zoom_routes.write_note_to_encounter",
+        lambda **kwargs: captured.update(kwargs) or True,
+    )
+
+    body = b""
+    response = client.post(
+        "/zoom/encounter/555010/fetch_zoom_note",
+        data=body,
+        headers={"X-Zoomly-Signature": _openemr_signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "ok",
+        "encounter_number": 555010,
+        "note_id": "note-acct-fetch-mode",
+        "note_title": "Zoom Clinical Note",
+    }
+    assert captured["note_writeback_mode"] == "soap_only"
+    assert captured["provider_username"] == "provider-user"
 
 
 def test_complete_zoom_note_audits_success_with_encounter_context(client, app, monkeypatch):
