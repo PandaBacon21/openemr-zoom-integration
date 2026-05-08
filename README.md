@@ -11,9 +11,11 @@ Current implemented areas:
 - OpenEMR appointment webhook handling for create, update, and delete flows
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
 - OpenEMR appointment URL writeback (`pc_website`) after meeting create/recreate
-- Audit logging for webhook intake and meeting lifecycle events
+- Zoom waiting-room/meeting-start handling for patient arrival and shared Zoom license context
+- Zoom clinical note retrieval/writeback, manual OpenEMR fetch proxy, and Zoom note completion endpoint plumbing
+- Audit logging for webhook intake, meeting lifecycle, note, completion, and config events
 - Paginated audit log API for the admin UI
-- Per-account config records for timezone, shared Zoom user behavior, and demo patient contact overrides
+- Per-account config records for timezone, shared Zoom user behavior, clinical note writeback mode, and demo patient contact overrides
 - Zoom EHR Context auth and appointment lookup endpoints
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
@@ -28,6 +30,8 @@ Current implemented areas:
   - webhook payload/signature contract
   - OpenEMR appointment status code mapping notes
   - migration and test coverage pointers
+- See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) for the repo-based deployment/setup checklist and credential reference.
+- See [docs/internal/phase-2-sprint-plan.md](docs/internal/phase-2-sprint-plan.md) for the future-facing Phase 2 Sprint 7-11 planning snapshot.
 
 ## Usage
 
@@ -98,6 +102,8 @@ Configuration and registration (JWT bearer protected):
 - `GET /config/registrations`
 - `POST /config/register/<zoom_account_id>/verify`
 
+Registration create/update responses include `tenant_id` for Zoom EHR Context and `note_writeback_mode` for clinical note writes. Supported writeback modes are `both`, `clinical_note_only`, and `soap_only`.
+
 Provider mapping management (JWT bearer protected):
 
 - `POST /config/providers`
@@ -129,7 +135,7 @@ Authorization: Bearer <token-from-/api/auth/login>
 OpenEMR-signed note endpoints:
 
 - `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; JWT exempt)
-- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; JWT exempt) - not currently in use
+- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; JWT exempt; idempotent Zoom completion hook)
 
 Inbound webhook endpoints:
 
@@ -151,6 +157,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks, audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS, registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks, audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest backend run result in this workspace: `221 passed`.
+Latest backend run result in this workspace: `237 passed`.

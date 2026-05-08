@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.models import MeetingPatient, MeetingRecord, ZoomAccount
+from app.models import AccountConfig, MeetingPatient, MeetingRecord, ZoomAccount
 
 
 def _create_account(account_id: str) -> ZoomAccount:
@@ -197,6 +197,73 @@ def test_note_processing_audits_encounter_failure_with_context(app, monkeypatch)
     assert audit_call["openemr_provider_id"] == "10"
     assert audit_call["openemr_patient_id"] == "1"
     assert audit_call["error_message"] == "could not find or create encounter"
+
+
+def test_note_processing_uses_account_writeback_mode(app, monkeypatch):
+    with app.app_context():
+        account = _create_account("acct-note-mode")
+        db.session.add(
+            AccountConfig(
+                account_id=account.account_id,
+                timezone="America/Denver",
+                note_writeback_mode="clinical_note_only",
+            )
+        )
+        db.session.commit()
+        _create_meeting(account, meeting_id="meet-note-mode")
+        calls = []
+        captured = {}
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_zoom_clinical_note",
+            lambda account, note_id: {
+                "note_title": "Zoom Clinical Note",
+                "note_content": "Plan\nFollow up",
+            },
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
+            lambda eid, pid, provider_id: None,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
+            lambda eid: {"facility_id": 1, "pc_catid": 27},
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.create_encounter",
+            lambda **kwargs: 555101,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_provider_username",
+            lambda provider_id: "provider-user",
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_note_to_encounter",
+            lambda **kwargs: captured.update(kwargs) or True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _validate_and_process_note
+
+        body, status = _validate_and_process_note(
+            account=account,
+            meeting_number="meet-note-mode",
+            note_id="note-mode",
+            note_title="Zoom Clinical Note",
+        )
+
+    assert status == 200
+    assert body == {
+        "status": "written",
+        "encounter": 555101,
+        "zoom_meeting_id": "meet-note-mode",
+    }
+    assert captured["note_writeback_mode"] == "clinical_note_only"
+    assert captured["provider_username"] == "provider-user"
+    assert any(call["event_type"] == "note.written" for call in calls)
 
 
 def test_waiting_room_arrival_audits_status_update_failure_with_context(app, monkeypatch):

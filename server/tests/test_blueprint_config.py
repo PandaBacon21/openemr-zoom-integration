@@ -41,6 +41,7 @@ def _fake_registration_result(
     ehr_context_username=None,
     kid="zoomly-acct-1",
     timezone_name="America/New_York",
+    note_writeback_mode="both",
 ):
     return (
         SimpleNamespace(
@@ -53,7 +54,7 @@ def _fake_registration_result(
             kid=kid,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
-        SimpleNamespace(timezone=timezone_name),
+        SimpleNamespace(timezone=timezone_name, note_writeback_mode=note_writeback_mode),
     )
 
 
@@ -109,8 +110,9 @@ def test_register_endpoint_success(client, monkeypatch):
         "zoom_account_id": "acct-1",
         "zoom_client_id": "client-id",
         "openemr_client_id": "openemr-client-id",
-        "tenet_id": "tenant-abc",
+        "tenant_id": "tenant-abc",
         "ehr_context_username": "ehr-user",
+        "note_writeback_mode": "both",
         "kid": "zoomly-acct-1",
         "timezone": "America/New_York",
         "created_at": "2026-01-01T00:00:00+00:00",
@@ -313,6 +315,7 @@ def test_update_registration_success(client, app):
             "demo_patient_email_override": "demo-patient@example.com",
             "demo_patient_phone_override_enabled": True,
             "demo_patient_phone_override": "+13035550199",
+            "note_writeback_mode": "soap_only",
         },
     )
 
@@ -328,6 +331,7 @@ def test_update_registration_success(client, app):
     assert body["demo_patient_email_override"] == "demo-patient@example.com"
     assert body["demo_patient_phone_override_enabled"] is True
     assert body["demo_patient_phone_override"] == "+13035550199"
+    assert body["note_writeback_mode"] == "soap_only"
     assert isinstance(body["updated_at"], str)
 
 
@@ -347,6 +351,7 @@ def test_update_registration_audits_changed_fields_without_secret_values(client,
             "ehr_context_password": "new-ehr-password-value",
             "timezone": "America/Denver",
             "allow_shared_zoom_user": True,
+            "note_writeback_mode": "clinical_note_only",
         },
     )
 
@@ -363,7 +368,7 @@ def test_update_registration_audits_changed_fields_without_secret_values(client,
             "zoom_client_secret",
             "zoom_webhook_secret",
         ],
-        "config_fields": ["allow_shared_zoom_user", "timezone"],
+        "config_fields": ["allow_shared_zoom_user", "note_writeback_mode", "timezone"],
     }
     detail_text = str(audit_call["detail"])
     assert "new-client-secret-value" not in detail_text
