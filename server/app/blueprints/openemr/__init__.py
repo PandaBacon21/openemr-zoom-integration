@@ -1,12 +1,12 @@
 from flask import Blueprint
-from app.blueprints.auth.auth_helpers import verify_jwt_request
+from app.blueprints.auth.auth_helpers import verify_jwt_cookie_or_header
 
 
 openemr_bp = Blueprint("openemr", __name__, url_prefix="/openemr")
 
 @openemr_bp.before_request
 def protect():
-    return verify_jwt_request()
+    return verify_jwt_cookie_or_header()
 
 
 @openemr_bp.route("/")

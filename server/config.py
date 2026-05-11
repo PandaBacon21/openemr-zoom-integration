@@ -13,8 +13,10 @@ OPENEMR_DB_URI = (
     )
 
 def _db_url():
-        # Database — SQLite (dev) and Postgres (staging/prod - for now. May change)
-        _db_url = os.environ.get("DATABASE_URL", "sqlite:///zoomly.db")
+        _db_url = os.environ.get("DATABASE_URL")
+        if not _db_url: 
+            raise RuntimeError("DATABASE_URL env variable is not set")
+        
         if _db_url.startswith("postgres://"):
             _db_url = _db_url.replace("postgres://", "postgresql+psycopg2://", 1)
         elif _db_url.startswith("postgresql://"):
@@ -30,7 +32,7 @@ class Config:
     API_KEY = os.environ.get("API_KEY")
 
     # Flask
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+    SECRET_KEY = os.environ.get("SECRET_KEY")
     DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
 
     # Database

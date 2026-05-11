@@ -1,5 +1,5 @@
 from flask import Blueprint
-from app.blueprints.auth.auth_helpers import verify_jwt_request
+from app.blueprints.auth.auth_helpers import verify_jwt_cookie_or_header
 
 
 config_bp = Blueprint("config", __name__, url_prefix="/config")
@@ -7,7 +7,7 @@ config_bp = Blueprint("config", __name__, url_prefix="/config")
 
 @config_bp.before_request
 def protect():
-    return verify_jwt_request()
+    return verify_jwt_cookie_or_header()
 
 
 @config_bp.route("/")

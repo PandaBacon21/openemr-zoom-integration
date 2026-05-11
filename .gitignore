@@ -49,6 +49,7 @@ lerna-debug.log*
 # Vite dev artifacts only
 *.local
 dist-ssr
+.vite/
 */.vite/*
 
 node_modules

@@ -28,8 +28,16 @@ def login():
         algorithm="HS256",
     )
 
-    return jsonify({"token": token}), 200
-
+    response = jsonify({"token": token})
+    response.set_cookie(
+        "admin_token",
+        token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=43200,  # 12 hours, matches JWT expiry
+    )
+    return response, 200
 
 @auth_bp.route("/verify", methods=["GET"])
 def verify():
