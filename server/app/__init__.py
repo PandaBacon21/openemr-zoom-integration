@@ -1,6 +1,6 @@
 import logging
 import os
-from logging.handlers import RotatingFileHandler
+from concurrent_log_handler import ConcurrentRotatingFileHandler
 from flask import Flask, send_from_directory
 from config import config_by_name
 from .extensions import scheduler, db
@@ -35,7 +35,7 @@ def _configure_logging(app: Flask) -> None:
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
 
-    file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=3)
+    file_handler = ConcurrentRotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=3)
     file_handler.setFormatter(formatter)
 
     app.logger.setLevel(log_level)

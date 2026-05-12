@@ -23,6 +23,7 @@ server/instance/
 logs
 *.log
 **/logs/
+*.__lock
 
 # uv / packaging
 build/
