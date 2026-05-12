@@ -167,6 +167,14 @@ def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int
                 f"zoom_helpers | note_id={note_id} content available "
                 f"(attempt {attempt}/{max_attempts})"
             )
+            if attempt > 1:
+                write_audit_log(
+                    event_type="note.fetched_after_retry",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    zoom_note_id=note_id,
+                    detail={"attempts": attempt, "max_attempts": max_attempts},
+                )
             return note_data
 
         current_app.logger.warning(
@@ -459,25 +467,34 @@ def _validate_and_process_note(
     )
  
     # --- 6. Write note to encounter ---
+    async_content = note_data.get("note_content", "") or ""
+    async_stripped_length = len(async_content.strip())
+    async_content_blank = async_stripped_length == 0
+    current_app.logger.info(
+        f"zoom_webhook | note_id={note_id} encounter={encounter_number} "
+        f"content_length={len(async_content)} stripped_length={async_stripped_length} "
+        f"content_blank={async_content_blank}"
+    )
+
     provider_username = get_provider_username(provider_id) or "admin"
- 
+
     success = write_note_to_encounter(
         encounter_number=encounter_number,
         pid=pid,
         provider_id=provider_id,
         provider_username=provider_username,
-        note_content=note_data.get("note_content", ""),
+        note_content=async_content,
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
         note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
- 
+
     if success:
         clinical_note.is_written_to_openemr = True
         clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
-        record.status = "note_written" 
+        record.status = "note_written"
         db.session.commit()
- 
+
     write_audit_log(
         event_type="note.written" if success else "note.write_failed",
         success=success,
@@ -489,7 +506,7 @@ def _validate_and_process_note(
         openemr_provider_id=str(provider_id),
         openemr_patient_id=str(pid),
         error_message=None if success else "OpenEMR note write failed",
-        detail={"ehr_context": bool(ehr_context)}
+        detail={"ehr_context": bool(ehr_context), "content_blank": async_content_blank}
     )
  
     return {

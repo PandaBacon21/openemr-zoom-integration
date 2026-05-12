@@ -151,7 +151,7 @@ def test_note_processing_audits_write_failure_with_context(app, monkeypatch):
     assert write_call["openemr_provider_id"] == "10"
     assert write_call["openemr_patient_id"] == "1"
     assert write_call["error_message"] == "OpenEMR note write failed"
-    assert write_call["detail"] == {"ehr_context": False}
+    assert write_call["detail"] == {"ehr_context": False, "content_blank": False}
 
 
 def test_note_processing_audits_encounter_failure_with_context(app, monkeypatch):
@@ -314,3 +314,83 @@ def test_waiting_room_arrival_audits_status_update_failure_with_context(app, mon
         "participant": "Patient One",
         "trigger": "meeting.participant_joined_waiting_room",
     }
+
+
+# ---------------------------------------------------------------------------
+# _fetch_note_with_retry — retry-success audit (G-N2)
+# ---------------------------------------------------------------------------
+
+def test_fetch_note_with_retry_audits_when_succeeds_after_empty(app, monkeypatch):
+    """G-N2: when content arrives non-empty on attempt > 1, write note.fetched_after_retry."""
+    with app.app_context():
+        account = _create_account("acct-retry-saves")
+        calls = []
+
+        responses = [
+            {"note_content": ""},
+            {"note_content": "Plan\nFollow up"},
+        ]
+
+        def fake_get(_account, _note_id):
+            return responses.pop(0)
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_zoom_clinical_note",
+            fake_get,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.time.sleep",
+            lambda _seconds: None,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _fetch_note_with_retry
+
+        result = _fetch_note_with_retry(
+            account=account,
+            note_id="note-retry-saves",
+            max_attempts=3,
+            delay_seconds=0,
+        )
+
+    assert result == {"note_content": "Plan\nFollow up"}
+    retry_audit = next(c for c in calls if c["event_type"] == "note.fetched_after_retry")
+    assert retry_audit["success"] is True
+    assert retry_audit["zoom_account_id"] == "acct-retry-saves"
+    assert retry_audit["zoom_note_id"] == "note-retry-saves"
+    assert retry_audit["detail"] == {"attempts": 2, "max_attempts": 3}
+
+
+def test_fetch_note_with_retry_does_not_audit_when_succeeds_first_attempt(app, monkeypatch):
+    """G-N2 negative: no note.fetched_after_retry row when attempt 1 already returns content."""
+    with app.app_context():
+        account = _create_account("acct-retry-first")
+        calls = []
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_zoom_clinical_note",
+            lambda _account, _note_id: {"note_content": "Plan\nFollow up"},
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.time.sleep",
+            lambda _seconds: None,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _fetch_note_with_retry
+
+        result = _fetch_note_with_retry(
+            account=account,
+            note_id="note-retry-first",
+            max_attempts=3,
+            delay_seconds=0,
+        )
+
+    assert result == {"note_content": "Plan\nFollow up"}
+    assert not any(c["event_type"] == "note.fetched_after_retry" for c in calls)

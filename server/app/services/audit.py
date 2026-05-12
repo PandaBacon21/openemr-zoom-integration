@@ -43,10 +43,21 @@ def write_audit_log(
       note.received             — clinical note webhook received from Zoom
       note.processing_scheduled - note retrieval process scheduled in background process
       note.retrieved            — note content fetched from Zoom API
+      note.fetch_error          — Zoom API HTTP error during fetch attempt
+      note.fetched_after_retry  — non-empty content arrived on attempt > 1 (Zoom race)
+      note.content_empty        — note content empty/whitespace at fetch time
+      note.context_missing      — pid or provider_id missing for note write
+      note.encounter_failed     — could not find or create encounter for note
+      note.dropped              — webhook received but no matching MeetingRecord
+      note.record_created       — ClinicalNoteRecord persisted on first webhook arrival
+      note.manual_fetch_requested — manual fetch button pressed in OpenEMR UI
+      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set)
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
       zoom.completion_success   — Zoom meeting marked complete successfully
+      zoom.completion_skipped   — completion idempotent — already marked complete
       zoom.completion_error     — error marking Zoom meeting complete
+      zoom.webhook_signature_failed — Zoom webhook signature verification failed
 
     Args:
         event_type:               One of the event type strings above

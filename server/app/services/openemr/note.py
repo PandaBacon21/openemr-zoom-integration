@@ -156,6 +156,16 @@ def write_note_to_encounter(
     Returns:
         True if successful, False on error
     """
+    content_length = len(note_content) if note_content else 0
+    stripped_length = len(note_content.strip()) if note_content else 0
+    content_blank = stripped_length == 0
+    logger.info(
+        f"openemr.write_note_to_encounter | entry encounter={encounter_number} "
+        f"note_id={note_id} mode={note_writeback_mode} "
+        f"content_length={content_length} stripped_length={stripped_length} "
+        f"content_blank={content_blank}"
+    )
+
     engine = get_openemr_db_engine()
     now   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -250,6 +260,10 @@ def _upsert_soap_form(
                 "id":         existing.form_id,
             }
         )
+        logger.info(
+            f"openemr.write_note | soap | update encounter={encounter_number} "
+            f"form_id={existing.form_id}"
+        )
         return existing.form_id
  
     # No existing row — insert
@@ -299,7 +313,11 @@ def _upsert_soap_form(
             "provider_id": int(provider_id),
         }
     )
- 
+
+    logger.info(
+        f"openemr.write_note | soap | insert encounter={encounter_number} "
+        f"form_id={soap_form_id} pid={pid}"
+    )
     return soap_form_id
 
 
@@ -357,6 +375,10 @@ def _upsert_clinical_note_form(
                 "external_id": note_id,
                 "id":          existing.form_id,
             }
+        )
+        logger.info(
+            f"openemr.write_note | clinical_notes | update id={existing.form_id} "
+            f"external_id={note_id}"
         )
         return existing.form_id
  
@@ -418,5 +440,9 @@ def _upsert_clinical_note_form(
             "provider_id": int(provider_id),
         }
     )
- 
+
+    logger.info(
+        f"openemr.write_note | clinical_notes | insert id={cn_id} "
+        f"encounter={encounter_number} external_id={note_id}"
+    )
     return cn_id
