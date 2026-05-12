@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import time
+import requests
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from flask import current_app
@@ -132,19 +133,26 @@ def _process_note_async(app, account_id: str, note_id: str, meeting_number: str,
 
 
 def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int = 3, delay_seconds: int = 30) -> dict | None:
-    """
-    Fetch a Zoom clinical note with retry logic to handle Zoom's known bug
-    where note_content is empty or whitespace-only immediately after the
-    note_created webhook fires.
-
-    Retries up to max_attempts times with delay_seconds between each attempt.
-
-    Returns the note dict when content is available, or the last response
-    (even if empty) after max_attempts are exhausted.
-    """
     note_data = None
     for attempt in range(1, max_attempts + 1):
-        note_data = get_zoom_clinical_note(account, note_id)
+        try:
+            note_data = get_zoom_clinical_note(account, note_id)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "unknown"
+            current_app.logger.error(
+                f"zoom_helpers | note_id={note_id} HTTP {status} error on attempt "
+                f"{attempt}/{max_attempts}: {e}"
+            )
+            write_audit_log(
+                event_type="note.fetch_error",
+                success=False,
+                zoom_account_id=account.account_id,
+                zoom_note_id=note_id,
+                error_message=f"HTTP {status} on attempt {attempt}/{max_attempts}",
+            )
+            if attempt < max_attempts:
+                time.sleep(delay_seconds)
+            continue
 
         if not note_data:
             current_app.logger.warning(
@@ -177,9 +185,7 @@ def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int
         if attempt < max_attempts:
             time.sleep(delay_seconds)
 
-    # Return whatever we have after max attempts — caller decides what to do
     return note_data
-
 # ---------------------------------------------------------------------------
 # clinical_notes.note_created handler
 # ---------------------------------------------------------------------------

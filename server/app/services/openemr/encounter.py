@@ -13,9 +13,10 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> int 
     Find an existing encounter for a given appointment.
 
     Lookup order:
-        1. external_id = 'zoom_eid_{eid}'  (created by waiting room webhook)
+        1. external_id = 'zoom_eid_{eid}'  — already claimed by Zoomly
         2. Most recent encounter for pid + provider_id on today's date
-            (created manually via UI status change)
+           with no external_id — manually created via UI status change.
+           If found, immediately stamps external_id to claim it.
 
     Args:
         eid:         OpenEMR appointment EID
@@ -25,11 +26,10 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> int 
     Returns:
         encounter number (int) or None if not found
     """
-
     engine = get_openemr_db_engine()
     try:
         with engine.begin() as conn:
-            # --- 1. Check by external_id ---
+            # --- 1. Check by external_id (fastest path) ---
             result = conn.execute(
                 text("""
                     SELECT encounter FROM form_encounter
@@ -46,10 +46,40 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> int 
                 )
                 return result.encounter
 
+            # --- 2. Fallback: manually created encounter (no external_id) ---
+            # Provider manually set status to Arrived in OpenEMR UI,
+            # triggering OpenEMR's auto-create which sets no external_id.
+            # Stamp immediately so all future lookups hit path 1.
+            result = conn.execute(
+                text("""
+                    SELECT encounter FROM form_encounter
+                    WHERE pid = :pid
+                    AND provider_id = :provider_id
+                    AND DATE(date) = CURDATE()
+                    AND (external_id IS NULL OR external_id = '')
+                    ORDER BY encounter DESC
+                    LIMIT 1
+                """),
+                {"pid": int(pid), "provider_id": int(provider_id)}
+            ).fetchone()
+
             if result:
+                # Claim — stamp external_id so future lookups find it via path 1
+                conn.execute(
+                    text("""
+                        UPDATE form_encounter
+                        SET external_id = :external_id
+                        WHERE encounter = :encounter
+                    """),
+                    {
+                        "external_id": f"zoom_eid_{eid}",
+                        "encounter": result.encounter
+                    }
+                )
                 logger.info(
-                    f"openemr.find_encounter | Found by pid+provider+date "
-                    f"pid={pid} provider={provider_id} → encounter={result.encounter}"
+                    f"openemr.find_encounter | Found manually-created encounter "
+                    f"pid={pid} provider={provider_id} → encounter={result.encounter} "
+                    f"— stamped external_id=zoom_eid_{eid}"
                 )
                 return result.encounter
 
