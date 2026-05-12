@@ -23,10 +23,10 @@ This is a future-facing planning reference for Phase 2 work. Status, size, prior
 
 | ID    | Area           | Size | Status  | Priority | Story / Task                     | Notes                                                                                                  |
 | ----- | -------------- | ---: | ------- | -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| S8-01 | Infrastructure |    S | Backlog | High     | Add Adminer Docker service       | Internal-only `adminer:latest`, no NPM exposure; connect to both `mariadb-emr` and `zoomly-postgres`.  |
-| S8-02 | React Frontend |    S | Backlog | High     | Adminer nav item                 | Add an admin-only Database nav item that renders Adminer in a full-height iframe through Flask.        |
-| S8-03 | Flask Backend  |    S | Backlog | Medium   | Adminer reverse proxy            | Add JWT-protected `/admin/db` proxy to `http://adminer:8080` so Adminer stays off the public internet. |
-| S8-04 | QA             |    S | Backlog | Medium   | Validate Adminer database access | Verify browsing and read/write operations for both OpenEMR MariaDB and Zoomly PostgreSQL schemas.      |
+| S8-01 | Infrastructure |    S | Backlog | High     | Add DbGate Docker service        | Internal-only `dbgate/dbgate`, no NPM exposure; connect to both `mariadb-emr` and `zoomly-postgres`. |
+| S8-02 | React Frontend |    S | Backlog | High     | DbGate nav item                  | Add an admin-only Database nav item that renders DbGate in a full-height iframe through Flask.       |
+| S8-03 | Flask Backend  |    S | Backlog | Medium   | DbGate reverse proxy             | Add JWT-protected `/admin/db` proxy to `http://dbgate:3000` so DbGate stays off the public internet. |
+| S8-04 | QA             |    S | Backlog | Medium   | Validate DbGate database access  | Verify browsing and read/write operations for both OpenEMR MariaDB and Zoomly PostgreSQL schemas.    |
 
 ## Sprint 9 - SE Demo Completion
 

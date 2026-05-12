@@ -1,19 +1,16 @@
-
-def verify_jwt_request() -> None | tuple:
-    """
-    Call from before_request guards on protected blueprints.
-    Returns None if valid (request proceeds), or a 401 response tuple.
-    """
+def verify_jwt_cookie_or_header() -> None | tuple:
     import jwt
     from flask import request, jsonify, current_app
 
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Missing or invalid Authorization header"}), 401
+    token = request.cookies.get("admin_token")
 
-    token = auth_header.split(" ", 1)[1]
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid Authorization header"}), 401
+        token = auth_header.split(" ", 1)[1]
+
     secret: str | None = current_app.config.get("CONFIG_JWT_SECRET")
-
     if not secret:
         return jsonify({"error": "JWT secret not configured"}), 500
 
@@ -24,3 +21,5 @@ def verify_jwt_request() -> None | tuple:
         return jsonify({"error": "Token expired"}), 401
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token"}), 401
+    except Exception:
+        return jsonify({"error": "Auth error"}), 401

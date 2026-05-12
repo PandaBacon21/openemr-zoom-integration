@@ -65,8 +65,11 @@ services:
       # Patch for bug and added delete method in OpenEMR Registration/De-Registration flow
       - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
       - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
-      # Patch for adding appointment event notifications
-      - ./patches/zoom_appointment_listener:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
+      # Patches for adding appointment event notifications
+      - ./patches/zoom_appointment_listener/AppointmentListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
+      - ./patches/zoom_appointment_listener/Bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/Bootstrap.php
+      - ./patches/zoom_appointment_listener/DialogCloseListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/DialogCloseListener.php
+      - ./patches/zoom_appointment_listener/openemr.bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/openemr.bootstrap.php
       # Patch for adding Start Zoom Meeting button
       - ./patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
       - ./patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
@@ -179,10 +182,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── DbGate DB Browser ───────────────────────────────────────────────────────
+  # Internal-only DB browser. Accessible via Flask reverse proxy at /admin/db.
+  # NOT exposed through Nginx Proxy Manager — internal network only.
+  dbgate:
+    image: dbgate/dbgate
+    container_name: zoomly-dbgate
+    restart: unless-stopped
+    environment:
+      SKIP_ALL_AUTH: 1
+      WEB_ROOT: /admin/db
+      CONNECTIONS: emr,zoomly
+      LABEL_emr: OpenEMR (MariaDB)
+      SERVER_emr: mariadb
+      USER_emr: ${OPENEMR_DB_USER}
+      PASSWORD_emr: ${OPENEMR_DB_PASS}
+      PORT_emr: 3306
+      ENGINE_emr: mysql@dbgate-plugin-mysql
+      LABEL_zoomly: Zoomly App (Postgres)
+      SERVER_zoomly: postgres
+      USER_zoomly: ${POSTGRES_USER}
+      PASSWORD_zoomly: ${POSTGRES_PASSWORD}
+      PORT_zoomly: 5432
+      ENGINE_zoomly: postgres@dbgate-plugin-postgres
+    networks:
+      - integration_net
+
   # ─── Flask Integration Server ─────────────────────────────────────────────────
   # Built from server/ directory. Reaches OpenEMR by container name on the
   # internal network
-  app:
+  zoom-bridge:
     build:
       context: .
       dockerfile: server/Dockerfile
