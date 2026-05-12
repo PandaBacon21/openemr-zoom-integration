@@ -1,3 +1,4 @@
+import uuid
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
@@ -139,8 +140,8 @@ def write_note_to_encounter(
       2. form_clinical_notes — full note content as narrative
  
     Both operations are idempotent:
-      - SOAP deduped by encounter + formdir
-      - Clinical Notes deduped by external_id = note_id
+      - Deduped by encounter + formdir via the forms registration table —
+        at most one SOAP form and one Clinical Notes form per encounter.
  
     Args:
         encounter_number:  OpenEMR encounter number
@@ -149,7 +150,8 @@ def write_note_to_encounter(
         provider_username: OpenEMR provider username (for forms.user field)
         note_content:      Raw note_content from Zoom clinical notes API
         note_title:        Note title from Zoom webhook payload
-        note_id:           Zoom note ID (stored in external_id for dedup)
+        note_id:           Zoom note ID (stored on form_clinical_notes.external_id
+                           for traceability — refreshed on each write)
  
     Returns:
         True if successful, False on error
@@ -315,43 +317,50 @@ def _upsert_clinical_note_form(
 ) -> int:
     """
     Insert or update a Clinical Notes form for the given encounter.
- 
-    Dedup key: form_clinical_notes.external_id = note_id
-    On update: updates description (note_content) and codetext (note_title) only.
+
+    Dedup key: forms.encounter + formdir='clinical_notes' + deleted=0
+    (mirrors _upsert_soap_form — ensures one Clinical Notes form per encounter).
+
+    external_id is still populated on insert and refreshed on update with the
+    latest note_id so the row records which Zoom note last contributed to it.
+
+    On update: refreshes description, external_id, and clinical_notes_type.
     On insert: inserts form_clinical_notes row (with self-referential form_id)
                and registers in forms table.
- 
+
     Returns:
         cn_id (int) — the form_clinical_notes.id for the written row
     """
     existing = conn.execute(
         text("""
-            SELECT id FROM form_clinical_notes
-            WHERE external_id = :note_id
-            ORDER BY id DESC
+            SELECT form_id FROM forms
+            WHERE encounter = :encounter
+            AND formdir = 'clinical_notes'
+            AND deleted = 0
             LIMIT 1
         """),
-        {"note_id": note_id}
+        {"encounter": encounter_number}
     ).fetchone()
- 
+
     if existing:
         conn.execute(
             text("""
                 UPDATE form_clinical_notes
                 SET description = :description,
                     codetext    = '',
+                    external_id = :external_id,
                     clinical_notes_type = 'general_note'
                 WHERE id = :id
             """),
             {
                 "description": f"{note_title}\n\n{note_content}",
-                "id":          existing.id,
+                "external_id": note_id,
+                "id":          existing.form_id,
             }
         )
-        return existing.id
+        return existing.form_id
  
     # No existing row — insert
-    import uuid
     cn_uuid = uuid.uuid4().bytes
  
     result = conn.execute(

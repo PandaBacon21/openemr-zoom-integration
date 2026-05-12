@@ -64,3 +64,6 @@ node_modules
 *.njsproj
 *.sln
 *.sw?
+
+# Claude 
+CLAUDE.md
