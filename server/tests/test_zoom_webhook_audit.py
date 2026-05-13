@@ -103,7 +103,7 @@ def test_note_processing_audits_write_failure_with_context(app, monkeypatch):
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
-            lambda eid, pid, provider_id: None,
+            lambda eid, pid, provider_id: (None, None),
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
@@ -169,7 +169,7 @@ def test_note_processing_audits_encounter_failure_with_context(app, monkeypatch)
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
-            lambda eid, pid, provider_id: None,
+            lambda eid, pid, provider_id: (None, None),
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
@@ -223,7 +223,7 @@ def test_note_processing_uses_account_writeback_mode(app, monkeypatch):
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
-            lambda eid, pid, provider_id: None,
+            lambda eid, pid, provider_id: (None, None),
         )
         monkeypatch.setattr(
             "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
@@ -521,3 +521,184 @@ def test_process_note_async_audits_unhandled_exception(app, monkeypatch):
     assert err["zoom_meeting_id"] == "meet-async"
     assert err["zoom_note_id"] == "note-async-err"
     assert "validation blew up" in err["error_message"]
+
+
+# ---------------------------------------------------------------------------
+# PR 5 — encounter.claimed and encounter.created audits
+# ---------------------------------------------------------------------------
+
+def test_note_processing_audits_encounter_claimed_on_manual_fallback(app, monkeypatch):
+    """G-N7: find_encounter_for_appointment source=manual_fallback → encounter.claimed audit."""
+    with app.app_context():
+        account = _create_account("acct-claimed")
+        _create_meeting(account, meeting_id="meet-claimed")
+        calls = []
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_zoom_clinical_note",
+            lambda account, note_id: {
+                "note_title": "Zoom Clinical Note",
+                "note_content": "Plan\nFollow up",
+            },
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
+            lambda eid, pid, provider_id: (777001, "manual_fallback"),
+        )
+        # Stub the redundant external_id re-stamp engine call
+        class _StubConn:
+            def execute(self, *_args, **_kwargs):
+                return None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+        class _StubEngine:
+            def begin(self):
+                return _StubConn()
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_openemr_db_engine",
+            lambda: _StubEngine(),
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_provider_username",
+            lambda provider_id: "provider-user",
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_note_to_encounter",
+            lambda **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _validate_and_process_note
+
+        body, status = _validate_and_process_note(
+            account=account,
+            meeting_number="meet-claimed",
+            note_id="note-claimed",
+            note_title="Zoom Clinical Note",
+        )
+
+    assert status == 200
+    claimed = next(c for c in calls if c["event_type"] == "encounter.claimed")
+    assert claimed["success"] is True
+    assert claimed["zoom_account_id"] == "acct-claimed"
+    assert claimed["zoom_meeting_id"] == "meet-claimed"
+    assert claimed["zoom_note_id"] == "note-claimed"
+    assert claimed["openemr_encounter_number"] == "777001"
+    assert claimed["detail"] == {"reason": "manual_fallback"}
+    # No encounter.created should fire on the claim path
+    assert not any(c["event_type"] == "encounter.created" for c in calls)
+
+
+def test_note_processing_audits_encounter_created_on_new_encounter(app, monkeypatch):
+    """G-N8: when find_encounter_for_appointment returns None and create_encounter succeeds,
+    write encounter.created audit with trigger=note_processing."""
+    with app.app_context():
+        account = _create_account("acct-enc-created")
+        _create_meeting(account, meeting_id="meet-enc-created")
+        calls = []
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_zoom_clinical_note",
+            lambda account, note_id: {
+                "note_title": "Zoom Clinical Note",
+                "note_content": "Plan\nFollow up",
+            },
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.find_encounter_for_appointment",
+            lambda eid, pid, provider_id: (None, None),
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
+            lambda eid: {"facility_id": 1, "pc_catid": 27},
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.create_encounter",
+            lambda **kwargs: 777002,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_provider_username",
+            lambda provider_id: "provider-user",
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_note_to_encounter",
+            lambda **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _validate_and_process_note
+
+        body, status = _validate_and_process_note(
+            account=account,
+            meeting_number="meet-enc-created",
+            note_id="note-enc-created",
+            note_title="Zoom Clinical Note",
+        )
+
+    assert status == 200
+    created = next(c for c in calls if c["event_type"] == "encounter.created")
+    assert created["success"] is True
+    assert created["zoom_account_id"] == "acct-enc-created"
+    assert created["zoom_meeting_id"] == "meet-enc-created"
+    assert created["zoom_note_id"] == "note-enc-created"
+    assert created["openemr_encounter_number"] == "777002"
+    assert created["detail"] == {"trigger": "note_processing"}
+
+
+def test_waiting_room_audits_encounter_created_on_success(app, monkeypatch):
+    """G-N8 parity: waiting-room handler emits encounter.created on create success."""
+    with app.app_context():
+        account = _create_account("acct-wr-created")
+        _create_meeting(account, meeting_id="meet-wr-created")
+        calls = []
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.update_appointment_status",
+            lambda eid, status: True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
+            lambda eid: {"pid": 1, "provider_id": 10, "facility_id": 1, "pc_catid": 27},
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.create_encounter",
+            lambda **kwargs: 777003,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        payload = {
+            "event": "meeting.participant_joined_waiting_room",
+            "payload": {"object": {
+                "id": "meet-wr-created",
+                "participant": {"user_name": "Patient X"},
+            }},
+        }
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_waiting_room_joined
+        body, status = _handle_waiting_room_joined(payload, account)
+
+    assert status == 200
+    created = next(c for c in calls if c["event_type"] == "encounter.created")
+    assert created["success"] is True
+    assert created["zoom_account_id"] == "acct-wr-created"
+    assert created["openemr_appointment_id"] == "999"
+    assert created["openemr_provider_id"] == "10"
+    assert created["openemr_patient_id"] == "1"
+    assert created["zoom_meeting_id"] == "meet-wr-created"
+    assert created["openemr_encounter_number"] == "777003"
+    assert created["detail"] == {"trigger": "waiting_room"}

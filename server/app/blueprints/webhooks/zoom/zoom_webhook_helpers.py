@@ -438,22 +438,37 @@ def _validate_and_process_note(
         return {"status": "error", "reason": "missing patient or provider"}, 500
  
     # --- 5. Find existing encounter or create one ---
-    encounter_number = find_encounter_for_appointment(eid, pid, provider_id)
- 
+    encounter_number, encounter_source = find_encounter_for_appointment(eid, pid, provider_id)
+
     if encounter_number:
+        # G-N7: surface the S7-01 fallback path in the dashboard
+        if encounter_source == "manual_fallback":
+            write_audit_log(
+                event_type="encounter.claimed",
+                success=True,
+                zoom_account_id=account.account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                openemr_appointment_id=str(eid),
+                openemr_encounter_number=str(encounter_number),
+                openemr_provider_id=openemr_provider_id,
+                openemr_patient_id=openemr_patient_id,
+                detail={"reason": "manual_fallback"},
+            )
+
         # Stamp external_id if not already set (e.g. manually created encounter)
         engine = get_openemr_db_engine()
         with engine.begin() as conn:
             conn.execute(
                 text("""
-                    UPDATE form_encounter 
+                    UPDATE form_encounter
                     SET external_id = :external_id
                     WHERE encounter = :encounter
                     AND (external_id IS NULL OR external_id = '')
                 """),
                 {"external_id": f"zoom_eid_{eid}", "encounter": encounter_number}
             )
- 
+
     if not encounter_number:
         current_app.logger.info(
             f"zoom_webhook | no encounter found for eid={eid} — creating"
@@ -467,6 +482,20 @@ def _validate_and_process_note(
                 pc_catid=appt["pc_catid"],
                 eid=eid,
             )
+            if encounter_number:
+                # G-N8: explicit success audit so "encounter created, note failed" is visible
+                write_audit_log(
+                    event_type="encounter.created",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    zoom_meeting_id=meeting_number,
+                    zoom_note_id=note_id,
+                    openemr_appointment_id=str(eid),
+                    openemr_encounter_number=str(encounter_number),
+                    openemr_provider_id=openemr_provider_id,
+                    openemr_patient_id=openemr_patient_id,
+                    detail={"trigger": "note_processing"},
+                )
  
     if not encounter_number:
         current_app.logger.error(
@@ -615,6 +644,19 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
                 openemr_patient_id=str(appt["pid"]),
                 zoom_meeting_id=meeting_id,
                 error_message="create_encounter returned None",
+                detail={"trigger": "waiting_room"},
+            )
+        else:
+            # G-N8: explicit success audit
+            write_audit_log(
+                event_type="encounter.created",
+                success=True,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=str(appt["provider_id"]),
+                openemr_patient_id=str(appt["pid"]),
+                zoom_meeting_id=meeting_id,
+                openemr_encounter_number=str(encounter_number),
                 detail={"trigger": "waiting_room"},
             )
 

@@ -28,7 +28,8 @@ def write_audit_log(
 
     Event types for appointment/meeting pipeline:
       appointment.received          — inbound webhook accepted and validated
-      appointment.dropped           — filtered out (no matching provider/type)
+      appointment.dropped           — filtered out (detail.reason: missing_provider_id,
+                                       provider_unmapped, account_inactive, type_mismatch)
       appointment.delete_no_record  — delete event received but no MeetingRecord existed
       appointment.patient_arrived   — waiting-room/JBH event marked appt as Arrived
       meeting.created               — Zoom meeting created successfully
@@ -60,6 +61,8 @@ def write_audit_log(
       note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set)
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
+      encounter.claimed         — manually-created encounter claimed via fallback path (S7-01)
+      encounter.created         — new encounter created via create_encounter (detail.trigger set)
       encounter.create_failed   — create_encounter returned None (detail.trigger set)
       zoom.completion_success   — Zoom meeting marked complete successfully
       zoom.completion_skipped   — completion idempotent — already marked complete

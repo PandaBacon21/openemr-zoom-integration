@@ -72,7 +72,9 @@ def _create_type_filter(account: ZoomAccount, type_id: str) -> AppointmentTypeFi
 def test_filter_appointment_event_drops_when_provider_missing():
     payload = dict(BASE_PAYLOAD)
     payload.pop("provider_id")
-    assert appointment_processor.filter_appointment_event(payload) == []
+    matches, reason = appointment_processor.filter_appointment_event(payload)
+    assert matches == []
+    assert reason == "missing_provider_id"
 
 
 def test_filter_appointment_event_drops_by_provider_id(app):
@@ -82,7 +84,9 @@ def test_filter_appointment_event_drops_by_provider_id(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
         _create_provider_mapping(account, npi="1234567890", provider_id="10")
-        assert appointment_processor.filter_appointment_event(payload) == []
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+    assert matches == []
+    assert reason == "provider_unmapped"
 
 
 def test_filter_appointment_event_matches_when_no_type_filters(app):
@@ -92,12 +96,13 @@ def test_filter_appointment_event_matches_when_no_type_filters(app):
 
         payload = dict(BASE_PAYLOAD)
         payload["category_id"] = 99  # no filters configured => all types pass
-        matches = appointment_processor.filter_appointment_event(payload)
+        matches, reason = appointment_processor.filter_appointment_event(payload)
 
     assert len(matches) == 1
     assert matches[0].zoom_account.account_id == "acct-1"
     assert matches[0].provider_mapping.id == mapping.id
     assert matches[0].payload["eid"] == 999
+    assert reason is None
 
 
 def test_filter_appointment_event_drops_by_category_id(app):
@@ -108,7 +113,9 @@ def test_filter_appointment_event_drops_by_category_id(app):
 
         payload = dict(BASE_PAYLOAD)
         payload["category_id"] = 99
-        assert appointment_processor.filter_appointment_event(payload) == []
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+    assert matches == []
+    assert reason == "type_mismatch"
 
 
 def test_filter_appointment_event_matches_allowed_category(app):
@@ -119,10 +126,11 @@ def test_filter_appointment_event_matches_allowed_category(app):
 
         payload = dict(BASE_PAYLOAD)
         payload["category_id"] = 27
-        matches = appointment_processor.filter_appointment_event(payload)
+        matches, reason = appointment_processor.filter_appointment_event(payload)
 
     assert len(matches) == 1
     assert matches[0].zoom_account.account_id == "acct-1"
+    assert reason is None
 
 
 def test_filter_appointment_event_skips_mapping_when_account_inactive(app):
@@ -131,6 +139,7 @@ def test_filter_appointment_event_skips_mapping_when_account_inactive(app):
         _create_provider_mapping(account, npi="1234567890", provider_id="10")
 
         payload = dict(BASE_PAYLOAD)
-        matches = appointment_processor.filter_appointment_event(payload)
+        matches, reason = appointment_processor.filter_appointment_event(payload)
 
     assert matches == []
+    assert reason == "account_inactive"

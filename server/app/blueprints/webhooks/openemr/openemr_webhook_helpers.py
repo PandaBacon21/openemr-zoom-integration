@@ -60,17 +60,17 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
     eid = payload.get("eid")
 
     # Filter
-    matches = filter_appointment_event(payload)
+    matches, drop_reason = filter_appointment_event(payload)
 
     if not matches:
         current_app.logger.info(
-            f"webhooks.openemr | eid={eid} dropped — no matching account/provider/type"
+            f"webhooks.openemr | eid={eid} dropped — reason={drop_reason}"
         )
         write_audit_log(
             event_type="appointment.dropped",
             success=True,
             openemr_appointment_id=eid,
-            detail={"reason": "no matching provider/type", "appointment_type": payload.get("category_id")},
+            detail={"reason": drop_reason, "appointment_type": payload.get("category_id")},
         )
         return {"status": "dropped", "eid": eid}, 200
 
