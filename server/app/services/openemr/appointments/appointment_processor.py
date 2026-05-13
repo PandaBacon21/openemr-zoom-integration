@@ -26,7 +26,7 @@ class AppointmentMatch:
 # Filter logic
 # ---------------------------------------------------------------------------
 
-def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
+def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str | None]:
     """
     Determine which registered Zoom accounts (if any) should receive a
     Zoom meeting for this appointment event.
@@ -45,8 +45,11 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
                  Expected keys: provider_id, category_id, eid, pid, etc.
 
     Returns:
-        List of AppointmentMatch objects — one per matching account.
-        Empty list means the event should be silently dropped.
+        (matches, drop_reason)
+          matches:     List of AppointmentMatch objects (may be empty)
+          drop_reason: None when matches is non-empty.
+                       Otherwise one of: "missing_provider_id",
+                       "provider_unmapped", "account_inactive", "type_mismatch".
     """
     provider_id = payload.get("provider_id")
     category_id = payload.get("category_id")
@@ -57,7 +60,7 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
         logger.info(
             f"appointment_processor | eid={eid} has no provider_id, dropping"
         )
-        return []
+        return [], "missing_provider_id"
 
     # --- 2. Find all active ProviderMappings for this NPI ---
     # A single NPI could theoretically be mapped across multiple Zoom accounts
@@ -73,10 +76,12 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
             f"appointment_processor | eid={eid} provider_id={provider_id} "
             "has no active provider mappings, dropping"
         )
-        return []
+        return [], "provider_unmapped"
 
     # --- 3. For each mapping, check appointment type filter ---
-    matches = []
+    matches: list[AppointmentMatch] = []
+    any_account_active = False
+    any_type_mismatched = False
 
     for mapping in mappings:
         account = ZoomAccount.query.filter_by(
@@ -89,6 +94,8 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
                 f"references inactive or missing ZoomAccount account_id={mapping.zoom_account_id}, skipping"
             )
             continue
+
+        any_account_active = True
 
         # Fetch this account's appointment type filter list
         type_filters = (
@@ -129,9 +136,19 @@ def filter_appointment_event(payload: dict) -> list[AppointmentMatch]:
                 payload=payload
             ))
         else:
+            any_type_mismatched = True
             logger.info(
                 f"appointment_processor | eid={eid} account={account.account_id} "
                 f"category_id={category_id} not in filter list {allowed_type_ids}, dropping"
             )
 
-    return matches
+    if matches:
+        return matches, None
+
+    if not any_account_active:
+        return [], "account_inactive"
+
+    if any_type_mismatched:
+        return [], "type_mismatch"
+
+    return [], "unknown"

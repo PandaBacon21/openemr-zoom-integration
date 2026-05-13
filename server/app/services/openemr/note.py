@@ -1,3 +1,4 @@
+import uuid
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
@@ -88,38 +89,48 @@ def parse_soap_sections(note_content: str) -> dict:
     current_field = "subjective"  # default catch-all
     current_header = None
     buffer = []
- 
+    headers_recognized = 0
+
     def flush_buffer():
         if buffer and current_header is not None:
             content = "\n".join(buffer).strip()
             if content:
                 sections[current_field].append(f"{current_header}\n{content}")
         buffer.clear()
- 
+
     for line in note_content.splitlines():
         stripped = line.strip()
         lower = stripped.lower()
- 
+
         # Check if this line is a known section header
         matched_field = SOAP_SECTION_MAP.get(lower)
- 
+
         if matched_field is not None:
             # Flush previous section buffer
             flush_buffer()
             current_field = matched_field
             current_header = stripped
+            headers_recognized += 1
         else:
             buffer.append(stripped)
- 
+
     # Flush final buffer
     flush_buffer()
- 
-    return {
+
+    result = {
         "subjective":  "\n\n".join(sections["subjective"]),
         "objective":   "\n\n".join(sections["objective"]),
         "assessment":  "\n\n".join(sections["assessment"]),
         "plan":        "\n\n".join(sections["plan"]),
     }
+    logger.info(
+        f"openemr.parse_soap | headers_recognized={headers_recognized} "
+        f"subjective_chars={len(result['subjective'])} "
+        f"objective_chars={len(result['objective'])} "
+        f"assessment_chars={len(result['assessment'])} "
+        f"plan_chars={len(result['plan'])}"
+    )
+    return result
  
 def write_note_to_encounter(
     encounter_number: int,
@@ -139,8 +150,8 @@ def write_note_to_encounter(
       2. form_clinical_notes — full note content as narrative
  
     Both operations are idempotent:
-      - SOAP deduped by encounter + formdir
-      - Clinical Notes deduped by external_id = note_id
+      - Deduped by encounter + formdir via the forms registration table —
+        at most one SOAP form and one Clinical Notes form per encounter.
  
     Args:
         encounter_number:  OpenEMR encounter number
@@ -149,11 +160,22 @@ def write_note_to_encounter(
         provider_username: OpenEMR provider username (for forms.user field)
         note_content:      Raw note_content from Zoom clinical notes API
         note_title:        Note title from Zoom webhook payload
-        note_id:           Zoom note ID (stored in external_id for dedup)
+        note_id:           Zoom note ID (stored on form_clinical_notes.external_id
+                           for traceability — refreshed on each write)
  
     Returns:
         True if successful, False on error
     """
+    content_length = len(note_content) if note_content else 0
+    stripped_length = len(note_content.strip()) if note_content else 0
+    content_blank = stripped_length == 0
+    logger.info(
+        f"openemr.write_note_to_encounter | entry encounter={encounter_number} "
+        f"note_id={note_id} mode={note_writeback_mode} "
+        f"content_length={content_length} stripped_length={stripped_length} "
+        f"content_blank={content_blank}"
+    )
+
     engine = get_openemr_db_engine()
     now   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -248,6 +270,10 @@ def _upsert_soap_form(
                 "id":         existing.form_id,
             }
         )
+        logger.info(
+            f"openemr.write_note | soap | update encounter={encounter_number} "
+            f"form_id={existing.form_id}"
+        )
         return existing.form_id
  
     # No existing row — insert
@@ -297,7 +323,11 @@ def _upsert_soap_form(
             "provider_id": int(provider_id),
         }
     )
- 
+
+    logger.info(
+        f"openemr.write_note | soap | insert encounter={encounter_number} "
+        f"form_id={soap_form_id} pid={pid}"
+    )
     return soap_form_id
 
 
@@ -315,43 +345,54 @@ def _upsert_clinical_note_form(
 ) -> int:
     """
     Insert or update a Clinical Notes form for the given encounter.
- 
-    Dedup key: form_clinical_notes.external_id = note_id
-    On update: updates description (note_content) and codetext (note_title) only.
+
+    Dedup key: forms.encounter + formdir='clinical_notes' + deleted=0
+    (mirrors _upsert_soap_form — ensures one Clinical Notes form per encounter).
+
+    external_id is still populated on insert and refreshed on update with the
+    latest note_id so the row records which Zoom note last contributed to it.
+
+    On update: refreshes description, external_id, and clinical_notes_type.
     On insert: inserts form_clinical_notes row (with self-referential form_id)
                and registers in forms table.
- 
+
     Returns:
         cn_id (int) — the form_clinical_notes.id for the written row
     """
     existing = conn.execute(
         text("""
-            SELECT id FROM form_clinical_notes
-            WHERE external_id = :note_id
-            ORDER BY id DESC
+            SELECT form_id FROM forms
+            WHERE encounter = :encounter
+            AND formdir = 'clinical_notes'
+            AND deleted = 0
             LIMIT 1
         """),
-        {"note_id": note_id}
+        {"encounter": encounter_number}
     ).fetchone()
- 
+
     if existing:
         conn.execute(
             text("""
                 UPDATE form_clinical_notes
                 SET description = :description,
                     codetext    = '',
+                    external_id = :external_id,
                     clinical_notes_type = 'general_note'
                 WHERE id = :id
             """),
             {
                 "description": f"{note_title}\n\n{note_content}",
-                "id":          existing.id,
+                "external_id": note_id,
+                "id":          existing.form_id,
             }
         )
-        return existing.id
+        logger.info(
+            f"openemr.write_note | clinical_notes | update id={existing.form_id} "
+            f"external_id={note_id}"
+        )
+        return existing.form_id
  
     # No existing row — insert
-    import uuid
     cn_uuid = uuid.uuid4().bytes
  
     result = conn.execute(
@@ -409,5 +450,9 @@ def _upsert_clinical_note_form(
             "provider_id": int(provider_id),
         }
     )
- 
+
+    logger.info(
+        f"openemr.write_note | clinical_notes | insert id={cn_id} "
+        f"encounter={encounter_number} external_id={note_id}"
+    )
     return cn_id

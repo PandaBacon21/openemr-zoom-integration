@@ -400,9 +400,13 @@ def get_zoom_clinical_note(zoom_account: ZoomAccount, note_id: str) -> dict | No
             f"/clinical_notes/notes/{note_id}",
             zoom_account
         )
+        content = result.get("note_content") or ""
+        stripped_length = len(content.strip())
         logger.info(
             f"zoom.get_clinical_note | Retrieved note_id={note_id} "
-            f"is_completed={result.get('is_note_completed')}"
+            f"is_completed={result.get('is_note_completed')} "
+            f"content_length={len(content)} stripped_length={stripped_length} "
+            f"content_blank={stripped_length == 0}"
         )
         return result
     except requests.HTTPError as e:

@@ -28,7 +28,10 @@ def write_audit_log(
 
     Event types for appointment/meeting pipeline:
       appointment.received          — inbound webhook accepted and validated
-      appointment.dropped           — filtered out (no matching provider/type)
+      appointment.dropped           — filtered out (detail.reason: missing_provider_id,
+                                       provider_unmapped, account_inactive, type_mismatch)
+      appointment.delete_no_record  — delete event received but no MeetingRecord existed
+      appointment.patient_arrived   — waiting-room/JBH event marked appt as Arrived
       meeting.created               — Zoom meeting created successfully
       meeting.updated               — Zoom meeting patched with new appointment details
       meeting.recreated             — replacement meeting created after Zoom deletion
@@ -36,6 +39,7 @@ def write_audit_log(
       meeting.create_failed         — Zoom API error during meeting creation
       meeting.update_failed         — Zoom API error during meeting update
       meeting.delete_failed         — Zoom API error during meeting delete
+      meeting.started               — Zoom meeting.started webhook updated MeetingRecord
       openemr.url_writeback_success - Zoom Meeting links written to OpenEMR Appointment Record
       openemr.url_writeback_failed  - Zoom Meeting links failed when writing to OpenEMR Appointment Record
 
@@ -43,10 +47,27 @@ def write_audit_log(
       note.received             — clinical note webhook received from Zoom
       note.processing_scheduled - note retrieval process scheduled in background process
       note.retrieved            — note content fetched from Zoom API
+      note.fetch_error          — Zoom API HTTP error during fetch attempt
+      note.fetched_after_retry  — non-empty content arrived on attempt > 1 (Zoom race)
+      note.content_empty        — note content empty/whitespace at fetch time
+      note.context_missing      — pid or provider_id missing for note write
+      note.encounter_failed     — could not find or create encounter for note
+      note.dropped              — webhook received but no matching MeetingRecord
+                                  (also: async job runs but account is inactive)
+      note.record_created       — ClinicalNoteRecord persisted on first webhook arrival
+      note.handler_error        — top-level exception in clinical_notes.note_created handler
+      note.async_job_error      — unhandled exception inside async note processor
+      note.manual_fetch_requested — manual fetch button pressed in OpenEMR UI
+      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set)
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
+      encounter.claimed         — manually-created encounter claimed via fallback path (S7-01)
+      encounter.created         — new encounter created via create_encounter (detail.trigger set)
+      encounter.create_failed   — create_encounter returned None (detail.trigger set)
       zoom.completion_success   — Zoom meeting marked complete successfully
+      zoom.completion_skipped   — completion idempotent — already marked complete
       zoom.completion_error     — error marking Zoom meeting complete
+      zoom.webhook_signature_failed — Zoom webhook signature verification failed
 
     Args:
         event_type:               One of the event type strings above

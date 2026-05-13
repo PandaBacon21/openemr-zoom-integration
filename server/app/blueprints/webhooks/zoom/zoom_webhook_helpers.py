@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import time
+import requests
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from flask import current_app
@@ -121,30 +122,60 @@ def _process_note_async(app, account_id: str, note_id: str, meeting_number: str,
         account = ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
         if not account:
             app.logger.error(f"zoom_helpers | async note job | no account for {account_id}")
+            write_audit_log(
+                event_type="note.dropped",
+                success=False,
+                zoom_account_id=account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                error_message="account inactive or missing at async run time",
+                detail={"reason": "account_inactive"},
+            )
             return
-        _validate_and_process_note(
-            account=account,
-            meeting_number=meeting_number,
-            note_id=note_id,
-            note_title=note_title,
-        )
+        try:
+            _validate_and_process_note(
+                account=account,
+                meeting_number=meeting_number,
+                note_id=note_id,
+                note_title=note_title,
+            )
+        except Exception as e:
+            app.logger.error(
+                f"zoom_helpers | async note job | unhandled exception note_id={note_id}: {e}",
+                exc_info=True,
+            )
+            write_audit_log(
+                event_type="note.async_job_error",
+                success=False,
+                zoom_account_id=account.account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                error_message=str(e),
+            )
         app.logger.info(f"zoom_helpers | async note job complete | note_id={note_id}")
 
 
 def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int = 3, delay_seconds: int = 30) -> dict | None:
-    """
-    Fetch a Zoom clinical note with retry logic to handle Zoom's known bug
-    where note_content is empty or whitespace-only immediately after the
-    note_created webhook fires.
-
-    Retries up to max_attempts times with delay_seconds between each attempt.
-
-    Returns the note dict when content is available, or the last response
-    (even if empty) after max_attempts are exhausted.
-    """
     note_data = None
     for attempt in range(1, max_attempts + 1):
-        note_data = get_zoom_clinical_note(account, note_id)
+        try:
+            note_data = get_zoom_clinical_note(account, note_id)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "unknown"
+            current_app.logger.error(
+                f"zoom_helpers | note_id={note_id} HTTP {status} error on attempt "
+                f"{attempt}/{max_attempts}: {e}"
+            )
+            write_audit_log(
+                event_type="note.fetch_error",
+                success=False,
+                zoom_account_id=account.account_id,
+                zoom_note_id=note_id,
+                error_message=f"HTTP {status} on attempt {attempt}/{max_attempts}",
+            )
+            if attempt < max_attempts:
+                time.sleep(delay_seconds)
+            continue
 
         if not note_data:
             current_app.logger.warning(
@@ -159,6 +190,14 @@ def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int
                 f"zoom_helpers | note_id={note_id} content available "
                 f"(attempt {attempt}/{max_attempts})"
             )
+            if attempt > 1:
+                write_audit_log(
+                    event_type="note.fetched_after_retry",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    zoom_note_id=note_id,
+                    detail={"attempts": attempt, "max_attempts": max_attempts},
+                )
             return note_data
 
         current_app.logger.warning(
@@ -177,9 +216,7 @@ def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int
         if attempt < max_attempts:
             time.sleep(delay_seconds)
 
-    # Return whatever we have after max attempts — caller decides what to do
     return note_data
-
 # ---------------------------------------------------------------------------
 # clinical_notes.note_created handler
 # ---------------------------------------------------------------------------
@@ -401,22 +438,37 @@ def _validate_and_process_note(
         return {"status": "error", "reason": "missing patient or provider"}, 500
  
     # --- 5. Find existing encounter or create one ---
-    encounter_number = find_encounter_for_appointment(eid, pid, provider_id)
- 
+    encounter_number, encounter_source = find_encounter_for_appointment(eid, pid, provider_id)
+
     if encounter_number:
+        # G-N7: surface the S7-01 fallback path in the dashboard
+        if encounter_source == "manual_fallback":
+            write_audit_log(
+                event_type="encounter.claimed",
+                success=True,
+                zoom_account_id=account.account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                openemr_appointment_id=str(eid),
+                openemr_encounter_number=str(encounter_number),
+                openemr_provider_id=openemr_provider_id,
+                openemr_patient_id=openemr_patient_id,
+                detail={"reason": "manual_fallback"},
+            )
+
         # Stamp external_id if not already set (e.g. manually created encounter)
         engine = get_openemr_db_engine()
         with engine.begin() as conn:
             conn.execute(
                 text("""
-                    UPDATE form_encounter 
+                    UPDATE form_encounter
                     SET external_id = :external_id
                     WHERE encounter = :encounter
                     AND (external_id IS NULL OR external_id = '')
                 """),
                 {"external_id": f"zoom_eid_{eid}", "encounter": encounter_number}
             )
- 
+
     if not encounter_number:
         current_app.logger.info(
             f"zoom_webhook | no encounter found for eid={eid} — creating"
@@ -430,6 +482,20 @@ def _validate_and_process_note(
                 pc_catid=appt["pc_catid"],
                 eid=eid,
             )
+            if encounter_number:
+                # G-N8: explicit success audit so "encounter created, note failed" is visible
+                write_audit_log(
+                    event_type="encounter.created",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    zoom_meeting_id=meeting_number,
+                    zoom_note_id=note_id,
+                    openemr_appointment_id=str(eid),
+                    openemr_encounter_number=str(encounter_number),
+                    openemr_provider_id=openemr_provider_id,
+                    openemr_patient_id=openemr_patient_id,
+                    detail={"trigger": "note_processing"},
+                )
  
     if not encounter_number:
         current_app.logger.error(
@@ -453,25 +519,34 @@ def _validate_and_process_note(
     )
  
     # --- 6. Write note to encounter ---
+    async_content = note_data.get("note_content", "") or ""
+    async_stripped_length = len(async_content.strip())
+    async_content_blank = async_stripped_length == 0
+    current_app.logger.info(
+        f"zoom_webhook | note_id={note_id} encounter={encounter_number} "
+        f"content_length={len(async_content)} stripped_length={async_stripped_length} "
+        f"content_blank={async_content_blank}"
+    )
+
     provider_username = get_provider_username(provider_id) or "admin"
- 
+
     success = write_note_to_encounter(
         encounter_number=encounter_number,
         pid=pid,
         provider_id=provider_id,
         provider_username=provider_username,
-        note_content=note_data.get("note_content", ""),
+        note_content=async_content,
         note_title=note_data.get("note_title", note_title or ""),
         note_id=note_id,
         note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
- 
+
     if success:
         clinical_note.is_written_to_openemr = True
         clinical_note.written_to_openemr_at = datetime.now(timezone.utc)
-        record.status = "note_written" 
+        record.status = "note_written"
         db.session.commit()
- 
+
     write_audit_log(
         event_type="note.written" if success else "note.write_failed",
         success=success,
@@ -483,7 +558,7 @@ def _validate_and_process_note(
         openemr_provider_id=str(provider_id),
         openemr_patient_id=str(pid),
         error_message=None if success else "OpenEMR note write failed",
-        detail={"ehr_context": bool(ehr_context)}
+        detail={"ehr_context": bool(ehr_context), "content_blank": async_content_blank}
     )
  
     return {
@@ -549,13 +624,41 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     # Get appointment details for encounter creation
     appt = get_appointment_details(int(eid))
     if appt:
-        create_encounter(
+        encounter_number = create_encounter(
             pid=appt["pid"],
             provider_id=appt["provider_id"],
             facility_id=appt["facility_id"],
             pc_catid=appt["pc_catid"],
             eid=int(eid),
         )
+        if encounter_number is None:
+            current_app.logger.error(
+                f"zoom_webhook | waiting_room | encounter creation failed for eid={eid}"
+            )
+            write_audit_log(
+                event_type="encounter.create_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=str(appt["provider_id"]),
+                openemr_patient_id=str(appt["pid"]),
+                zoom_meeting_id=meeting_id,
+                error_message="create_encounter returned None",
+                detail={"trigger": "waiting_room"},
+            )
+        else:
+            # G-N8: explicit success audit
+            write_audit_log(
+                event_type="encounter.created",
+                success=True,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=str(appt["provider_id"]),
+                openemr_patient_id=str(appt["pid"]),
+                zoom_meeting_id=meeting_id,
+                openemr_encounter_number=str(encounter_number),
+                detail={"trigger": "waiting_room"},
+            )
 
     return {"status": "ok", "eid": eid}, 200
 

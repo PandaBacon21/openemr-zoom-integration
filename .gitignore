@@ -23,6 +23,7 @@ server/instance/
 logs
 *.log
 **/logs/
+*.__lock
 
 # uv / packaging
 build/
@@ -64,3 +65,6 @@ node_modules
 *.njsproj
 *.sln
 *.sw?
+
+# Claude 
+CLAUDE.md

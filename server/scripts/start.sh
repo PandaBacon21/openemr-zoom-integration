@@ -15,4 +15,13 @@ echo "Fixing Zoomly file permissions..."
 docker exec openemr chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly
 docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
 
+docker exec openemr chmod 755 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/openemr.bootstrap.php
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/Bootstrap.php
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/DialogCloseListener.php
+
+echo "Waiting for module init to complete..."
+docker wait zoomly-module-init
+
 echo "Stack ready."

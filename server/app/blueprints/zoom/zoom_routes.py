@@ -8,7 +8,7 @@ from app.services.audit import write_audit_log
 from app.services.zoom import get_zoom_users, get_zoom_clinical_note, mark_zoom_note_completed
 from app.services.openemr import write_note_to_encounter, get_provider_username
 
-from app.blueprints.zoom.zoom_route_helper import verify_openemr_signature
+from app.blueprints.zoom.zoom_route_helper import verify_openemr_signature, _audit_manual_fetch_failed
 from app.blueprints.zoom import zoom_bp
 
 logger = logging.getLogger(__name__)
@@ -44,14 +44,14 @@ def get_users():
 def fetch_zoom_note(encounter_number: int):
     """
     Manually trigger a Zoom clinical note fetch and write it into an OpenEMR encounter.
- 
+
     Called by the "Retrieve Note" button on the encounter page in OpenEMR.
     Handles the case where Zoom's webhook delivered an empty note_content
     on first delivery — the provider can edit in Zoom and then trigger this.
 
-    Or, if the provider makes edits to the note in Zoom and wants the record in 
-    OpenEMR updated, they can use that button to retrieve the updates. 
- 
+    Or, if the provider makes edits to the note in Zoom and wants the record in
+    OpenEMR updated, they can use that button to retrieve the updates.
+
     Lookup chain:
         encounter_number
             → form_encounter.external_id (zoom_eid_{eid})
@@ -59,11 +59,17 @@ def fetch_zoom_note(encounter_number: int):
             → MeetingRecord.clinical_note.zoom_note_id
             → get_zoom_clinical_note()
             → write_note_to_encounter()
- 
+
     pid and provider_id are pulled directly from form_encounter
     since they are already stored there by create_encounter().
     """
- 
+    logger.info(f"fetch_zoom_note | manual fetch requested encounter={encounter_number}")
+    write_audit_log(
+        event_type="note.manual_fetch_requested",
+        success=True,
+        openemr_encounter_number=str(encounter_number),
+    )
+
     # --- 1. Look up form_encounter by encounter number ---
     # We need: external_id (to get eid), pid, provider_id
     engine = get_openemr_db_engine()
@@ -81,61 +87,164 @@ def fetch_zoom_note(encounter_number: int):
             ).fetchone()
     except Exception as e:
         logger.error(f"fetch_zoom_note | DB error looking up encounter={encounter_number}: {e}")
+        _audit_manual_fetch_failed(
+            reason="db_error",
+            error_message=str(e),
+            encounter_number=encounter_number,
+        )
         return jsonify({"error": "Database error looking up encounter"}), 500
- 
+
     if not row:
+        logger.warning(
+            f"fetch_zoom_note | No Zoom-linked encounter for encounter={encounter_number}"
+        )
+        _audit_manual_fetch_failed(
+            reason="not_zoom_encounter",
+            error_message="no zoom-linked encounter",
+            encounter_number=encounter_number,
+        )
         return jsonify({
             "error": f"No Zoom-linked encounter found for encounter number {encounter_number}"
         }), 404
- 
+
     pid = row.pid
     provider_id = row.provider_id
     external_id = row.external_id  # e.g. "zoom_eid_42"
- 
+
     # --- 2. Extract eid from external_id ---
     try:
         eid = int(external_id.removeprefix("zoom_eid_"))
     except ValueError:
         logger.error(f"fetch_zoom_note | Could not parse eid from external_id='{external_id}'")
+        _audit_manual_fetch_failed(
+            reason="malformed_external_id",
+            error_message=f"malformed external_id: {external_id}",
+            encounter_number=encounter_number,
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+        )
         return jsonify({"error": f"Malformed external_id: {external_id}"}), 500
- 
+
     # --- 3. Look up MeetingRecord by eid to get clinical_note.zoom_note_id + account ---
     record = MeetingRecord.query.filter_by(
         openemr_appointment_id=str(eid)
     ).first()
- 
+
     if not record:
+        logger.warning(
+            f"fetch_zoom_note | No MeetingRecord for eid={eid} encounter={encounter_number}"
+        )
+        _audit_manual_fetch_failed(
+            reason="no_meeting_record",
+            error_message="no meeting record",
+            encounter_number=encounter_number,
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+        )
         return jsonify({
             "error": f"No MeetingRecord found for appointment eid={eid}"
         }), 404
- 
+
     if not record.clinical_note or not record.clinical_note.zoom_note_id:
+        logger.warning(f"fetch_zoom_note | No zoom_note_id on record eid={eid}")
+        _audit_manual_fetch_failed(
+            reason="no_note_id",
+            error_message="no zoom_note_id on record",
+            encounter_number=encounter_number,
+            zoom_account_id=record.zoom_account_id,
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+            zoom_meeting_id=record.zoom_meeting_id,
+        )
         return jsonify({
             "error": "No Zoom note ID on record — note webhook may not have arrived yet"
         }), 404
- 
+
     # --- 4. Look up the ZoomAccount for this meeting record ---
     account = ZoomAccount.query.filter_by(
         account_id=record.zoom_account_id, is_active=True
     ).first()
- 
+
     if not account:
+        logger.warning(
+            f"fetch_zoom_note | No active ZoomAccount for record account_id={record.zoom_account_id}"
+        )
+        _audit_manual_fetch_failed(
+            reason="account_inactive",
+            error_message="no active zoom account",
+            encounter_number=encounter_number,
+            zoom_account_id=record.zoom_account_id,
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+            zoom_meeting_id=record.zoom_meeting_id,
+            zoom_note_id=record.clinical_note.zoom_note_id,
+        )
         return jsonify({"error": "No active Zoom account found for this meeting"}), 404
- 
+
     note_id = record.clinical_note.zoom_note_id
+
     # --- 5. Fetch the note from Zoom API ---
     try:
         note = get_zoom_clinical_note(account, note_id)
     except Exception as e:
         logger.error(f"fetch_zoom_note | Zoom API error for note_id={note_id}: {e}")
+        write_audit_log(
+            event_type="note.fetch_error",
+            success=False,
+            zoom_account_id=account.account_id,
+            openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+            zoom_meeting_id=record.zoom_meeting_id,
+            zoom_note_id=note_id,
+            error_message=str(e),
+            detail={"trigger": "manual_fetch"},
+        )
         return jsonify({"error": f"Failed to fetch note from Zoom: {str(e)}"}), 502
- 
-    note_content = note.get("note_content", "") if note is not None else "Note Content Missing"
-    note_title = note.get("note_title", "Zoom Clinical Note") if note is not None else "Note Title Missing"
+
+    # --- 5a. Inspect content shape (G-M9) ---
+    note_none = note is None
+    raw_content = note.get("note_content", "") if note is not None else ""
+    raw_title = note.get("note_title", "Zoom Clinical Note") if note is not None else "Note Title Missing"
+    content_length = len(raw_content)
+    stripped_length = len(raw_content.strip()) if raw_content else 0
+    content_blank = stripped_length == 0
+
+    logger.info(
+        f"fetch_zoom_note | content shape note_id={note_id} note_none={note_none} "
+        f"content_length={content_length} stripped_length={stripped_length}"
+    )
+
+    if content_blank:
+        write_audit_log(
+            event_type="note.content_empty",
+            success=False,
+            zoom_account_id=account.account_id,
+            openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+            zoom_meeting_id=record.zoom_meeting_id,
+            zoom_note_id=note_id,
+            error_message="note not found in Zoom API" if note_none else "note content empty",
+            detail={
+                "trigger": "manual_fetch",
+                "note_none": note_none,
+                "content_length": content_length,
+            },
+        )
+
+    # Preserve current behavior: placeholder body when Zoom returned None.
+    note_content = raw_content if not note_none else "Note Content Missing"
+    note_title = raw_title
 
     # --- 6. Resolve provider username for forms table ---
     provider_username = get_provider_username(provider_id) or "admin"
- 
+
     # --- 7. Write note into encounter ---
     success = write_note_to_encounter(
         encounter_number=encounter_number,
@@ -147,13 +256,27 @@ def fetch_zoom_note(encounter_number: int):
         note_id=note_id,
         note_writeback_mode=account.config.note_writeback_mode if account.config else "both",
     )
- 
+
+    write_audit_log(
+        event_type="note.written" if success else "note.write_failed",
+        success=success,
+        zoom_account_id=account.account_id,
+        openemr_appointment_id=str(eid),
+        openemr_encounter_number=str(encounter_number),
+        openemr_provider_id=str(provider_id) if provider_id is not None else None,
+        openemr_patient_id=str(pid) if pid is not None else None,
+        zoom_meeting_id=record.zoom_meeting_id,
+        zoom_note_id=note_id,
+        error_message=None if success else "OpenEMR note write failed",
+        detail={"trigger": "manual_fetch", "content_blank": content_blank},
+    )
+
     if not success:
         return jsonify({"error": "Failed to write note to encounter"}), 500
- 
+
     logger.info(
         f"fetch_zoom_note | Written note_id={note_id} "
-        f"to encounter={encounter_number} pid={pid}"
+        f"to encounter={encounter_number} pid={pid} content_blank={content_blank}"
     )
     return jsonify({
         "status": "ok",
