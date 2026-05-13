@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import time
 from types import SimpleNamespace
 
 
@@ -385,11 +386,15 @@ def test_openemr_webhook_writes_received_audit_event_for_deleted_payload(client,
 
     assert response.status_code == 200
     assert response.get_json() == {"status": "no_record", "eid": 999}
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert calls[0]["event_type"] == "appointment.received.appointment.deleted"
     assert calls[0]["success"] is True
     assert calls[0]["openemr_appointment_id"] == 999
     assert calls[0]["detail"] == {"event": "appointment.deleted", "appointment_type": None}
+    # G-A1: delete event with no matching MeetingRecord now writes its own audit row
+    assert calls[1]["event_type"] == "appointment.delete_no_record"
+    assert calls[1]["success"] is True
+    assert calls[1]["openemr_appointment_id"] == 999
 
 
 def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, app, monkeypatch):
@@ -782,3 +787,49 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
     assert audit_call["zoom_meeting_id"] == "meet-del-err"
     assert audit_call["error_message"] == "zoom delete failed"
     assert audit_call["detail"] == {"stage": "zoom_delete"}
+
+
+def test_zoom_webhook_audits_note_handler_error(client, app, monkeypatch):
+    """G-N4: unhandled exception in _handle_cn_created writes note.handler_error audit."""
+    with app.app_context():
+        _create_zoom_account("acct-handler-err")
+
+    calls = []
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.zoom.zoom_webhook._verify_zoom_signature",
+        lambda *_, **__: True,
+    )
+
+    def boom(*_, **__):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.zoom.zoom_webhook._handle_cn_created",
+        boom,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.zoom.zoom_webhook.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    payload = json.dumps({
+        "event": "clinical_notes.note_created",
+        "account_id": "acct-handler-err",
+        "payload": {"account_id": "acct-handler-err"},
+    }).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/zoom",
+        data=payload,
+        content_type="application/json",
+        headers={
+            "x-zm-request-timestamp": str(int(time.time())),
+            "x-zm-signature": "v0=ignored-by-mock",
+        },
+    )
+
+    assert response.status_code == 500
+    handler_err = next(c for c in calls if c["event_type"] == "note.handler_error")
+    assert handler_err["success"] is False
+    assert handler_err["zoom_account_id"] == "acct-handler-err"
+    assert "boom" in handler_err["error_message"]

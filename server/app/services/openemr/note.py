@@ -89,38 +89,48 @@ def parse_soap_sections(note_content: str) -> dict:
     current_field = "subjective"  # default catch-all
     current_header = None
     buffer = []
- 
+    headers_recognized = 0
+
     def flush_buffer():
         if buffer and current_header is not None:
             content = "\n".join(buffer).strip()
             if content:
                 sections[current_field].append(f"{current_header}\n{content}")
         buffer.clear()
- 
+
     for line in note_content.splitlines():
         stripped = line.strip()
         lower = stripped.lower()
- 
+
         # Check if this line is a known section header
         matched_field = SOAP_SECTION_MAP.get(lower)
- 
+
         if matched_field is not None:
             # Flush previous section buffer
             flush_buffer()
             current_field = matched_field
             current_header = stripped
+            headers_recognized += 1
         else:
             buffer.append(stripped)
- 
+
     # Flush final buffer
     flush_buffer()
- 
-    return {
+
+    result = {
         "subjective":  "\n\n".join(sections["subjective"]),
         "objective":   "\n\n".join(sections["objective"]),
         "assessment":  "\n\n".join(sections["assessment"]),
         "plan":        "\n\n".join(sections["plan"]),
     }
+    logger.info(
+        f"openemr.parse_soap | headers_recognized={headers_recognized} "
+        f"subjective_chars={len(result['subjective'])} "
+        f"objective_chars={len(result['objective'])} "
+        f"assessment_chars={len(result['assessment'])} "
+        f"plan_chars={len(result['plan'])}"
+    )
+    return result
  
 def write_note_to_encounter(
     encounter_number: int,

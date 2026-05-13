@@ -394,3 +394,130 @@ def test_fetch_note_with_retry_does_not_audit_when_succeeds_first_attempt(app, m
 
     assert result == {"note_content": "Plan\nFollow up"}
     assert not any(c["event_type"] == "note.fetched_after_retry" for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# PR 4 — P2 cleanup tests
+# ---------------------------------------------------------------------------
+
+def test_waiting_room_audits_encounter_create_failed(app, monkeypatch):
+    """G-A3: create_encounter returns None during waiting-room → encounter.create_failed audit."""
+    with app.app_context():
+        account = _create_account("acct-encounter-create-fail")
+        _create_meeting(account, meeting_id="meet-encounter-create-fail")
+        calls = []
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.update_appointment_status",
+            lambda eid, status: True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.get_appointment_details",
+            lambda eid: {"pid": 1, "provider_id": 10, "facility_id": 1, "pc_catid": 27},
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.create_encounter",
+            lambda **kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        payload = {
+            "event": "meeting.participant_joined_waiting_room",
+            "payload": {"object": {
+                "id": "meet-encounter-create-fail",
+                "participant": {"user_name": "Patient X"},
+            }},
+        }
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_waiting_room_joined
+        body, status = _handle_waiting_room_joined(payload, account)
+
+    assert status == 200
+    encounter_fail = next(c for c in calls if c["event_type"] == "encounter.create_failed")
+    assert encounter_fail["success"] is False
+    assert encounter_fail["zoom_account_id"] == "acct-encounter-create-fail"
+    assert encounter_fail["openemr_appointment_id"] == "999"
+    assert encounter_fail["openemr_provider_id"] == "10"
+    assert encounter_fail["openemr_patient_id"] == "1"
+    assert encounter_fail["zoom_meeting_id"] == "meet-encounter-create-fail"
+    assert encounter_fail["error_message"] == "create_encounter returned None"
+    assert encounter_fail["detail"] == {"trigger": "waiting_room"}
+
+
+def test_process_note_async_audits_when_account_inactive(app, monkeypatch):
+    """G-N6: async job runs but account is inactive → note.dropped reason=account_inactive."""
+    with app.app_context():
+        account = _create_account("acct-inactive-async")
+        account.is_active = False
+        db.session.commit()
+        calls = []
+
+        def should_not_run(**_):
+            raise AssertionError("should not run when account is inactive")
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers._validate_and_process_note",
+            should_not_run,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from flask import current_app
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _process_note_async
+
+        _process_note_async(
+            current_app._get_current_object(),
+            account.account_id,
+            "note-inactive",
+            "meet-inactive",
+            "title",
+        )
+
+    dropped = next(c for c in calls if c["event_type"] == "note.dropped")
+    assert dropped["success"] is False
+    assert dropped["zoom_account_id"] == "acct-inactive-async"
+    assert dropped["zoom_meeting_id"] == "meet-inactive"
+    assert dropped["zoom_note_id"] == "note-inactive"
+    assert dropped["detail"] == {"reason": "account_inactive"}
+
+
+def test_process_note_async_audits_unhandled_exception(app, monkeypatch):
+    """G-N5: _validate_and_process_note raises inside async job → note.async_job_error audit."""
+    with app.app_context():
+        account = _create_account("acct-async-error")
+        calls = []
+
+        def boom(**_):
+            raise RuntimeError("validation blew up")
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers._validate_and_process_note",
+            boom,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from flask import current_app
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _process_note_async
+
+        _process_note_async(
+            current_app._get_current_object(),
+            account.account_id,
+            "note-async-err",
+            "meet-async",
+            "title",
+        )
+
+    err = next(c for c in calls if c["event_type"] == "note.async_job_error")
+    assert err["success"] is False
+    assert err["zoom_account_id"] == "acct-async-error"
+    assert err["zoom_meeting_id"] == "meet-async"
+    assert err["zoom_note_id"] == "note-async-err"
+    assert "validation blew up" in err["error_message"]

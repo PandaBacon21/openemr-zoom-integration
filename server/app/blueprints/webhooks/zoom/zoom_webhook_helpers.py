@@ -122,13 +122,36 @@ def _process_note_async(app, account_id: str, note_id: str, meeting_number: str,
         account = ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
         if not account:
             app.logger.error(f"zoom_helpers | async note job | no account for {account_id}")
+            write_audit_log(
+                event_type="note.dropped",
+                success=False,
+                zoom_account_id=account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                error_message="account inactive or missing at async run time",
+                detail={"reason": "account_inactive"},
+            )
             return
-        _validate_and_process_note(
-            account=account,
-            meeting_number=meeting_number,
-            note_id=note_id,
-            note_title=note_title,
-        )
+        try:
+            _validate_and_process_note(
+                account=account,
+                meeting_number=meeting_number,
+                note_id=note_id,
+                note_title=note_title,
+            )
+        except Exception as e:
+            app.logger.error(
+                f"zoom_helpers | async note job | unhandled exception note_id={note_id}: {e}",
+                exc_info=True,
+            )
+            write_audit_log(
+                event_type="note.async_job_error",
+                success=False,
+                zoom_account_id=account.account_id,
+                zoom_meeting_id=meeting_number,
+                zoom_note_id=note_id,
+                error_message=str(e),
+            )
         app.logger.info(f"zoom_helpers | async note job complete | note_id={note_id}")
 
 
@@ -572,13 +595,28 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     # Get appointment details for encounter creation
     appt = get_appointment_details(int(eid))
     if appt:
-        create_encounter(
+        encounter_number = create_encounter(
             pid=appt["pid"],
             provider_id=appt["provider_id"],
             facility_id=appt["facility_id"],
             pc_catid=appt["pc_catid"],
             eid=int(eid),
         )
+        if encounter_number is None:
+            current_app.logger.error(
+                f"zoom_webhook | waiting_room | encounter creation failed for eid={eid}"
+            )
+            write_audit_log(
+                event_type="encounter.create_failed",
+                success=False,
+                zoom_account_id=account.account_id,
+                openemr_appointment_id=eid,
+                openemr_provider_id=str(appt["provider_id"]),
+                openemr_patient_id=str(appt["pid"]),
+                zoom_meeting_id=meeting_id,
+                error_message="create_encounter returned None",
+                detail={"trigger": "waiting_room"},
+            )
 
     return {"status": "ok", "eid": eid}, 200
 

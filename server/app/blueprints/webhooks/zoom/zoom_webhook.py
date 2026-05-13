@@ -98,6 +98,12 @@ def zoom_webhook():
             return _handle_cn_created(payload, account)
         except Exception as e:
             logger.error(f"webhooks.zoom | Unhandled exception in _handle_cn_created: {e}", exc_info=True)
+            write_audit_log(
+                event_type="note.handler_error",
+                success=False,
+                zoom_account_id=account.account_id,
+                error_message=str(e),
+            )
             return {"error": "internal error"}, 500
     elif event_type == "meeting.started":
         return _handle_meeting_started(payload, account)
