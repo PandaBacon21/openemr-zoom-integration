@@ -168,11 +168,11 @@ def test_get_appointments_returns_mapped_provider_appointments(client, app, monk
             "patientId": "109",
             "startTime": "2026-04-27T16:00:00Z",
             "endTime": "2026-04-27T16:30:00Z",
-            "serviceType": "Zoom Telehealth",
+            "serviceType": "Telehealth Zoom",
             "name": "Aisha Johnson",
             "dob": "1993-01-25",
             "gender": "Female",
-            "appointmentType": "Telehealth Zoom",
+            "appointmentType": "Zoom Telehealth",
         }
     ]
     assert captured["params"]["provider_id"] == 10
