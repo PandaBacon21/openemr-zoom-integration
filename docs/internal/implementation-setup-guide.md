@@ -281,7 +281,7 @@ Enter the Zoom account credentials and optional EHR Context credentials. On succ
 
 4. (Auto-handled) Confirm the OpenEMR client is enabled.
 
-Registration auto-enables the dynamically registered OpenEMR client by flipping `oauth_clients.is_enabled = 1` via direct DB UPDATE right after the RFC 7591 call returns. No manual "Enable Client" step in OpenEMR Admin is needed. If the enable fails, registration rolls back (the OpenEMR client is deregistered and the local keypair deleted) and the registration UI surfaces the error.
+Registration auto-enables the dynamically registered OpenEMR client by flipping `oauth_clients.is_enabled = 1` via direct DB UPDATE right after the RFC 7591 call returns. No manual "Enable Client" step in OpenEMR Admin is needed. If anything downstream of the OpenEMR registration fails — the enable UPDATE, the Flask `ZoomAccount` persist, or Zoom credential validation — registration rolls back: the OpenEMR client is deregistered, the local keypair is deleted, and the registration UI surfaces the error. The OpenEMR side never ends up with an enabled-but-orphaned client.
 
 If you want to verify after the fact, navigate to Admin → System → API Clients in OpenEMR and confirm the entry **Zoomly Bridge - `Zoom Account ID`** shows as enabled.
 
