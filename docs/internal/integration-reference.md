@@ -346,18 +346,17 @@ Current bridge behavior:
   - removes local meeting records (cascade removes meeting-patient rows)
   - returns one of: `deleted`, `no_record`, `error`
 
-Audit events emitted by webhook handlers:
+Audit event taxonomy is canonical in the `write_audit_log()` docstring at `server/app/services/audit.py` — read that before adding or referencing event types. As of Sprint 7 cleanup, coverage spans appointment lifecycle, meeting lifecycle, clinical-note pipeline (async + manual fetch), encounter create/claim, and Zoom completion outcomes. Categories at a glance:
 
-- `appointment.received.<event>` on accepted inbound payloads
-- `appointment.dropped` when filtering produces no account/provider/type matches
-- `appointment.patient_arrived` when Zoom waiting-room events update OpenEMR status to arrived
-- `meeting.created`, `meeting.updated`, `meeting.recreated`, `meeting.deleted`, and `meeting.started` on successful meeting lifecycle actions
-- `meeting.create_failed`, `meeting.update_failed`, `meeting.recreate_failed`, and `meeting.delete_failed` on handled failure paths
-- `openemr.url_writeback_success`, `openemr.url_writeback_failed` for appointment URL writeback outcomes
-- `note.received`, `note.processing_scheduled`, `note.record_created`, `note.retrieved`, `note.written`, and `note.write_failed` for Zoom clinical note processing
-- `note.dropped`, `note.content_empty`, `note.context_missing`, and `note.encounter_failed` for handled note-processing drop/error paths
-- `zoom.completion_success`, `zoom.completion_error`, and `zoom.completion_skipped` for Zoom clinical note completion attempts
-- `note.written` and `note.write_failed` include `openemr_encounter_number` when an encounter is found or created
+- `appointment.*` — webhook receipt, drop reasons (`detail.reason` of `missing_provider_id`, `provider_unmapped`, `account_inactive`, `type_mismatch`), patient arrival, delete-no-record
+- `meeting.*` — create/update/recreate/delete success and failure, `meeting.started`
+- `openemr.url_writeback_*` — appointment URL writeback outcomes
+- `note.*` — receipt, async scheduling, content fetch (including `note.fetched_after_retry`, `note.content_empty`, `note.fetch_error`), record creation, write success/failure, drop/context-missing paths, async safety nets (`note.handler_error`, `note.async_job_error`), and manual fetch (`note.manual_fetch_requested`, `note.manual_fetch_failed` with `detail.reason`)
+- `encounter.*` — `encounter.created` (with `detail.trigger`), `encounter.create_failed`, `encounter.claimed` (manual-fallback match path, S7-01)
+- `zoom.completion_*` — completion success, skipped (idempotent), error
+- `zoom.webhook_signature_failed` — Zoom HMAC mismatch
+
+`note.written` and `note.write_failed` include `openemr_encounter_number` and `detail.content_blank`; manual-fetch flows carry `detail.trigger=manual_fetch`.
 
 ## Zoom Webhook Contract
 
@@ -372,7 +371,7 @@ Current supported Zoom events:
 
 Manual note endpoints under `/zoom/encounter/<encounter_number>/...` are OpenEMR-signed, JWT-exempt routes:
 
-- `fetch_zoom_note` fetches the latest Zoom note by stored `ClinicalNoteRecord.zoom_note_id` and writes it back to the linked encounter
+- `fetch_zoom_note` resolves a `note_id` via `MeetingRecord.clinical_note.zoom_note_id`. When multiple `ClinicalNoteRecord` rows exist for one meeting (e.g. a failed/empty note followed by a real one), the relationship returns the most-recently-received note (`order_by="ClinicalNoteRecord.received_at.desc()"`). Form dedup is encounter-scoped, so repeated retrieves on the same encounter update the existing SOAP + Clinical Notes forms in place. **Limitation:** recurring Zoom meetings that share a `zoom_meeting_id` across multiple appointments are not yet supported — the schema forces 1 MeetingRecord per Zoom meeting. Tracked as TD-01 in `phase-2-sprint-plan.md`.
 - `complete_zoom_note` marks the stored Zoom note complete; the route is idempotent and returns 200 for valid skip/error outcomes so OpenEMR UI actions are not blocked
 
 ## OpenEMR Patch Module (PHP)
@@ -460,6 +459,7 @@ Primary files for this integration slice:
 - `server/tests/test_services_appointment_filters.py`
 - `server/tests/test_services_audit.py`
 - `server/tests/test_services_openemr.py`
+- `server/tests/test_services_openemr_note.py`
 - `server/tests/test_services_providers.py`
 - `server/tests/test_services_keys.py`
 - `server/tests/test_services_registration.py`

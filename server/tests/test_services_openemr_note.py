@@ -5,10 +5,16 @@ Both forms dedup by encounter via the `forms` registration table:
 
 `form_clinical_notes.external_id` is populated with the latest Zoom note_id
 for traceability but is no longer the dedup key.
+
+Also covers MeetingRecord.clinical_note relationship ordering (most recent
+note wins when multiple ClinicalNoteRecord rows exist for one meeting).
 """
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from app.extensions import db
+from app.models import ClinicalNoteRecord, MeetingRecord
 from app.services.openemr.note import (
     _upsert_clinical_note_form,
     _upsert_soap_form,
@@ -222,3 +228,53 @@ def test_upsert_soap_inserts_when_no_form_on_encounter():
     assert "'soap'" in forms_insert["sql"]
     assert forms_insert["params"]["form_id"] == 88
     assert forms_insert["params"]["encounter"] == 1234
+
+
+# ---------------------------------------------------------------------------
+# MeetingRecord.clinical_note ordering
+# ---------------------------------------------------------------------------
+
+
+def test_meeting_record_clinical_note_returns_most_recent(app):
+    """When multiple ClinicalNoteRecord rows exist for one MeetingRecord
+    (e.g. a failed/empty note followed by a real one), the .clinical_note
+    relationship returns the most recently received note."""
+    with app.app_context():
+        meeting = MeetingRecord(
+            zoom_meeting_id="zm-abc-123",
+            zoom_account_id="acct-1",
+            openemr_appointment_id="500",
+            openemr_provider_id="20",
+            status="started",
+        )
+        db.session.add(meeting)
+        db.session.commit()
+
+        older = ClinicalNoteRecord(
+            zoom_meeting_id=meeting.zoom_meeting_id,
+            zoom_note_id="note-OLD-failed",
+            zoom_note_title="Failed note",
+            note_content="",
+            is_written_to_openemr=False,
+        )
+        older.received_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        db.session.add(older)
+        db.session.commit()
+
+        newer = ClinicalNoteRecord(
+            zoom_meeting_id=meeting.zoom_meeting_id,
+            zoom_note_id="note-NEW-real",
+            zoom_note_title="Real note",
+            note_content="actual content",
+            is_written_to_openemr=False,
+        )
+        newer.received_at = datetime.now(timezone.utc)
+        db.session.add(newer)
+        db.session.commit()
+
+        # Force a fresh load of the relationship
+        db.session.expire(meeting)
+        resolved = MeetingRecord.query.filter_by(zoom_meeting_id="zm-abc-123").one()
+
+        assert resolved.clinical_note is not None
+        assert resolved.clinical_note.zoom_note_id == "note-NEW-real"

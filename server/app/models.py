@@ -272,10 +272,16 @@ class MeetingRecord(db.Model):
         lazy=True, cascade="all, delete-orphan",
         foreign_keys="MeetingPatient.zoom_meeting_id"
     )
+    # uselist=False returns the most-recently-received note when multiple
+    # ClinicalNoteRecord rows exist for one meeting (e.g. a failed/empty note
+    # followed by a real one). Recurring-meeting scenarios that share a
+    # zoom_meeting_id across multiple appointments are not yet supported —
+    # see TD-01 in docs/internal/phase-2-sprint-plan.md.
     clinical_note = db.relationship(
         "ClinicalNoteRecord", backref="meeting_record",
         lazy=True, uselist=False, cascade="all, delete-orphan",
-        foreign_keys="ClinicalNoteRecord.zoom_meeting_id"
+        foreign_keys="ClinicalNoteRecord.zoom_meeting_id",
+        order_by="ClinicalNoteRecord.received_at.desc()",
     )
 
     if TYPE_CHECKING:
