@@ -335,8 +335,9 @@ class ClinicalNoteRecord(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     zoom_meeting_id = db.Column(
-        db.String(128), db.ForeignKey("meeting_records.zoom_meeting_id"),
-        nullable=False, index=True
+        db.String(128),
+        db.ForeignKey("meeting_records.zoom_meeting_id", ondelete="CASCADE"),
+        nullable=False, index=True,
     )
 
     zoom_note_id = db.Column(db.String(128), unique=True, nullable=False)

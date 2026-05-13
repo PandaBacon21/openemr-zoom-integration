@@ -126,6 +126,11 @@ Audit logs (JWT bearer protected):
 
 - `GET /audit/logs?zoom_account_id=...&event_type=...&success=true&page=1&per_page=50`
 
+DbGate database browser proxy (JWT cookie protected — required because iframes cannot send custom auth headers):
+
+- `GET/POST /admin/db`
+- `GET/POST /admin/db/<path>`
+
 Protected routes require:
 
 ```http
@@ -157,6 +162,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS, registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks, audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS, registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest backend run result in this workspace: `237 passed`.
+Latest backend run result in this workspace: `270 passed`.
