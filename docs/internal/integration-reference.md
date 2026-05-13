@@ -199,6 +199,8 @@ Optional JSON fields:
 
 Registration returns the saved `ZoomAccount` identity fields plus the created `AccountConfig.timezone` and default `AccountConfig.note_writeback_mode`. EHR Context credentials are stored on `ZoomAccount`; timezone, note writeback mode, shared-user behavior, and demo override settings are stored on `AccountConfig`.
 
+The registration flow auto-enables the dynamically registered OpenEMR client. After the RFC 7591 registration succeeds, Flask runs `UPDATE oauth_clients SET is_enabled = 1 WHERE client_id = :client_id` against the OpenEMR database. This removes the manual "Enable Client" step from the SE demo flow. If the UPDATE fails (DB error, schema drift, 0 rows affected), the registration rolls back: the OpenEMR client is deregistered via the RFC 7591 management URI and the local keypair is deleted. Two audit events surface this path: `openemr.client_enabled` (success) and `openemr.client_enable_failed` (raises, registration aborts).
+
 `PATCH /config/register/<zoom_account_id>` updates editable registration and account config fields. Only fields sent with non-null values are updated; `false` is valid for boolean settings.
 
 Editable JSON fields:
