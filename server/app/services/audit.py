@@ -36,6 +36,8 @@ def write_audit_log(
       meeting.updated               — Zoom meeting patched with new appointment details
       meeting.recreated             — replacement meeting created after Zoom deletion
       meeting.deleted               — Zoom meeting deleted on appointment delete
+      meeting.cancelled             — appointment deleted but local record preserved
+                                       (detail.preserved, detail.reason set)
       meeting.create_failed         — Zoom API error during meeting creation
       meeting.update_failed         — Zoom API error during meeting update
       meeting.delete_failed         — Zoom API error during meeting delete

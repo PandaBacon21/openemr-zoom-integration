@@ -123,7 +123,7 @@ Relationships:
 | Column                  | Type                      | Required | Notes                                   |
 | ----------------------- | ------------------------- | -------- | --------------------------------------- |
 | `id`                    | `Integer`                 | yes      | Primary key                             |
-| `zoom_meeting_id`       | `String(128, FK)`         | yes      | FK to `meeting_records.zoom_meeting_id` |
+| `zoom_meeting_id`       | `String(128, FK)`         | yes      | FK to `meeting_records.zoom_meeting_id` (`ON DELETE CASCADE`) |
 | `zoom_note_id`          | `String(128)`             | yes      | Zoom note identifier (unique)           |
 | `zoom_note_title`       | `String(256)`             | no       | Note title                              |
 | `note_content`          | `Text`                    | no       | Note body                               |
@@ -343,13 +343,13 @@ Current bridge behavior:
 - For `appointment.deleted`:
   - finds `MeetingRecord` rows by `eid`
   - deletes Zoom meetings
-  - removes local meeting records (cascade removes meeting-patient rows)
+  - branches on local state: removes the `MeetingRecord` (cascade clears `MeetingPatient` rows) when no `ClinicalNoteRecord` exists, or preserves the row with `status="cancelled"` when a `ClinicalNoteRecord` exists so the chart-data audit trail is retained
   - returns one of: `deleted`, `no_record`, `error`
 
 Audit event taxonomy is canonical in the `write_audit_log()` docstring at `server/app/services/audit.py` — read that before adding or referencing event types. As of Sprint 7 cleanup, coverage spans appointment lifecycle, meeting lifecycle, clinical-note pipeline (async + manual fetch), encounter create/claim, and Zoom completion outcomes. Categories at a glance:
 
 - `appointment.*` — webhook receipt, drop reasons (`detail.reason` of `missing_provider_id`, `provider_unmapped`, `account_inactive`, `type_mismatch`), patient arrival, delete-no-record
-- `meeting.*` — create/update/recreate/delete success and failure, `meeting.started`
+- `meeting.*` — create/update/recreate/delete success and failure, `meeting.started`, `meeting.cancelled` (appointment deleted but local row preserved because a `ClinicalNoteRecord` exists; `detail.preserved=True`, `detail.reason="clinical_note_present"`)
 - `openemr.url_writeback_*` — appointment URL writeback outcomes
 - `note.*` — receipt, async scheduling, content fetch (including `note.fetched_after_retry`, `note.content_empty`, `note.fetch_error`), record creation, write success/failure, drop/context-missing paths, async safety nets (`note.handler_error`, `note.async_job_error`), and manual fetch (`note.manual_fetch_requested`, `note.manual_fetch_failed` with `detail.reason`)
 - `encounter.*` — `encounter.created` (with `detail.trigger`), `encounter.create_failed`, `encounter.claimed` (manual-fallback match path, S7-01)

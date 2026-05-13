@@ -789,6 +789,139 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
     assert audit_call["detail"] == {"stage": "zoom_delete"}
 
 
+def test_openemr_webhook_delete_removes_record_when_no_clinical_note(client, app, monkeypatch):
+    """No ClinicalNoteRecord exists — MeetingRecord is removed and MeetingPatient
+    rows are swept by cascade. Audit event is meeting.deleted."""
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
+    with app.app_context():
+        from app.extensions import db
+        from app.models import MeetingPatient
+
+        _, record = _create_meeting_record("acct-no-note", meeting_id="meet-no-note", eid="999")
+        meeting_id = record.zoom_meeting_id
+        db.session.add(MeetingPatient(zoom_meeting_id=meeting_id, openemr_patient_id="42"))
+        db.session.commit()
+
+    calls = []
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting",
+        lambda account, meeting_id: True,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "deleted",
+        "eid": 999,
+        "deleted_meetings": ["meet-no-note"],
+    }
+
+    with app.app_context():
+        from app.extensions import db
+        from app.models import MeetingPatient, MeetingRecord
+
+        assert db.session.get(MeetingRecord, meeting_id) is None
+        # MeetingPatient cleared by cascade
+        assert MeetingPatient.query.filter_by(zoom_meeting_id=meeting_id).all() == []
+
+    audit_call = next(c for c in calls if c["event_type"] == "meeting.deleted")
+    assert audit_call["success"] is True
+    assert audit_call["zoom_account_id"] == "acct-no-note"
+    assert audit_call["zoom_meeting_id"] == "meet-no-note"
+    assert not any(c["event_type"] == "meeting.cancelled" for c in calls)
+
+
+def test_openemr_webhook_delete_preserves_record_when_clinical_note_present(client, app, monkeypatch):
+    """A ClinicalNoteRecord exists — MeetingRecord is preserved with status='cancelled',
+    the ClinicalNoteRecord and any MeetingPatient rows are retained, and the audit event
+    is meeting.cancelled with detail.preserved=True."""
+    app.config["OPENEMR_FLASK_SECRET"] = "test-webhook-secret"
+    with app.app_context():
+        from app.extensions import db
+        from app.models import ClinicalNoteRecord, MeetingPatient
+
+        _, record = _create_meeting_record("acct-preserve", meeting_id="meet-preserve", eid="999")
+        meeting_id = record.zoom_meeting_id
+        db.session.add(MeetingPatient(zoom_meeting_id=meeting_id, openemr_patient_id="42"))
+        db.session.add(ClinicalNoteRecord(
+            zoom_meeting_id=meeting_id,
+            zoom_note_id="note-preserve",
+            zoom_note_title="Encounter note",
+            note_content="SUBJECTIVE: ...",
+            is_written_to_openemr=True,
+        ))
+        db.session.commit()
+
+    calls = []
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.delete_zoom_meeting",
+        lambda account, meeting_id: True,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    body = _body(OPENEMR_APPOINTMENT_DELETE_PAYLOAD)
+    response = client.post(
+        "/webhooks/openemr",
+        data=body,
+        content_type="application/json",
+        headers={"X-Zoomly-Signature": _signature(body, "test-webhook-secret")},
+    )
+
+    assert response.status_code == 200
+    body_json = response.get_json()
+    assert body_json["status"] == "deleted"
+    assert body_json["eid"] == 999
+    assert body_json["deleted_meetings"] == ["meet-preserve"]
+
+    with app.app_context():
+        from app.extensions import db
+        from app.models import ClinicalNoteRecord, MeetingPatient, MeetingRecord
+
+        refreshed = db.session.get(MeetingRecord, meeting_id)
+        assert refreshed is not None
+        assert refreshed.status == "cancelled"
+
+        notes = ClinicalNoteRecord.query.filter_by(zoom_meeting_id=meeting_id).all()
+        assert len(notes) == 1
+        assert notes[0].zoom_note_id == "note-preserve"
+
+        patients = MeetingPatient.query.filter_by(zoom_meeting_id=meeting_id).all()
+        assert len(patients) == 1
+        assert patients[0].openemr_patient_id == "42"
+
+    audit_call = next(c for c in calls if c["event_type"] == "meeting.cancelled")
+    assert audit_call["success"] is True
+    assert audit_call["zoom_account_id"] == "acct-preserve"
+    assert audit_call["openemr_appointment_id"] == 999
+    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_patient_id"] == "42"
+    assert audit_call["zoom_meeting_id"] == "meet-preserve"
+    assert audit_call["detail"] == {"preserved": True, "reason": "clinical_note_present"}
+    assert not any(c["event_type"] == "meeting.deleted" for c in calls)
+
+
 def test_zoom_webhook_audits_note_handler_error(client, app, monkeypatch):
     """G-N4: unhandled exception in _handle_cn_created writes note.handler_error audit."""
     with app.app_context():

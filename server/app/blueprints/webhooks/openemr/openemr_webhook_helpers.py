@@ -462,9 +462,16 @@ def _handle_existing_meeting(
 def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
     """
     Handle appointment.deleted events from OpenEMR.
- 
-    Looks up MeetingRecord by eid, deletes the Zoom meeting,
-    and removes the local record.
+
+    Looks up MeetingRecord(s) by eid, deletes the Zoom meeting, and then
+    either:
+      - removes the local MeetingRecord (cascade cleans MeetingPatient rows)
+        when no clinical note was ever received, or
+      - preserves the MeetingRecord with status='cancelled' when a
+        ClinicalNoteRecord exists. Per the system's design, any received note
+        must be written back to the EHR, so an existing ClinicalNoteRecord
+        represents real EHR work (or an anomalous state that needs
+        investigation) — never silent cleanup.
     """
     eid = payload.get("eid")
  
@@ -538,20 +545,40 @@ def _process_appointment_delete(payload: dict) -> tuple[dict, int]:
             db.session.commit()
             continue
  
-        # Remove from DB — cascade deletes MeetingPatient rows
+        # Branch on whether any clinical note was ever received for this
+        # meeting. If yes, preserve the row as an audit trail; if no, the
+        # local record can be removed (cascade cleans MeetingPatient rows).
         try:
-            db.session.delete(record)
-            db.session.commit()
-            current_app.logger.info(
-                f"webhooks.openemr | eid={eid} MeetingRecord zoom_meeting_id={meeting_id} deleted"
-            )
-            write_audit_log(
-                event_type="meeting.deleted",
-                success=True,
-                zoom_account_id=account.account_id,
-                openemr_appointment_id=eid,
-                zoom_meeting_id=meeting_id,
-            )
+            if record.clinical_note is not None:
+                record.status = "cancelled"
+                db.session.commit()
+                current_app.logger.info(
+                    f"webhooks.openemr | eid={eid} MeetingRecord "
+                    f"zoom_meeting_id={meeting_id} cancelled (clinical note preserved)"
+                )
+                write_audit_log(
+                    event_type="meeting.cancelled",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    openemr_appointment_id=eid,
+                    openemr_provider_id=record.openemr_provider_id,
+                    openemr_patient_id=patient_id,
+                    zoom_meeting_id=meeting_id,
+                    detail={"preserved": True, "reason": "clinical_note_present"},
+                )
+            else:
+                db.session.delete(record)
+                db.session.commit()
+                current_app.logger.info(
+                    f"webhooks.openemr | eid={eid} MeetingRecord zoom_meeting_id={meeting_id} deleted"
+                )
+                write_audit_log(
+                    event_type="meeting.deleted",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    openemr_appointment_id=eid,
+                    zoom_meeting_id=meeting_id,
+                )
             deleted_meetings.append(meeting_id)
         except Exception as e:
             db.session.rollback()
