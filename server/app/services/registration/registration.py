@@ -273,6 +273,14 @@ def register_zoom_account(
     except Exception as e:
         db.session.rollback()
         logger.error(f"DB persistence failed, cleaning up: {e}")
+        # Deregister the (already-enabled) OpenEMR client so we don't leave
+        # an orphaned, enabled entry in oauth_clients for a Zoom account that
+        # has no Flask DB record. _deregister_from_openemr swallows its own
+        # errors, so this won't compound if OpenEMR is also unavailable.
+        _deregister_from_openemr(
+            openemr_response.get("registration_client_uri", ""),
+            openemr_response.get("registration_access_token", ""),
+        )
         delete_keypair(zoom_account_id)
         raise
 

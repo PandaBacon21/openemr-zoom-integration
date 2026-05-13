@@ -214,9 +214,10 @@ def test_register_zoom_account_cleans_up_keys_when_openemr_registration_fails(ap
     assert record is None
 
 
-def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, monkeypatch):
+def test_register_zoom_account_rolls_back_deregisters_and_cleans_keys_on_db_failure(app, monkeypatch):
     cleanup_called = {}
     rollback_called = {"called": False}
+    deregister_calls = []
 
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
@@ -230,6 +231,11 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
                 "registration_access_token": "registration-token",
                 "registration_client_uri": "https://openemr.public/oauth2/default/client/abc",
             },
+        )
+        monkeypatch.setattr(
+            registration,
+            "_deregister_from_openemr",
+            lambda uri, token: deregister_calls.append((uri, token)),
         )
         monkeypatch.setattr(registration, "delete_keypair", lambda account_id: cleanup_called.__setitem__("account_id", account_id))
         monkeypatch.setattr(registration.db.session, "commit", lambda: (_ for _ in ()).throw(RuntimeError("db write failed")))
@@ -249,6 +255,9 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
 
     assert cleanup_called["account_id"] == "acct-db-fail"
     assert rollback_called["called"] is True
+    # The (already-enabled) OpenEMR client must be deregistered so we don't
+    # leave an orphan in oauth_clients tied to a non-existent Flask account.
+    assert deregister_calls == [("https://openemr.public/oauth2/default/client/abc", "registration-token")]
 
 
 def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, monkeypatch):

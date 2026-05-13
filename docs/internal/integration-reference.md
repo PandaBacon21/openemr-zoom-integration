@@ -199,7 +199,14 @@ Optional JSON fields:
 
 Registration returns the saved `ZoomAccount` identity fields plus the created `AccountConfig.timezone` and default `AccountConfig.note_writeback_mode`. EHR Context credentials are stored on `ZoomAccount`; timezone, note writeback mode, shared-user behavior, and demo override settings are stored on `AccountConfig`.
 
-The registration flow auto-enables the dynamically registered OpenEMR client. After the RFC 7591 registration succeeds, Flask runs `UPDATE oauth_clients SET is_enabled = 1 WHERE client_id = :client_id` against the OpenEMR database. This removes the manual "Enable Client" step from the SE demo flow. If the UPDATE fails (DB error, schema drift, 0 rows affected), the registration rolls back: the OpenEMR client is deregistered via the RFC 7591 management URI and the local keypair is deleted. Two audit events surface this path: `openemr.client_enabled` (success) and `openemr.client_enable_failed` (raises, registration aborts).
+The registration flow auto-enables the dynamically registered OpenEMR client. After the RFC 7591 registration succeeds, Flask runs `UPDATE oauth_clients SET is_enabled = 1 WHERE client_id = :client_id` against the OpenEMR database. This removes the manual "Enable Client" step from the SE demo flow.
+
+Rollback fires on either of two failure modes so the OpenEMR side never ends up with an enabled-but-orphaned client:
+
+- **Auto-enable failure** (UPDATE raises, or matches 0 rows): registration aborts; the OpenEMR client is deregistered via the RFC 7591 management URI and the local keypair is deleted. Surfaced by `openemr.client_enabled` (success) / `openemr.client_enable_failed` (raises) audit events.
+- **Flask DB-persist failure** (commit on the `ZoomAccount` / `AccountConfig` rows raises): same cleanup chain — `_deregister_from_openemr` + `delete_keypair` — so the (already-enabled) OpenEMR client doesn't outlive a Flask account that never persisted.
+
+`_deregister_from_openemr` swallows its own errors, so a simultaneously-unavailable OpenEMR during cleanup never compounds the original failure.
 
 `PATCH /config/register/<zoom_account_id>` updates editable registration and account config fields. Only fields sent with non-null values are updated; `false` is valid for boolean settings.
 
