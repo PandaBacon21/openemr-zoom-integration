@@ -212,7 +212,7 @@ def get_appointments():
     # Convert the UTC window to the account's local timezone before querying.
     account_tz = ZoneInfo(
         account.config.timezone if hasattr(account, 'config') and account.config
-        else "America/Denver"
+        else "America/New_York"  # matches AccountConfig.timezone default
     )
     query_dt_local = query_dt.replace(tzinfo=timezone.utc).astimezone(account_tz).replace(tzinfo=None)
     window_start = query_dt_local - timedelta(hours=2)
@@ -313,13 +313,14 @@ def get_appointments():
             "patientId":       str(row.pc_pid),
             "startTime":       start_dt.isoformat() + "Z" if start_dt else None,
             "endTime":         end_dt.isoformat()+ "Z" if end_dt else None,
-            "serviceType":     row.pc_title or "",
+            # "serviceType":     row.pc_title or "",
+            "serviceType":     row.pc_catname or "",
             "name":            f"{row.fname or ''} {row.lname or ''}".strip(),
             "dob":             row.DOB.isoformat() if row.DOB else None,
             "gender":          row.sex or "",
-            "appointmentType": row.pc_catname or "",
+            # "appointmentType": row.pc_catname or "",
+            "appointmentType": row.pc_title or "", # swapped pc_title and pc_catname because Zoom uses 'appointmentType' to display in appointment picker 
         })
-        # logger.info(f"getAppointments | row pc_eid={row.pc_eid} pc_startTime={row.pc_startTime} pc_duration={row.pc_duration} start_dt={start_dt} end_dt={end_dt}")
     logger.info(
         f"ehr_context.getAppointments | Returning {len(appointments)} appointments "
         f"for provider_id={provider_id} zoom_user_id={zoom_user_id} "
