@@ -89,6 +89,7 @@ def test_register_zoom_account_rejects_invalid_zoom_credentials(app, monkeypatch
     deregister_called = {}
 
     monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: False)
+    monkeypatch.setattr(registration, "_enable_openemr_client", lambda zoom_account_id, openemr_client_id: None)
     monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
     monkeypatch.setattr(
         registration,
@@ -155,7 +156,7 @@ def test_register_zoom_account_replaces_inactive_record(app, monkeypatch):
         _create_account("acct-inactive", is_active=False)
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "_enable_openemr_client", lambda zoom_account_id, openemr_client_id: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -219,6 +220,7 @@ def test_register_zoom_account_rolls_back_and_cleans_keys_on_db_failure(app, mon
 
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
+        monkeypatch.setattr(registration, "_enable_openemr_client", lambda zoom_account_id, openemr_client_id: None)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
         monkeypatch.setattr(
             registration,
@@ -253,7 +255,7 @@ def test_register_zoom_account_success_persists_and_normalizes_client_uri(app, m
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "_enable_openemr_client", lambda zoom_account_id, openemr_client_id: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -294,7 +296,7 @@ def test_register_zoom_account_persists_custom_timezone(app, monkeypatch):
     with app.app_context():
         monkeypatch.setattr(registration, "validate_zoom_credentials", lambda account: True)
         monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
-        monkeypatch.setattr(registration, "trigger_verification_scheduler", lambda app: None)
+        monkeypatch.setattr(registration, "_enable_openemr_client", lambda zoom_account_id, openemr_client_id: None)
         monkeypatch.setattr(
             registration,
             "_register_with_openemr",
@@ -460,4 +462,155 @@ def test_deregister_zoom_account_skips_openemr_when_registration_data_missing(ap
 
     assert captured["openemr_called"] is False
     assert captured["keypair"] == "acct-delete-no-openemr"
+    assert record is None
+
+
+# ---------------------------------------------------------------------------
+# _enable_openemr_client — direct DB UPDATE on oauth_clients.is_enabled
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_engine(rowcount: int = 1, raise_exc: Exception | None = None):
+    class FakeResult:
+        def __init__(self, rc):
+            self.rowcount = rc
+
+    captured = {"calls": []}
+
+    class FakeConn:
+        def execute(self, query, params):
+            captured["calls"].append({"sql": str(query), "params": params})
+            if raise_exc is not None:
+                raise raise_exc
+            return FakeResult(rowcount)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeConn()
+
+    return FakeEngine(), captured
+
+
+def test_enable_openemr_client_updates_row_and_writes_audit(app, monkeypatch):
+    engine, captured = _make_fake_engine(rowcount=1)
+    audits = []
+    monkeypatch.setattr(registration, "get_openemr_db_engine", lambda: engine)
+    monkeypatch.setattr(
+        registration,
+        "write_audit_log",
+        lambda **kwargs: audits.append(kwargs),
+    )
+
+    with app.app_context():
+        registration._enable_openemr_client("acct-1", "openemr-client-1")
+
+    assert len(captured["calls"]) == 1
+    assert "UPDATE oauth_clients" in captured["calls"][0]["sql"]
+    assert "is_enabled = 1" in captured["calls"][0]["sql"]
+    assert captured["calls"][0]["params"] == {"client_id": "openemr-client-1"}
+
+    assert len(audits) == 1
+    assert audits[0]["event_type"] == "openemr.client_enabled"
+    assert audits[0]["success"] is True
+    assert audits[0]["zoom_account_id"] == "acct-1"
+    assert audits[0]["detail"] == {"openemr_client_id": "openemr-client-1"}
+
+
+def test_enable_openemr_client_raises_and_audits_when_no_row_matches(app, monkeypatch):
+    engine, _ = _make_fake_engine(rowcount=0)
+    audits = []
+    monkeypatch.setattr(registration, "get_openemr_db_engine", lambda: engine)
+    monkeypatch.setattr(
+        registration,
+        "write_audit_log",
+        lambda **kwargs: audits.append(kwargs),
+    )
+
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="matched 0 rows"):
+            registration._enable_openemr_client("acct-1", "missing-client-id")
+
+    assert len(audits) == 1
+    assert audits[0]["event_type"] == "openemr.client_enable_failed"
+    assert audits[0]["success"] is False
+    assert audits[0]["zoom_account_id"] == "acct-1"
+    assert "matched 0 rows" in audits[0]["error_message"]
+
+
+def test_enable_openemr_client_raises_and_audits_on_db_exception(app, monkeypatch):
+    engine, _ = _make_fake_engine(raise_exc=RuntimeError("db down"))
+    audits = []
+    monkeypatch.setattr(registration, "get_openemr_db_engine", lambda: engine)
+    monkeypatch.setattr(
+        registration,
+        "write_audit_log",
+        lambda **kwargs: audits.append(kwargs),
+    )
+
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="db down"):
+            registration._enable_openemr_client("acct-1", "openemr-client-1")
+
+    assert len(audits) == 1
+    assert audits[0]["event_type"] == "openemr.client_enable_failed"
+    assert audits[0]["success"] is False
+    assert audits[0]["error_message"] == "db down"
+
+
+def test_register_zoom_account_rolls_back_when_enable_client_fails(app, monkeypatch):
+    """When auto-enable fails, registration deregisters from OpenEMR and cleans
+    up keypair — no Flask DB row should remain, and the caller sees the error."""
+    deregister_calls = []
+    keypair_cleanup = {}
+
+    monkeypatch.setattr(registration, "generate_keypair", lambda account_id: (f"/tmp/{account_id}/private.pem", f"zoomly-{account_id}"))
+    monkeypatch.setattr(
+        registration,
+        "_register_with_openemr",
+        lambda account_id, contact_email: {
+            "client_id": "openemr-client-fail",
+            "client_secret": "openemr-client-secret",
+            "registration_access_token": "registration-token",
+            "registration_client_uri": "https://openemr.public/oauth2/default/client/abc",
+        },
+    )
+    monkeypatch.setattr(
+        registration,
+        "_enable_openemr_client",
+        lambda zoom_account_id, openemr_client_id: (_ for _ in ()).throw(RuntimeError("enable failed")),
+    )
+    monkeypatch.setattr(
+        registration,
+        "_deregister_from_openemr",
+        lambda uri, token: deregister_calls.append((uri, token)),
+    )
+    monkeypatch.setattr(
+        registration,
+        "delete_keypair",
+        lambda account_id: keypair_cleanup.__setitem__("account_id", account_id),
+    )
+
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="enable failed"):
+            registration.register_zoom_account(
+                None,
+                "acct-enable-fail",
+                "zoom-client-id",
+                "zoom-client-secret",
+                "webhook-secret",
+                None,
+                None,
+                "admin@example.com",
+            )
+
+        record = ZoomAccount.query.filter_by(account_id="acct-enable-fail").first()
+
+    assert deregister_calls == [("https://openemr.public/oauth2/default/client/abc", "registration-token")]
+    assert keypair_cleanup["account_id"] == "acct-enable-fail"
     assert record is None

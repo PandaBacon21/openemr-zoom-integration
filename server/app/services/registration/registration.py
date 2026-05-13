@@ -1,9 +1,10 @@
 import logging
 import requests
 from flask import current_app
-from .reg_verification import trigger_verification_scheduler
-from app.extensions import db
+from sqlalchemy import text
+from app.extensions import db, get_openemr_db_engine
 from app.models import ZoomAccount, ZoomAccount, AccountConfig
+from app.services.audit import write_audit_log
 from app.services.zoom import validate_zoom_credentials
 from app.services.keys import generate_keypair, delete_keypair
 from app.services.ehr_context import set_ehr_context_credentials, _generate_tenant_id
@@ -62,6 +63,69 @@ def _register_with_openemr(
     return response.json()
 
 
+def _enable_openemr_client(zoom_account_id: str, openemr_client_id: str) -> None:
+    """
+    Flip `oauth_clients.is_enabled` to 1 for a freshly-registered client.
+
+    OpenEMR's dynamic-registration endpoint creates the client with
+    `is_enabled = 0` by default — an admin would normally click "Enable Client"
+    in the OpenEMR UI to activate it. Zoomly owns this OpenEMR instance and
+    runs the registration UI itself, so we activate the client directly via DB
+    instead of forcing a manual step into the SE demo flow.
+
+    Writes `openemr.client_enabled` audit on success and
+    `openemr.client_enable_failed` audit on failure.
+
+    Args:
+        zoom_account_id:    Zoom account ID (for audit correlation)
+        openemr_client_id:  OpenEMR client_id returned by dynamic registration
+
+    Raises:
+        RuntimeError: If the UPDATE affects 0 rows (client_id not found —
+                      registration didn't actually persist on OpenEMR's side)
+                      or the DB operation raises. Callers must treat this as
+                      registration failure and run the deregister cleanup path.
+    """
+    engine = get_openemr_db_engine()
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("""
+                    UPDATE oauth_clients
+                    SET is_enabled = 1
+                    WHERE client_id = :client_id
+                """),
+                {"client_id": openemr_client_id}
+            )
+            if result.rowcount == 0:
+                raise RuntimeError(
+                    f"oauth_clients UPDATE matched 0 rows for client_id={openemr_client_id} — "
+                    "OpenEMR registration may not have persisted"
+                )
+    except Exception as e:
+        logger.error(
+            f"openemr.enable_client | Failed for client_id={openemr_client_id}: {e}"
+        )
+        write_audit_log(
+            event_type="openemr.client_enable_failed",
+            success=False,
+            zoom_account_id=zoom_account_id,
+            error_message=str(e),
+            detail={"openemr_client_id": openemr_client_id},
+        )
+        raise
+
+    logger.info(
+        f"openemr.enable_client | client_id={openemr_client_id} is_enabled=1"
+    )
+    write_audit_log(
+        event_type="openemr.client_enabled",
+        success=True,
+        zoom_account_id=zoom_account_id,
+        detail={"openemr_client_id": openemr_client_id},
+    )
+
+
 def _deregister_from_openemr(
     registration_client_uri: str,
     registration_access_token: str
@@ -107,10 +171,11 @@ def register_zoom_account(
     Step 1: Check for existing registration — don't allow duplicates.
     Step 2: Generate a per-account RSA keypair.
     Step 3: Register with OpenEMR dynamic client registration.
-    Step 4: Persist ZoomAccount to DB.
-    Step 5: Validate Zoom credentials and cache token.
+    Step 4: Enable the OpenEMR client via direct DB UPDATE.
+            If this fails, deregister from OpenEMR and clean up keypair.
+    Step 5: Persist ZoomAccount to DB.
+    Step 6: Validate Zoom credentials and cache token.
             If this fails, roll back DB, keypair, and OpenEMR registration.
-    Step 6: Trigger OpenEMR verification scheduler.
 
     Returns: The newly created ZoomAccount ORM object.
     Raises:
@@ -146,7 +211,27 @@ def register_zoom_account(
         delete_keypair(zoom_account_id)
         raise
 
-    # ── Step 4: Persist to DB ─────────────────────────────────────────────────
+    openemr_client_id = openemr_response["client_id"]
+
+    # ── Step 4: Enable the OpenEMR client via direct DB UPDATE ────────────────
+    # OpenEMR's dynamic-registration endpoint leaves new clients disabled.
+    # Zoomly owns this OpenEMR instance, so we activate immediately instead of
+    # forcing a manual "Enable Client" click into the SE demo flow.
+    try:
+        _enable_openemr_client(zoom_account_id, openemr_client_id)
+    except Exception as e:
+        logger.error(
+            f"OpenEMR client enable failed for {zoom_account_id} "
+            f"(client_id={openemr_client_id}), cleaning up: {e}"
+        )
+        _deregister_from_openemr(
+            openemr_response.get("registration_client_uri", ""),
+            openemr_response.get("registration_access_token", "")
+        )
+        delete_keypair(zoom_account_id)
+        raise
+
+    # ── Step 5: Persist to DB ─────────────────────────────────────────────────
     try:
         registration_client_uri = openemr_response.get("registration_client_uri", "")
         if registration_client_uri:
@@ -163,7 +248,7 @@ def register_zoom_account(
             client_id=zoom_client_id,
             client_secret=zoom_client_secret,
             webhook_secret=zoom_webhook_secret,
-            openemr_client_id=openemr_response["client_id"],
+            openemr_client_id=openemr_client_id,
             openemr_client_secret=openemr_response.get("client_secret"),
             openemr_registration_access_token=openemr_response.get(
                 "registration_access_token"
@@ -191,7 +276,7 @@ def register_zoom_account(
         delete_keypair(zoom_account_id)
         raise
 
-    # ── Step 5: Validate Zoom credentials and cache token ─────────────────────
+    # ── Step 6: Validate Zoom credentials and cache token ─────────────────────
     # Account exists in DB now so _fetch_zoom_token() can write to it.
     # If this fails, roll back everything — DB record, keypair, OpenEMR registration.
     logger.info(f"Validating Zoom credentials for account {zoom_account_id}")
@@ -214,12 +299,9 @@ def register_zoom_account(
             "the app is activated in the Zoom Marketplace."
         )
 
-    # ── Step 6: Trigger OpenEMR verification scheduler ────────────────────────
-    trigger_verification_scheduler(current_app._get_current_object())  # type: ignore[attr-defined]
-
     logger.info(
         f"Registration complete for account {zoom_account_id}, "
-        f"OpenEMR client_id: {openemr_response['client_id']}"
+        f"OpenEMR client_id: {openemr_client_id}"
     )
     return account, config
 

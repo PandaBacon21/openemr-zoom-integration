@@ -294,11 +294,13 @@ def verify_registration(zoom_account_id: str):
         return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
 
     openemr_success = verify_openemr_token_for_account(account)
-    zoom_success = account.zoom_access_token
+    zoom_success = bool(account.zoom_access_token)
 
     messages = [
-        "OpenEMR and Zoom token verified successfully", 
-        "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again",
+        "OpenEMR and Zoom token verified successfully",
+        "OpenEMR token verification failed — confirm the client is still enabled "
+        "in OpenEMR (Admin → System → API Clients) and that the configured "
+        "OpenEMR URL is reachable.",
         f"Zoom credential validation failed for account {zoom_account_id}. "
             "Verify account_id, client_id, and client_secret are correct and "
             "the app is activated in the Zoom Marketplace.",

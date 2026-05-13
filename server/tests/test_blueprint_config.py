@@ -553,13 +553,13 @@ def test_verify_registration_returns_success_true(client, app, monkeypatch):
     response = client.post("/config/register/acct-verify/verify", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
-    assert response.get_json() == {
-        "nickname": None,
-        "zoom_account_id": "acct-verify",
-        "openemr_verified": True,
-        "zoom_verified": "zoom-token",
-        "message": "OpenEMR and Zoom token verified successfully",
-    }
+    body = response.get_json()
+    assert body["nickname"] is None
+    assert body["zoom_account_id"] == "acct-verify"
+    assert body["openemr_verified"] is True
+    # zoom_verified is a bool — never leak the access token to the browser
+    assert body["zoom_verified"] is True
+    assert body["message"] == "OpenEMR and Zoom token verified successfully"
 
 
 def test_verify_registration_returns_success_false(client, app, monkeypatch):
@@ -572,13 +572,12 @@ def test_verify_registration_returns_success_false(client, app, monkeypatch):
     response = client.post("/config/register/acct-verify/verify", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
-    assert response.get_json() == {
-        "nickname": None,
-        "zoom_account_id": "acct-verify",
-        "openemr_verified": False,
-        "zoom_verified": None,
-        "message": "OpenEMR client not yet enabled — enable it in OpenEMR admin and try again",
-    }
+    body = response.get_json()
+    assert body["nickname"] is None
+    assert body["zoom_account_id"] == "acct-verify"
+    assert body["openemr_verified"] is False
+    assert body["zoom_verified"] is False
+    assert "OpenEMR token verification failed" in body["message"]
 
 
 def test_create_provider_mapping_requires_body(client):

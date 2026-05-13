@@ -44,6 +44,8 @@ def write_audit_log(
       meeting.started               — Zoom meeting.started webhook updated MeetingRecord
       openemr.url_writeback_success - Zoom Meeting links written to OpenEMR Appointment Record
       openemr.url_writeback_failed  - Zoom Meeting links failed when writing to OpenEMR Appointment Record
+      openemr.client_enabled        — `oauth_clients.is_enabled` flipped to 1 at registration time
+      openemr.client_enable_failed  — direct DB UPDATE to enable the client failed (registration rolls back)
 
     Event types for clinical note pipeline:
       note.received             — clinical note webhook received from Zoom
