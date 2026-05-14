@@ -157,6 +157,8 @@ class ProviderMapping(db.Model):
     openemr_provider_npi = db.Column(db.String(10), nullable=False)
     openemr_provider_id = db.Column(db.String(128), nullable=True)
     openemr_provider_name = db.Column(db.String(256), nullable=True)
+    openemr_facility_id = db.Column(db.Integer, nullable=True)
+    openemr_facility_name = db.Column(db.String(255), nullable=True)
  
     # Zoom side
     zoom_user_email = db.Column(db.String(256), nullable=False)
@@ -183,6 +185,8 @@ class ProviderMapping(db.Model):
             openemr_provider_npi: str | None = ...,
             openemr_provider_id: int | None = ...,
             openemr_provider_name: str | None = ...,
+            openemr_facility_id: int | None = ...,
+            openemr_facility_name: str | None = ...,
             zoom_user_id: str | None = ...,
             zoom_user_email: str | None = ...,
             zoom_user_name: str | None = ...,
@@ -190,7 +194,7 @@ class ProviderMapping(db.Model):
             default_alternative_host_email: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
- 
+
     def __repr__(self):
         return f"<ProviderMapping {self.openemr_provider_npi} → {self.zoom_user_email}>"
  
