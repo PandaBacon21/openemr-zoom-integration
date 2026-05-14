@@ -478,6 +478,7 @@ def test_list_registrations_returns_summary(client, app):
                 demo_patient_phone_override_enabled=True,
                 demo_patient_phone_override="+13035550111",
                 allow_shared_zoom_user=True,
+                note_writeback_mode="soap_only",
             )
         )
         db.session.add(
@@ -518,6 +519,7 @@ def test_list_registrations_returns_summary(client, app):
     assert acct1["demo_patient_phone_override_enabled"] is True
     assert acct1["demo_patient_phone_override"] == "+13035550111"
     assert acct1["allow_shared_zoom_user"] is True
+    assert acct1["note_writeback_mode"] == "soap_only"
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
 
@@ -531,6 +533,7 @@ def test_list_registrations_returns_summary(client, app):
     assert acct2["demo_patient_phone_override_enabled"] is False
     assert acct2["demo_patient_phone_override"] is None
     assert acct2["allow_shared_zoom_user"] is False
+    assert acct2["note_writeback_mode"] == "both"  # fallback when no AccountConfig
 
 
 def test_verify_registration_returns_404_for_unknown_account(client):

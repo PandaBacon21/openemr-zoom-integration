@@ -1,0 +1,21 @@
+# Staging-only compose overlay (S7-09).
+#
+# Apply with:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml ...
+#
+# Or use server/scripts/start-staging.sh, which handles this automatically.
+#
+# Staging runs on a Proxmox VM that cold-boots noticeably slower than the dev
+# MacBook stack. The base docker-compose.yml gives OpenEMR a 6-minute
+# start_period, which is fine for dev but too tight for staging — Docker
+# marks OpenEMR unhealthy during normal init, and the branding +
+# zoom-module-init helpers (which `depends_on: openemr: service_healthy`)
+# never start, leaving the stack broken.
+#
+# Override here lifts the start_period to 15 minutes to cover the slower
+# hardware. interval / timeout / retries unchanged.
+
+services:
+  openemr:
+    healthcheck:
+      start_period: 15m

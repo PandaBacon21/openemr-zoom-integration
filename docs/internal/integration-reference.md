@@ -271,6 +271,14 @@ Response shape:
 
 These `/rest/*` routes are called by Zoom's EHR integration and are not config-JWT protected.
 
+> **Gotcha:** The endpoint URLs configured on the Zoom Marketplace app's
+> EHR Context tab must have no leading or trailing whitespace. Zoom silently
+> drops the call (no webhook history entry on Zoom's side, no inbound request
+> on Flask's side) if the URL has a stray space — a particularly hard failure
+> to diagnose because Postman against the same URL works fine. If a session
+> doesn't trigger `gettoken` even though identical config works for another
+> account, character-by-character compare the URL fields first.
+
 `GET /rest/auth/gettoken`
 
 - Requires `X-Tenant-ID: <tenant_id>`

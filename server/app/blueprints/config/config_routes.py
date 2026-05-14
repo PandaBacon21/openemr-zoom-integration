@@ -275,6 +275,7 @@ def list_registrations():
                 "demo_patient_phone_override_enabled": a.config.demo_patient_phone_override_enabled if a.config else False,
                 "demo_patient_phone_override": a.config.demo_patient_phone_override if a.config else None,
                 "allow_shared_zoom_user": a.config.allow_shared_zoom_user if a.config else False,
+                "note_writeback_mode": a.config.note_writeback_mode if a.config else "both",
                 "created_at": a.created_at.isoformat(),
                 "updated_at": a.updated_at.isoformat(),
             }
