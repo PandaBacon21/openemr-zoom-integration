@@ -103,6 +103,13 @@ export interface AuditLogResponse {
 export interface AuditLogFilters {
   zoom_account_id?: string;
   event_type?: string;
+  /**
+   * Comma-separated list of event types to hide from success rows. Failures
+   * of the same event types are always still shown. Used by the dashboard
+   * to suppress token-fetch noise. Ignored by the server when `event_type`
+   * is also set (explicit drilldowns win).
+   */
+  exclude_event_types?: string;
   openemr_appointment_id?: string;
   openemr_encounter_number?: string;
   openemr_provider_id?: string;

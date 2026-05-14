@@ -150,3 +150,58 @@ def test_get_audit_logs_rejects_bad_dates_and_pagination(client):
     assert date_response.get_json() == {"error": "Invalid date_from format: not-a-date"}
     assert page_response.status_code == 400
     assert page_response.get_json() == {"error": "Invalid pagination parameters"}
+
+
+def test_get_audit_logs_exclude_event_types_hides_success_rows(client, app):
+    """`exclude_event_types` should hide success rows for the listed events
+    but keep their failures visible."""
+    with app.app_context():
+        _add_audit_log("jwks.fetched", success=True)
+        _add_audit_log("openemr.token_verify_success", success=True)
+        _add_audit_log("openemr.token_verify_failed", success=False)
+        _add_audit_log("meeting.created", success=True)
+        _add_audit_log("jwks.fetched", success=False)  # failure of noisy type
+
+    response = client.get(
+        "/audit/logs",
+        headers=AUTH_HEADERS,
+        query_string={
+            "exclude_event_types": "jwks.fetched,openemr.token_verify_success",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    returned_events = {
+        (log["event_type"], log["success"]) for log in body["logs"]
+    }
+    # Successful noisy events suppressed
+    assert ("jwks.fetched", True) not in returned_events
+    assert ("openemr.token_verify_success", True) not in returned_events
+    # Failures of noisy types still surfaced
+    assert ("jwks.fetched", False) in returned_events
+    # Unrelated success events untouched
+    assert ("meeting.created", True) in returned_events
+    assert ("openemr.token_verify_failed", False) in returned_events
+    assert body["total"] == 3
+
+
+def test_get_audit_logs_exclude_event_types_skipped_when_event_type_set(client, app):
+    """Explicit `event_type` filter wins over `exclude_event_types`."""
+    with app.app_context():
+        _add_audit_log("jwks.fetched", success=True)
+        _add_audit_log("jwks.fetched", success=True)
+
+    response = client.get(
+        "/audit/logs",
+        headers=AUTH_HEADERS,
+        query_string={
+            "event_type": "jwks.fetched",
+            "exclude_event_types": "jwks.fetched",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["total"] == 2
+    assert all(log["event_type"] == "jwks.fetched" for log in body["logs"])

@@ -236,7 +236,7 @@ const AccountProvidersTab: React.FC<Props> = ({
 
   return (
     <Box
-      sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 800 }}
+      sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 1000 }}
     >
       {/* Search + Provider Selection */}
       <Card>
@@ -387,6 +387,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                 <TableHead>
                   <TableRow sx={{ bgcolor: "background.default" }}>
                     <TableCell sx={{ fontWeight: 600 }}>Provider</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Provider ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>NPI</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
@@ -411,6 +412,13 @@ const AccountProvidersTab: React.FC<Props> = ({
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {mapping.openemr_provider_name}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={mapping.openemr_provider_id}
+                          size="small"
+                          variant="outlined"
+                        />
                       </TableCell>
                       <TableCell>
                         <Chip

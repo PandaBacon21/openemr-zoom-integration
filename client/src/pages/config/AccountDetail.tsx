@@ -36,36 +36,26 @@ const AccountDetail: React.FC<Props> = ({
   const [mappings, setMappings] = useState<ProviderMapping[]>([]);
   const [loadingMappings, setLoadingMappings] = useState(false);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCheckedAccountId = useRef<string | null>(null);
 
   const runVerify = async (accountId: string) => {
     try {
       const res = await verifyAccount(accountId);
+      // Stale-response guard: drop the result if the user has switched
+      // accounts while this request was in flight, otherwise we would
+      // overwrite the newly-selected account's verify state with the
+      // previous account's outcome.
+      if (lastCheckedAccountId.current !== accountId) return false;
       const verified = res.data.openemr_verified;
       setVerifyStatus(verified ? "verified" : "unverified");
       setVerifyMessage(res.data.message);
       return verified;
     } catch {
+      if (lastCheckedAccountId.current !== accountId) return false;
       setVerifyStatus("error");
       setVerifyMessage("Failed to reach verification endpoint");
       return false;
     }
-  };
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
-
-  const startPolling = (accountId: string) => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      const verified = await runVerify(accountId);
-      if (verified) stopPolling();
-    }, 60_000);
   };
 
   useEffect(() => {
@@ -74,21 +64,20 @@ const AccountDetail: React.FC<Props> = ({
 
     setVerifyStatus("loading");
     setVerifyMessage("");
-    stopPolling();
     setTab(0);
     setMappings([]);
     setLoadingMappings(true);
 
-    runVerify(account.zoom_account_id).then((verified) => {
-      if (!verified) startPolling(account.zoom_account_id);
-    });
+    // Single-shot verify. Auto-enable at registration time (S7-05) means
+    // a freshly-registered account is always verified on first response;
+    // background polling would only mask manual admin actions and is the
+    // wrong UX for that case — the Re-verify button covers it explicitly.
+    runVerify(account.zoom_account_id);
 
     getProviderMappings(account.zoom_account_id)
       .then((res) => setMappings(res.data.providers))
       .catch(() => console.error("Failed to load mappings"))
       .finally(() => setLoadingMappings(false));
-
-    return () => stopPolling();
   }, [account.zoom_account_id]);
 
   const isVerified = verifyStatus === "verified";
@@ -136,7 +125,7 @@ const AccountDetail: React.FC<Props> = ({
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Chip
                 icon={<ErrorIcon />}
-                label="OpenEMR Not Enabled"
+                label="OpenEMR Unverified"
                 size="small"
                 color="error"
                 variant="filled"
@@ -147,9 +136,7 @@ const AccountDetail: React.FC<Props> = ({
                 color="error"
                 onClick={async () => {
                   setVerifyStatus("loading");
-                  const verified = await runVerify(account.zoom_account_id);
-                  if (!verified) startPolling(account.zoom_account_id);
-                  else stopPolling();
+                  await runVerify(account.zoom_account_id);
                 }}
               >
                 Re-verify
@@ -163,7 +150,7 @@ const AccountDetail: React.FC<Props> = ({
       {verifyStatus === "unverified" && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {verifyMessage ||
-            "OpenEMR client is not yet enabled. Enable it in OpenEMR admin and re-verify."}
+            "OpenEMR verification failed. Confirm the client is still enabled in OpenEMR admin and that OpenEMR is reachable, then re-verify."}
         </Alert>
       )}
 

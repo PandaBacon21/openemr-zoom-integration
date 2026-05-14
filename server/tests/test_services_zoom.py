@@ -108,6 +108,81 @@ def test_validate_zoom_credentials_raises_on_network_error(monkeypatch):
         zoom_auth.validate_zoom_credentials(_make_account())
 
 
+def test_fetch_zoom_token_writes_refresh_failed_on_http_error(monkeypatch):
+    captured: list[dict] = []
+    account = _make_account(account_id="acct-zoom-http")
+
+    class BadResponse:
+        status_code = 401
+        text = '{"error": "invalid_client", "reason": "Bad creds"}'
+
+        def json(self):
+            return {"error": "invalid_client", "reason": "Bad creds"}
+
+        def raise_for_status(self):
+            err = requests.HTTPError("Unauthorized")
+            err.response = self
+            raise err
+
+    monkeypatch.setattr(zoom_auth.requests, "post", lambda *_, **__: BadResponse())
+    monkeypatch.setattr(zoom_auth, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    with pytest.raises(requests.HTTPError):
+        zoom_auth._fetch_zoom_token(account)
+
+    audit = next(c for c in captured if c["event_type"] == "zoom.token_refresh_failed")
+    assert audit["zoom_account_id"] == "acct-zoom-http"
+    assert audit["detail"]["status_code"] == 401
+    assert audit["detail"]["zoom_error"] == "Bad creds"
+    assert "invalid_client" in audit["detail"]["body_snippet"]
+
+
+def test_fetch_zoom_token_writes_refresh_failed_on_network_error(monkeypatch):
+    captured: list[dict] = []
+    account = _make_account(account_id="acct-zoom-net")
+
+    def _raise(*_, **__):
+        raise requests.ConnectionError("network down")
+
+    monkeypatch.setattr(zoom_auth.requests, "post", _raise)
+    monkeypatch.setattr(zoom_auth, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    with pytest.raises(requests.ConnectionError):
+        zoom_auth._fetch_zoom_token(account)
+
+    audit = next(c for c in captured if c["event_type"] == "zoom.token_refresh_failed")
+    assert audit["zoom_account_id"] == "acct-zoom-net"
+    assert audit["detail"] == {"stage": "network"}
+
+
+def test_validate_zoom_credentials_writes_validated_audit(monkeypatch):
+    captured: list[dict] = []
+    monkeypatch.setattr(zoom_auth, "_fetch_zoom_token", lambda account: ("tok", 3600, "meeting:read"))
+    monkeypatch.setattr(zoom_auth, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    assert zoom_auth.validate_zoom_credentials(_make_account(account_id="acct-zoom-ok")) is True
+    audit = next(c for c in captured if c["event_type"] == "zoom.credentials_validated")
+    assert audit["zoom_account_id"] == "acct-zoom-ok"
+    assert audit["detail"] == {"scopes": "meeting:read"}
+
+
+def test_validate_zoom_credentials_writes_failed_audit_on_http_error(monkeypatch):
+    captured: list[dict] = []
+
+    def _raise(account):
+        err = requests.HTTPError("bad credentials")
+        err.response = SimpleNamespace(status_code=401)
+        raise err
+
+    monkeypatch.setattr(zoom_auth, "_fetch_zoom_token", _raise)
+    monkeypatch.setattr(zoom_auth, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    assert zoom_auth.validate_zoom_credentials(_make_account(account_id="acct-zoom-vf")) is False
+    audit = next(c for c in captured if c["event_type"] == "zoom.credentials_validation_failed")
+    assert audit["zoom_account_id"] == "acct-zoom-vf"
+    assert audit["detail"] == {"status_code": 401}
+
+
 def test_get_zoom_token_uses_cache_if_more_than_5_minutes_left(app, monkeypatch):
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     account = _make_account(

@@ -73,6 +73,38 @@ def write_audit_log(
       zoom.completion_error     — error marking Zoom meeting complete
       zoom.webhook_signature_failed — Zoom webhook signature verification failed
 
+    Event types for OpenEMR auth / JWKS pipeline:
+      jwks.fetched                  — /.well-known/jwks.json hit (detail.client_ip,
+                                       detail.active_accounts, detail.keys_served)
+      openemr.token_refresh_failed  — exchange of client assertion for access token
+                                       failed in get_openemr_token (HTTPError:
+                                       detail.status_code, detail.oauth_error,
+                                       detail.body_snippet; otherwise detail.stage)
+      openemr.token_verify_success  — UI verify endpoint succeeded
+      openemr.token_verify_failed   — UI verify endpoint failed (detail.status_code
+                                       when HTTPError; detail.stage="unexpected"
+                                       otherwise). Pairs with token_refresh_failed
+                                       on the same flow — verify_failed is the
+                                       UI-level outcome, refresh_failed is the
+                                       low-level token mint failure.
+
+    Event types for Zoom auth pipeline:
+      zoom.token_refresh_failed          — _fetch_zoom_token POST to
+                                            zoom.us/oauth/token failed (HTTPError:
+                                            detail.status_code, detail.zoom_error,
+                                            detail.body_snippet; network:
+                                            detail.stage="network"; otherwise
+                                            detail.stage="fetch")
+      zoom.credentials_validated         — registration-time validation succeeded
+                                            (detail.scopes set)
+      zoom.credentials_validation_failed — registration-time validation failed via
+                                            HTTPError (detail.status_code set).
+                                            Pairs with zoom.token_refresh_failed —
+                                            credentials_validation_failed is the
+                                            registration-level outcome,
+                                            token_refresh_failed is the low-level
+                                            HTTP failure.
+
     Args:
         event_type:               One of the event type strings above
         success:                  Whether the operation succeeded

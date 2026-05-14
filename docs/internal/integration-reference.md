@@ -364,6 +364,11 @@ Audit event taxonomy is canonical in the `write_audit_log()` docstring at `serve
 - `encounter.*` — `encounter.created` (with `detail.trigger`), `encounter.create_failed`, `encounter.claimed` (manual-fallback match path, S7-01)
 - `zoom.completion_*` — completion success, skipped (idempotent), error
 - `zoom.webhook_signature_failed` — Zoom HMAC mismatch
+- `jwks.fetched` — `/.well-known/jwks.json` endpoint hit; `detail.client_ip`, `detail.active_accounts`, `detail.keys_served`. Useful for diagnosing OpenEMR JWKS cache behavior (S7-08)
+- `openemr.token_refresh_failed` — `get_openemr_token` failure; HTTPError carries `detail.status_code`, `detail.oauth_error`, `detail.body_snippet`; otherwise `detail.stage="network"` or `"assertion"`. Pairs with `openemr.token_verify_failed` on the UI verify path
+- `openemr.token_verify_*` — UI verify endpoint outcomes (`success` / `failed`). `failed` carries `detail.status_code` on HTTPError or `detail.stage="unexpected"` otherwise
+- `zoom.token_refresh_failed` — `_fetch_zoom_token` failure; HTTPError carries `detail.status_code`, `detail.zoom_error`, `detail.body_snippet`; otherwise `detail.stage="network"` or `"fetch"`. Pairs with `zoom.credentials_validation_failed` on the registration path
+- `zoom.credentials_*` — registration-time validation outcomes (`validated` with `detail.scopes` / `validation_failed` with `detail.status_code`)
 
 `note.written` and `note.write_failed` include `openemr_encounter_number` and `detail.content_blank`; manual-fetch flows carry `detail.trigger=manual_fetch`.
 
@@ -402,6 +407,8 @@ Current listener behavior highlights:
 - Sends `duration_minutes`, `title`, and `room` in `appointment.set`
 - Sends compact `appointment.deleted` payload for delete actions
 - Signs all webhook payloads with HMAC-SHA256 using `OPENEMR_FLASK_SECRET`
+
+`patches/RsaSha384Signer.php` overrides `src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php` to fix a multi-client JWT verification bug (S7-08). Upstream's `verify()` reads kid from `$this->headers['kid']`, which is only populated during signing — during verification kid was always null, causing `JsonWebKeySet::getJSONWebKey()` to return the first RSA key in the JWKS regardless of which client's token was being validated. The patch extracts kid from the JWT header bytes in `$payload` (the signed segment Lcobucci passes into `verify()`). Bind-mounted `:ro` so OpenEMR's auto-config can't overwrite it.
 
 ## OpenEMR Appointment Status (`appt_status`) Mapping
 

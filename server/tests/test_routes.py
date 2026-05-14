@@ -16,6 +16,25 @@ def test_jwks_route(client):
     assert body == {"keys": []}
 
 
+def test_jwks_route_writes_fetched_audit(client, monkeypatch):
+    import app as app_module
+
+    calls = []
+    monkeypatch.setattr(app_module, "write_audit_log", lambda **kwargs: calls.append(kwargs))
+
+    response = client.get(
+        "/.well-known/jwks.json",
+        headers={"X-Forwarded-For": "203.0.113.5"},
+    )
+
+    assert response.status_code == 200
+    audit = next(c for c in calls if c["event_type"] == "jwks.fetched")
+    assert audit["success"] is True
+    assert audit["detail"]["client_ip"] == "203.0.113.5"
+    assert audit["detail"]["active_accounts"] == 0
+    assert audit["detail"]["keys_served"] == 0
+
+
 def test_openemr_root_route_requires_jwt(client):
     response = client.get("/openemr/")
     assert response.status_code == 401
