@@ -65,6 +65,11 @@ services:
       # Patch for bug and added delete method in OpenEMR Registration/De-Registration flow
       - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
       - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
+      # Patch for multi-client JWT kid lookup bug (S7-08): upstream RsaSha384Signer
+      # reads $this->headers['kid'] which is never populated during verification,
+      # so it returns the first RSA key in JWKS regardless of which client's JWT
+      # is being verified. Patch extracts kid from the payload header instead.
+      - ./patches/RsaSha384Signer.php:/var/www/localhost/htdocs/openemr/src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php:ro
       # Patches for adding appointment event notifications
       - ./patches/zoom_appointment_listener/AppointmentListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
       - ./patches/zoom_appointment_listener/Bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/Bootstrap.php

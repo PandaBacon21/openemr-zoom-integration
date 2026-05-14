@@ -1,9 +1,10 @@
 import logging
 import os
 from concurrent_log_handler import ConcurrentRotatingFileHandler
-from flask import Flask, send_from_directory
+from flask import Flask, request, send_from_directory
 from config import config_by_name
 from .extensions import scheduler, db
+from app.services.audit import write_audit_log
 from app.services.keys import build_jwks_for_accounts
 from app.models import ZoomAccount
 
@@ -89,9 +90,23 @@ def _register_app_routes(app: Flask) -> None:
 
 
     @app.route("/.well-known/jwks.json")
-    def jwks(): 
+    def jwks():
         accounts = ZoomAccount.query.filter_by(is_active=True).all()
-        return build_jwks_for_accounts(accounts), 200
+        jwks_doc = build_jwks_for_accounts(accounts)
+        client_ip = (
+            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or request.remote_addr
+        )
+        write_audit_log(
+            event_type="jwks.fetched",
+            success=True,
+            detail={
+                "client_ip": client_ip,
+                "active_accounts": len(accounts),
+                "keys_served": len(jwks_doc.get("keys", [])),
+            },
+        )
+        return jwks_doc, 200
     
 
     @app.route("/", defaults={"path": ""})

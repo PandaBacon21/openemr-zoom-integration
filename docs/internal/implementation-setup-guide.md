@@ -232,6 +232,7 @@ When using `docker-compose.yml`, the repo mounts OpenEMR patch files directly in
 
 - `patches/AuthorizationController.php`
 - `patches/OAuth2AuthorizationListener.php`
+- `patches/RsaSha384Signer.php` — fixes a multi-client JWT verification bug in OpenEMR (S7-08); without this patch, any account whose key isn't first in the JWKS response fails token verification
 - `patches/zoom_appointment_listener/*`
 - `patches/add_edit_event.php`
 - `patches/post_calendar/ajax_template.html`
