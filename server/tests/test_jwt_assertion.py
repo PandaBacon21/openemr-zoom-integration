@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import uuid
 
 import jwt
+import pytest
+import requests
 
 from app.auth import jwt_assertion
 from app.auth.jwks import load_private_key
@@ -50,6 +52,8 @@ def test_exchange_assertion_for_token_posts_expected_request(monkeypatch):
     captured = {}
 
     class DummyResponse:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 
@@ -94,6 +98,8 @@ def test_exchange_assertion_for_token_posts_expected_request(monkeypatch):
 
 def test_exchange_assertion_for_token_default_expiry(monkeypatch):
     class DummyResponse:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 
@@ -209,3 +215,48 @@ def test_get_openemr_token_handles_naive_expiry_as_utc(app, monkeypatch):
         token = jwt_assertion.get_openemr_token(account)
 
     assert token == "cached-token"
+
+
+def test_get_openemr_token_writes_refresh_failed_on_http_error(app, monkeypatch):
+    captured: list[dict] = []
+    account = _make_account(account_id="acct-token-http")
+
+    def _raise(*_, **__):
+        err = requests.HTTPError("forbidden")
+        err.response = SimpleNamespace(
+            status_code=403,
+            text='{"error":"unauthorized_client"}',
+            json=lambda: {"error": "unauthorized_client"},
+        )
+        raise err
+
+    monkeypatch.setattr(jwt_assertion, "exchange_assertion_for_token", _raise)
+    monkeypatch.setattr(jwt_assertion, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    with app.app_context():
+        with pytest.raises(requests.HTTPError):
+            jwt_assertion.get_openemr_token(account)
+
+    audit = next(c for c in captured if c["event_type"] == "openemr.token_refresh_failed")
+    assert audit["zoom_account_id"] == "acct-token-http"
+    assert audit["detail"]["status_code"] == 403
+    assert audit["detail"]["oauth_error"] == "unauthorized_client"
+
+
+def test_get_openemr_token_writes_refresh_failed_on_network_error(app, monkeypatch):
+    captured: list[dict] = []
+    account = _make_account(account_id="acct-token-net")
+
+    def _raise(*_, **__):
+        raise requests.ConnectionError("network down")
+
+    monkeypatch.setattr(jwt_assertion, "exchange_assertion_for_token", _raise)
+    monkeypatch.setattr(jwt_assertion, "write_audit_log", lambda **kwargs: captured.append(kwargs))
+
+    with app.app_context():
+        with pytest.raises(requests.ConnectionError):
+            jwt_assertion.get_openemr_token(account)
+
+    audit = next(c for c in captured if c["event_type"] == "openemr.token_refresh_failed")
+    assert audit["zoom_account_id"] == "acct-token-net"
+    assert audit["detail"] == {"stage": "network"}

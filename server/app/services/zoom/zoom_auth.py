@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import requests
 from app.extensions import db
 from app.models import ZoomAccount
+from app.services.audit import write_audit_log
 
 
 logger = logging.getLogger(__name__)
@@ -27,19 +28,43 @@ def _fetch_zoom_token(zoom_account: ZoomAccount, refresh: bool = False) -> tuple
     Fetch a fresh Zoom token and store it on the account record.
     Internal only — callers should use get_zoom_token()
     """
-    response = requests.post(
-        ZOOM_TOKEN_URL,
-        params={
-            "grant_type": "account_credentials",
-            "account_id": zoom_account.account_id,
-        },
-        headers={
-            "Authorization": _build_basic_auth_header(zoom_account.client_id, zoom_account.client_secret),
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        timeout=10
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            ZOOM_TOKEN_URL,
+            params={
+                "grant_type": "account_credentials",
+                "account_id": zoom_account.account_id,
+            },
+            headers={
+                "Authorization": _build_basic_auth_header(zoom_account.client_id, zoom_account.client_secret),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+    except Exception as e:
+        detail: dict = {}
+        if isinstance(e, requests.HTTPError):
+            if e.response is not None:
+                detail["status_code"] = e.response.status_code
+                try:
+                    body = e.response.json()
+                    detail["zoom_error"] = body.get("reason") or body.get("error")
+                except Exception:
+                    pass
+                detail["body_snippet"] = e.response.text[:200]
+        elif isinstance(e, requests.RequestException):
+            detail["stage"] = "network"
+        else:
+            detail["stage"] = "fetch"
+        write_audit_log(
+            event_type="zoom.token_refresh_failed",
+            success=False,
+            zoom_account_id=zoom_account.account_id,
+            error_message=str(e),
+            detail=detail,
+        )
+        raise
     data = response.json()
     
     access_token = data["access_token"]
@@ -75,14 +100,30 @@ def validate_zoom_credentials(
             f"Zoom credentials validated for account {zoom_account.account_id}, "
             f"scopes: {scope}"
         )
+        write_audit_log(
+            event_type="zoom.credentials_validated",
+            success=True,
+            zoom_account_id=zoom_account.account_id,
+            detail={"scopes": scope},
+        )
         return True
     except requests.HTTPError as e:
         logger.warning(
             f"Zoom credential validation failed for account {zoom_account.account_id}: {e}"
         )
+        status = e.response.status_code if e.response is not None else None
+        write_audit_log(
+            event_type="zoom.credentials_validation_failed",
+            success=False,
+            zoom_account_id=zoom_account.account_id,
+            error_message=str(e),
+            detail={"status_code": status},
+        )
         return False
     except requests.RequestException as e:
         logger.error(f"Network error validating Zoom credentials: {e}")
+        # _fetch_zoom_token already wrote zoom.token_refresh_failed; we re-raise
+        # without a separate validation audit so the caller can react.
         raise
 
 

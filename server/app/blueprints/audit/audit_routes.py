@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from flask import request, jsonify
+from sqlalchemy import and_, not_
 from app.models import AuditLog
 from app.blueprints.audit import audit_bp
 
@@ -15,6 +16,13 @@ def get_audit_logs():
     Query parameters (all optional):
         zoom_account_id         — filter to a specific account
         event_type              — filter by event type string
+        exclude_event_types     — comma-separated list of event types to hide
+                                  WHEN success=true. Failures of those types
+                                  are always still shown. Used by the dashboard
+                                  to suppress token-fetch noise (jwks.fetched,
+                                  openemr.token_verify_success, etc.) without
+                                  losing visibility into the corresponding
+                                  failure events.
         openemr_appointment_id  — filter by appointment ID
         openemr_encounter_number— filter by encounter number
         openemr_provider_id     — filter by OpenEMR provider ID
@@ -38,6 +46,23 @@ def get_audit_logs():
     event_type = request.args.get("event_type")
     if event_type:
         query = query.filter(AuditLog.event_type == event_type)
+
+    # Exclude noisy event types from success rows while still surfacing their
+    # failures — used by the dashboard to hide jwks.fetched and friends by
+    # default. Skipped entirely when the caller also passes a specific
+    # `event_type` filter, so explicit drilldowns aren't accidentally muted.
+    exclude_event_types = request.args.get("exclude_event_types")
+    if exclude_event_types and not event_type:
+        excluded = [e.strip() for e in exclude_event_types.split(",") if e.strip()]
+        if excluded:
+            query = query.filter(
+                not_(
+                    and_(
+                        AuditLog.event_type.in_(excluded),
+                        AuditLog.success.is_(True),
+                    )
+                )
+            )
 
     openemr_appointment_id = request.args.get("openemr_appointment_id")
     if openemr_appointment_id:

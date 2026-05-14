@@ -16,6 +16,8 @@ import {
   Pagination,
   CircularProgress,
   Alert,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { getAuditLogs } from "../../api/config";
@@ -47,14 +49,32 @@ const EVENT_TYPE_OPTIONS = [
   "zoom.completion_success",
   "zoom.completion_error",
   "zoom.completion_skipped",
+  "zoom.token_refresh_failed",
+  "zoom.credentials_validated",
+  "zoom.credentials_validation_failed",
   "openemr.write_success",
   "openemr.write_error",
   "openemr.url_writeback_success",
   "openemr.url_writeback_failed",
+  "openemr.client_enabled",
+  "openemr.client_enable_failed",
+  "openemr.token_verify_success",
+  "openemr.token_verify_failed",
+  "openemr.token_refresh_failed",
+  "jwks.fetched",
   "config.registration_created",
   "config.registration_updated",
   "config.registration_deleted",
   "config.ehr_credentials_updated",
+];
+
+// Token-fetch / JWKS event types that are noisy on success but worth keeping
+// visible on failure. The Dashboard toggle below sends this list as the
+// `exclude_event_types` server param so success rows are filtered out while
+// failures still surface.
+const TOKEN_NOISE_EVENT_TYPES = [
+  "jwks.fetched",
+  "openemr.token_verify_success",
 ];
 
 interface AuditFilterValues {
@@ -67,6 +87,7 @@ interface AuditFilterValues {
   meetingId: string;
   noteId: string;
   successFilter: string;
+  hideTokenNoise: boolean;
 }
 
 interface Props {
@@ -90,6 +111,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
   const [meetingId, setMeetingId] = useState("");
   const [noteId, setNoteId] = useState("");
   const [successFilter, setSuccessFilter] = useState("");
+  const [hideTokenNoise, setHideTokenNoise] = useState(true);
 
   const fetchLogs = useCallback(
     async (
@@ -109,6 +131,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
           meetingId,
           noteId,
           successFilter,
+          hideTokenNoise,
           ...filterOverrides,
         };
         const filters: AuditLogFilters = { page: currentPage, per_page: 50 };
@@ -118,6 +141,12 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
         }
         if (currentFilters.eventType)
           filters.event_type = currentFilters.eventType;
+        // Skip the noise filter when the user has selected a specific
+        // event_type — otherwise the explicit filter would be wiped out by
+        // the exclude list on the server side.
+        if (currentFilters.hideTokenNoise && !currentFilters.eventType) {
+          filters.exclude_event_types = TOKEN_NOISE_EVENT_TYPES.join(",");
+        }
         if (currentFilters.appointmentId) {
           filters.openemr_appointment_id = currentFilters.appointmentId;
         }
@@ -159,6 +188,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
       meetingId,
       noteId,
       successFilter,
+      hideTokenNoise,
       page,
     ],
   );
@@ -326,6 +356,24 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
             onChange={(e) => setNoteId(e.target.value)}
             size="small"
             sx={{ width: 150 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={hideTokenNoise}
+                onChange={(e) => {
+                  setHideTokenNoise(e.target.checked);
+                  setPage(1);
+                  fetchLogs(1, { hideTokenNoise: e.target.checked });
+                }}
+              />
+            }
+            label="Hide token-fetch noise"
+            sx={{ alignSelf: "center", ml: 0.5 }}
+            slotProps={{ typography: { variant: "body2" } }}
+            title="Hides successful jwks.fetched and openemr.token_verify_success rows. Failures of those types are still shown. Has no effect when a specific Event Type is selected."
           />
 
           <Button

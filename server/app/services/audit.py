@@ -88,6 +88,23 @@ def write_audit_log(
                                        UI-level outcome, refresh_failed is the
                                        low-level token mint failure.
 
+    Event types for Zoom auth pipeline:
+      zoom.token_refresh_failed          — _fetch_zoom_token POST to
+                                            zoom.us/oauth/token failed (HTTPError:
+                                            detail.status_code, detail.zoom_error,
+                                            detail.body_snippet; network:
+                                            detail.stage="network"; otherwise
+                                            detail.stage="fetch")
+      zoom.credentials_validated         — registration-time validation succeeded
+                                            (detail.scopes set)
+      zoom.credentials_validation_failed — registration-time validation failed via
+                                            HTTPError (detail.status_code set).
+                                            Pairs with zoom.token_refresh_failed —
+                                            credentials_validation_failed is the
+                                            registration-level outcome,
+                                            token_refresh_failed is the low-level
+                                            HTTP failure.
+
     Args:
         event_type:               One of the event type strings above
         success:                  Whether the operation succeeded

@@ -364,6 +364,11 @@ Audit event taxonomy is canonical in the `write_audit_log()` docstring at `serve
 - `encounter.*` — `encounter.created` (with `detail.trigger`), `encounter.create_failed`, `encounter.claimed` (manual-fallback match path, S7-01)
 - `zoom.completion_*` — completion success, skipped (idempotent), error
 - `zoom.webhook_signature_failed` — Zoom HMAC mismatch
+- `jwks.fetched` — `/.well-known/jwks.json` endpoint hit; `detail.client_ip`, `detail.active_accounts`, `detail.keys_served`. Useful for diagnosing OpenEMR JWKS cache behavior (S7-08)
+- `openemr.token_refresh_failed` — `get_openemr_token` failure; HTTPError carries `detail.status_code`, `detail.oauth_error`, `detail.body_snippet`; otherwise `detail.stage="network"` or `"assertion"`. Pairs with `openemr.token_verify_failed` on the UI verify path
+- `openemr.token_verify_*` — UI verify endpoint outcomes (`success` / `failed`). `failed` carries `detail.status_code` on HTTPError or `detail.stage="unexpected"` otherwise
+- `zoom.token_refresh_failed` — `_fetch_zoom_token` failure; HTTPError carries `detail.status_code`, `detail.zoom_error`, `detail.body_snippet`; otherwise `detail.stage="network"` or `"fetch"`. Pairs with `zoom.credentials_validation_failed` on the registration path
+- `zoom.credentials_*` — registration-time validation outcomes (`validated` with `detail.scopes` / `validation_failed` with `detail.status_code`)
 
 `note.written` and `note.write_failed` include `openemr_encounter_number` and `detail.content_blank`; manual-fetch flows carry `detail.trigger=manual_fetch`.
 
