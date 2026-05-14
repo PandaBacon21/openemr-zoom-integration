@@ -99,20 +99,37 @@ def _normalize_practitioner(resource: dict) -> dict:
             email = telecom.get("value")
             break
 
-    # Look up users.id from OpenEMR DB using NPI.
-    # This is the integer used as pc_aid / form_provider in appointment events
-    # and needs to be stored on ProviderMapping for the webhook hot path.
+    # Look up users.id, facility_id, and facility name from OpenEMR DB by NPI.
+    # users.id is the integer used as pc_aid / form_provider in appointment
+    # events and needs to be stored on ProviderMapping for the webhook hot
+    # path. facility_id + facility_name are captured at mapping creation time
+    # for surface in the provider mappings table (S7-14) and future filtering.
     user_id = None
+    facility_id = None
+    facility_name = None
     if npi:
         try:
             engine = get_openemr_db_engine()
             with engine.connect() as conn:
+                # JOIN against the `facility` table for the canonical facility
+                # name — OpenEMR's `users.facility` (denormalized varchar) is
+                # not reliably populated, so trust `facility.name` resolved
+                # through `users.facility_id`. users.facility_id defaults to 0
+                # when unset; LEFT JOIN keeps the row but yields NULL facility.
                 row = conn.execute(
-                    text("SELECT id FROM users WHERE npi = :npi LIMIT 1"),
+                    text("""
+                        SELECT u.id, u.facility_id, f.name AS facility_name
+                        FROM users u
+                        LEFT JOIN facility f ON f.id = u.facility_id
+                        WHERE u.npi = :npi
+                        LIMIT 1
+                    """),
                     {"npi": npi}
                 ).fetchone()
                 if row:
                     user_id = row.id
+                    facility_id = row.facility_id or None
+                    facility_name = row.facility_name or None
         except Exception as e:
             logger.warning(f"_normalize_practitioner | Failed to look up users.id for npi={npi}: {e}")
 
@@ -125,6 +142,8 @@ def _normalize_practitioner(resource: dict) -> dict:
         "npi": npi,
         "email": email,
         "user_id": user_id,
+        "facility_id": facility_id,
+        "facility_name": facility_name,
     }
 
 
@@ -137,7 +156,9 @@ def _create_provider_mapping(
     zoom_user_id: str,
     zoom_user_email: str,
     zoom_user_name: str | None,
-    zoom_user_type: int | None
+    zoom_user_type: int | None,
+    openemr_facility_id: int | None = None,
+    openemr_facility_name: str | None = None,
 ) -> ProviderMapping:
     """
     Create a new provider mapping linking an OpenEMR provider to a Zoom user.
@@ -176,8 +197,10 @@ def _create_provider_mapping(
         zoom_account_id=zoom_account_id,
         openemr_fhir_id=openemr_fhir_id,
         openemr_provider_npi=openemr_provider_npi,
-        openemr_provider_id=openemr_provider_id, 
+        openemr_provider_id=openemr_provider_id,
         openemr_provider_name=openemr_provider_name,
+        openemr_facility_id=openemr_facility_id,
+        openemr_facility_name=openemr_facility_name,
         zoom_user_id=zoom_user_id,
         zoom_user_email=zoom_user_email,
         zoom_user_name=zoom_user_name,

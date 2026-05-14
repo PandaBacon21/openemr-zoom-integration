@@ -60,7 +60,9 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
     class FakeConn:
         def execute(self, query, params):
             if params["npi"] == "1234567890":
-                return FakeResult(SimpleNamespace(id=10))
+                return FakeResult(
+                    SimpleNamespace(id=10, facility_id=1, facility_name="Zoomly Medical Center")
+                )
             return FakeResult(None)
 
         def __enter__(self):
@@ -98,6 +100,8 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "npi": "1234567890",
             "email": "jane@example.com",
             "user_id": 10,
+            "facility_id": 1,
+            "facility_name": "Zoomly Medical Center",
         },
         {
             "fhir_id": "pract-2",
@@ -108,6 +112,8 @@ def test_get_practitioners_bundle_dedupes_and_normalizes(app, monkeypatch):
             "npi": None,
             "email": None,
             "user_id": None,
+            "facility_id": None,
+            "facility_name": None,
         },
     ]
 
@@ -152,6 +158,8 @@ def test_get_practitioners_single_resource_fetch(app, monkeypatch):
             "npi": None,
             "email": None,
             "user_id": None,
+            "facility_id": None,
+            "facility_name": None,
         }
     ]
 
@@ -181,6 +189,8 @@ def test_normalize_practitioner_defaults_for_missing_fields():
         "npi": None,
         "email": None,
         "user_id": None,
+        "facility_id": None,
+        "facility_name": None,
     }
 
 

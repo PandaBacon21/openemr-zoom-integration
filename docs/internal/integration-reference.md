@@ -69,6 +69,8 @@ Relationships:
 | `openemr_provider_npi`           | `String(10)`              | yes      | Provider NPI used by filter pipeline                                     |
 | `openemr_provider_id`            | `String(128)`             | no       | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
 | `openemr_provider_name`          | `String(256)`             | no       | Provider display name                                                    |
+| `openemr_facility_id`            | `Integer`                 | no       | OpenEMR `users.facility_id` captured at mapping creation (S7-14)         |
+| `openemr_facility_name`          | `String(255)`             | no       | OpenEMR `users.facility` (display name) captured at mapping creation     |
 | `zoom_user_email`                | `String(256)`             | yes      | Zoom host email                                                          |
 | `zoom_user_name`                 | `String(256)`             | no       | Zoom display name                                                        |
 | `zoom_user_id`                   | `String(128)`             | no       | Zoom user id                                                             |

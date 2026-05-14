@@ -159,6 +159,8 @@ const AccountProvidersTab: React.FC<Props> = ({
         openemr_provider_npi: selectedProvider.npi ?? "",
         openemr_provider_id: String(selectedProvider.user_id),
         openemr_provider_name: selectedProvider.full_name,
+        openemr_facility_id: selectedProvider.facility_id,
+        openemr_facility_name: selectedProvider.facility_name,
         zoom_user_id: selectedZoomUser.zoom_user_id,
         zoom_user_email: selectedZoomUser.email,
         zoom_user_name: selectedZoomUser.display_name,
@@ -220,6 +222,8 @@ const AccountProvidersTab: React.FC<Props> = ({
       user_id: parseInt(mapping.openemr_provider_id) || 0,
       active: true,
       email: null,
+      facility_id: mapping.openemr_facility_id,
+      facility_name: mapping.openemr_facility_name,
     });
     const zoomUser =
       zoomUsers.find((u) => u.zoom_user_id === mapping.zoom_user_id) ?? null;
@@ -389,6 +393,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                     <TableCell sx={{ fontWeight: 600 }}>Provider</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Provider ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>NPI</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Facility</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
@@ -426,6 +431,21 @@ const AccountProvidersTab: React.FC<Props> = ({
                           size="small"
                           variant="outlined"
                         />
+                      </TableCell>
+                      <TableCell>
+                        {mapping.openemr_facility_name ? (
+                          <Typography variant="body2">
+                            {mapping.openemr_facility_name}
+                          </Typography>
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Chip

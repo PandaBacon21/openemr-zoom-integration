@@ -607,11 +607,17 @@ def test_create_provider_mapping_success(client, monkeypatch):
         id=12,
         openemr_provider_npi="1234567890",
         openemr_provider_name="Dr Jane Doe",
+        openemr_facility_id=1,
+        openemr_facility_name="Zoomly Medical Center",
         zoom_user_email="jane@example.com",
         zoom_user_name="Dr Jane Doe",
         created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
-    monkeypatch.setattr("app.blueprints.config.config_routes._create_provider_mapping", lambda **kwargs: fake_mapping)
+    captured = {}
+    def _capture_create(**kwargs):
+        captured.update(kwargs)
+        return fake_mapping
+    monkeypatch.setattr("app.blueprints.config.config_routes._create_provider_mapping", _capture_create)
 
     response = client.post(
         "/config/providers",
@@ -620,6 +626,8 @@ def test_create_provider_mapping_success(client, monkeypatch):
             "zoom_account_id": "acct-1",
             "openemr_fhir_id": "pract-1",
             "openemr_provider_npi": "1234567890",
+            "openemr_facility_id": 1,
+            "openemr_facility_name": "Zoomly Medical Center",
             "zoom_user_id": "u-1",
             "zoom_user_email": "jane@example.com",
             "zoom_user_type": 2,
@@ -631,10 +639,16 @@ def test_create_provider_mapping_success(client, monkeypatch):
         "id": 12,
         "openemr_provider_npi": "1234567890",
         "openemr_provider_name": "Dr Jane Doe",
+        "openemr_facility_id": 1,
+        "openemr_facility_name": "Zoomly Medical Center",
         "zoom_user_email": "jane@example.com",
         "zoom_user_name": "Dr Jane Doe",
         "created_at": "2026-01-02T00:00:00+00:00",
     }
+    # Facility fields are threaded through to the service-layer call so
+    # they actually land on the new ProviderMapping row.
+    assert captured["openemr_facility_id"] == 1
+    assert captured["openemr_facility_name"] == "Zoomly Medical Center"
 
 
 def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
@@ -697,6 +711,8 @@ def test_list_provider_mappings_success(client, monkeypatch):
             openemr_provider_npi="1234567890",
             openemr_provider_id="10",
             openemr_provider_name="Dr Jane Doe",
+            openemr_facility_id=1,
+            openemr_facility_name="Zoomly Medical Center",
             zoom_user_id="u-1",
             zoom_user_email="jane@example.com",
             zoom_user_name="Dr Jane Doe",
@@ -721,6 +737,8 @@ def test_list_provider_mappings_success(client, monkeypatch):
                 "openemr_provider_npi": "1234567890",
                 "openemr_provider_id": "10",
                 "openemr_provider_name": "Dr Jane Doe",
+                "openemr_facility_id": 1,
+                "openemr_facility_name": "Zoomly Medical Center",
                 "zoom_user_id": "u-1",
                 "zoom_user_email": "jane@example.com",
                 "zoom_user_name": "Dr Jane Doe",

@@ -36,6 +36,8 @@ export interface ProviderMapping {
   openemr_provider_npi: string;
   openemr_provider_id: string;
   openemr_provider_name: string;
+  openemr_facility_id: number | null;
+  openemr_facility_name: string | null;
   zoom_account_id: string;
   zoom_user_id: string;
   zoom_user_email: string;
@@ -53,6 +55,8 @@ export interface OpenEMRProvider {
   user_id: number;
   active: boolean;
   email: string | null;
+  facility_id: number | null;
+  facility_name: string | null;
 }
 
 export interface ZoomUser {
@@ -173,6 +177,8 @@ export const createProviderMapping = (data: {
   openemr_provider_npi: string;
   openemr_provider_id?: string;
   openemr_provider_name?: string;
+  openemr_facility_id?: number | null;
+  openemr_facility_name?: string | null;
   zoom_user_id: string;
   zoom_user_email: string;
   zoom_user_name?: string;
