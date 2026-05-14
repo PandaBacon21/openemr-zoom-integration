@@ -97,6 +97,8 @@ docker exec openemr chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly
 docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
 ```
 
+For staging deployments, use `server/scripts/start-staging.sh` instead. It layers the `docker-compose.staging.yml` overlay (extends OpenEMR healthcheck `start_period` to 15 minutes for slower Proxmox hardware), waits for OpenEMR healthy, runs the same permission fixes as `start.sh`, waits for `zoomly-module-init`, then runs `alembic upgrade head`. `git pull` and `docker compose build --no-cache` remain separate deploy steps that run before the script.
+
 8. Confirm service health.
 
 ```bash
