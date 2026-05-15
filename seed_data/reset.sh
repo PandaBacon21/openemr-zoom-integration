@@ -37,6 +37,24 @@ DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
 DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 207;
 DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 207;
 
+-- Sprint 12 clinical data (must run before patient_data delete; FK_CHECKS=0
+-- means order is for clarity rather than constraint enforcement, but the
+-- lists_medication / procedure_* chains still go child-first so the
+-- intermediate state is sane if anyone runs the block partially.)
+DELETE FROM lists_medication WHERE list_id IN (SELECT id FROM lists WHERE pid BETWEEN 100 AND 129);
+DELETE FROM lists           WHERE pid        BETWEEN 100 AND 129;
+DELETE FROM prescriptions   WHERE patient_id BETWEEN 100 AND 129;
+DELETE FROM form_vitals     WHERE pid        BETWEEN 100 AND 129;
+DELETE FROM history_data    WHERE pid        BETWEEN 100 AND 129;
+DELETE FROM immunizations   WHERE patient_id BETWEEN 100 AND 129;
+DELETE FROM insurance_data  WHERE pid        BETWEEN 100 AND 129;
+
+-- procedure_* chain (labs from S12-11)
+DELETE FROM procedure_result      WHERE procedure_report_id IN (SELECT procedure_report_id FROM procedure_report WHERE procedure_order_id IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 129));
+DELETE FROM procedure_report      WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 129);
+DELETE FROM procedure_order_code  WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 129);
+DELETE FROM procedure_order       WHERE patient_id BETWEEN 100 AND 129;
+
 DELETE FROM forms WHERE pid BETWEEN 100 AND 129;
 DELETE FROM form_encounter WHERE pid BETWEEN 100 AND 129;
 DELETE FROM form_soap WHERE pid BETWEEN 100 AND 129;
@@ -55,6 +73,9 @@ SELECT COUNT(*) AS remaining_appointments FROM openemr_postcalendar_events WHERE
 SELECT COUNT(*) AS remaining_patients FROM patient_data WHERE pid BETWEEN 100 AND 129;
 SELECT COUNT(*) AS remaining_providers FROM users WHERE id IN (10,11,12,13,20,21,30,31);
 SELECT COUNT(*) AS remaining_encounters FROM form_encounter WHERE pid BETWEEN 100 AND 129;
+SELECT COUNT(*) AS remaining_lists FROM lists WHERE pid BETWEEN 100 AND 129;
+SELECT COUNT(*) AS remaining_prescriptions FROM prescriptions WHERE patient_id BETWEEN 100 AND 129;
+SELECT COUNT(*) AS remaining_vitals FROM form_vitals WHERE pid BETWEEN 100 AND 129;
 EOF
 
 
