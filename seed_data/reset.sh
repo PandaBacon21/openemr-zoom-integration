@@ -31,6 +31,11 @@ DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson',
 DELETE FROM facility WHERE id = 1;
 DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 129;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
+DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
+
+-- Sprint 12 master data
+DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 207;
+DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 207;
 
 DELETE FROM forms WHERE pid BETWEEN 100 AND 129;
 DELETE FROM form_encounter WHERE pid BETWEEN 100 AND 129;
