@@ -1263,6 +1263,562 @@ VALUES
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, single episode, moderate', 'ICD10:F32.1', 129, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'erodriguez', 0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    129, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'erodriguez', 0);
 
+-- =============================================================================
+-- MEDICATIONS  (Sprint 12 / S12-08)
+--
+-- 49 medication rows across 22 patients. Real generic names with real RxNorm
+-- CUIs in `rxnorm_drugcode` so the medications panel looks structured. HYA
+-- persona patients (121/125/128) and select asymptomatic CV-F patients
+-- (111/115/123) have no chronic meds. PID 124 (NEW) skipped.
+--
+-- Each lists row gets a companion lists_medication sidecar row via the
+-- JOIN-based INSERT after this block — outpatient / order defaults.
+-- =============================================================================
+
+INSERT INTO `lists`
+    (uuid, type, subtype, title, pid, date, begdate, activity, user, comments)
+VALUES
+-- PID 100 James Harrison (CHR HTN+HLD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           100, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR), 1, 'moconnor',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         100, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR), 1, 'moconnor',   'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Aspirin 81mg tab',              100, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR), 1, 'moconnor',   'rxnorm:243670 — 1 tab PO daily'),
+-- PID 101 Sofia Reyes (BH-PC MDD+GAD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 50mg tab',           101, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'erodriguez', 'rxnorm:313989 — 1 tab PO daily'),
+-- PID 102 David Kim (CV-F CAD+OldMI+HTN+HLD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Aspirin 81mg tab',              102, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  'rxnorm:243670 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 80mg tab',         102, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  'rxnorm:617318 — 1 tab PO at bedtime (high-intensity post-MI)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metoprolol succinate ER 50mg',  102, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  'rxnorm:866412 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           102, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  'rxnorm:314077 — 1 tab PO daily'),
+-- PID 103 Rachel Nguyen (PSY-S GAD severe)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          103, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR), 1, 'amiller',    'rxnorm:313990 — 1 tab PO daily'),
+-- PID 104 Carlos Mendez (BH-PC HTN+MDD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           104, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR), 1, 'moconnor',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          104, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor',   'rxnorm:313990 — 1 tab PO daily'),
+-- PID 105 Linda Patel (GER OA+osteoporosis+hypothyroid+HTN)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           105, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'erodriguez', 'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 75mcg tab',       105, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'erodriguez', 'rxnorm:966222 — 1 tab PO daily on empty stomach'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          105, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'erodriguez', 'rxnorm:197910 — 1 tab PO weekly on empty stomach'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       105, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 'rxnorm:198440 — 1–2 tabs PO every 6 hours as needed for OA pain'),
+-- PID 106 Ethan Brooks (PSY-S ADHD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Methylphenidate ER 36mg tab',   106, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR), 1, 'amiller',    'rxnorm:847218 — 1 tab PO every morning (Schedule II)'),
+-- PID 107 Maria Chen (CV-F post-ablation SVT)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metoprolol tartrate 25mg tab',  107, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  'rxnorm:866435 — 1 tab PO twice daily as needed for palpitations'),
+-- PID 108 Thomas Walsh (CHR T2DM+HTN+HLD) ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          108, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR), 1, 'moconnor',   'rxnorm:860975 — 1 tab PO twice daily with meals'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           108, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR), 1, 'moconnor',   'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 40mg tab',         108, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR), 1, 'moconnor',   'rxnorm:617312 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Aspirin 81mg tab',              108, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR), 1, 'moconnor',   'rxnorm:243670 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Pioglitazone 30mg tab',         108, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'moconnor',   'rxnorm:261241 — 1 tab PO daily'),
+-- PID 109 Aisha Johnson (BH-PC GAD+Obesity)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         109, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR), 1, 'erodriguez', 'rxnorm:321988 — 1 tab PO daily'),
+-- PID 110 Brian Foster (PSY-S MDD recurrent)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          110, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR), 1, 'amiller',    'rxnorm:313990 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Bupropion XL 300mg tab',        110, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'amiller',    'rxnorm:1232588 — 1 tab PO every morning (augmentation)'),
+-- PID 112 Omar Hassan (CHR HTN)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           112, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR), 1, 'moconnor',   'rxnorm:314077 — 1 tab PO daily'),
+-- PID 113 Patricia Monroe (GER HTN+HLD+hypothyroid)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           113, NOW(), DATE_SUB(NOW(), INTERVAL 14 YEAR), 1, 'erodriguez', 'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         113, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 100mcg tab',      113, NOW(), DATE_SUB(NOW(), INTERVAL 9 YEAR),  1, 'erodriguez', 'rxnorm:966224 — 1 tab PO daily on empty stomach'),
+-- PID 114 Kevin Park (PSY-S Bipolar II)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lamotrigine 200mg tab',         114, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'amiller',    'rxnorm:197716 — 1 tab PO daily (mood stabilizer)'),
+-- PID 116 Gregory Stone (GER HTN+HLD+BPH+CKD3 polypharmacy)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Amlodipine 5mg tab',            116, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'moconnor',   'rxnorm:308135 — 1 tab PO daily (CKD3 — avoid ACEi)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 40mg tab',         116, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'moconnor',   'rxnorm:617312 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Tamsulosin 0.4mg cap',          116, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'moconnor',   'rxnorm:313988 — 1 cap PO daily 30 min after dinner (BPH)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Aspirin 81mg tab',              116, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'moconnor',   'rxnorm:243670 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Furosemide 20mg tab',           116, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'moconnor',   'rxnorm:310439 — 1 tab PO every morning (volume management)'),
+-- PID 117 Nadia Okafor (CHR prediabetes+HLD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 500mg tab',           117, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'erodriguez', 'rxnorm:861007 — 1 tab PO twice daily with meals'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 10mg tab',         117, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'erodriguez', 'rxnorm:617310 — 1 tab PO at bedtime'),
+-- PID 118 Samuel Wright (PSY-S MDD+GAD)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Duloxetine 60mg cap',           118, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'amiller',    'rxnorm:596926 — 1 cap PO daily'),
+-- PID 119 Claire Bennett (CV-F IST)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metoprolol tartrate 25mg tab',  119, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'mthompson',  'rxnorm:866435 — 1 tab PO twice daily'),
+-- PID 120 Andre Dubois (SUD OUD remission + PTSD) — telehealth MAT
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Buprenorphine/Naloxone 8mg/2mg SL film', 120, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor', 'rxnorm:1010600 — 1 film SL daily (Suboxone; Schedule III; X-DEA prescribing)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          120, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'moconnor',   'rxnorm:313990 — 1 tab PO daily (PTSD)'),
+-- PID 122 Robert Castillo (PSY-S MDD+GAD+insomnia)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Mirtazapine 30mg tab',          122, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'amiller',    'rxnorm:15996 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          122, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'amiller',    'rxnorm:313990 — 1 tab PO daily'),
+-- PID 126 Jerome Washington (PSY-S MDD remission + insomnia)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 50mg tab',           126, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'amiller',    'rxnorm:313989 — 1 tab PO daily (maintenance)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Mirtazapine 15mg tab',          126, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'amiller',    'rxnorm:313559 — 1 tab PO at bedtime'),
+-- PID 127 Mei Liu (CV-F paroxysmal afib)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Apixaban 5mg tab',              127, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'mthompson',  'rxnorm:1364430 — 1 tab PO twice daily (anticoag)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metoprolol succinate ER 50mg',  127, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'mthompson',  'rxnorm:866412 — 1 tab PO daily'),
+-- PID 129 Amara Diallo (BH-PC MDD+HTN)
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 50mg tab',           129, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'erodriguez', 'rxnorm:313989 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           129, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'erodriguez', 'rxnorm:314076 — 1 tab PO daily');
+
+-- Companion lists_medication sidecar row per medication (FHIR MedicationStatement
+-- structure). All are outpatient telehealth-managed clinician-ordered meds.
+INSERT INTO `lists_medication`
+    (list_id, usage_category, usage_category_title, request_intent, request_intent_title, is_primary_record)
+SELECT id, 'outpatient', 'Outpatient', 'order', 'Order', 1
+  FROM `lists`
+ WHERE type='medication' AND pid BETWEEN 100 AND 129;
+
+-- =============================================================================
+-- ACTIVE PRESCRIPTIONS  (Sprint 12 / S12-09)
+--
+-- ~38 active prescription rows — a clinically-realistic subset of each
+-- patient's medication list (1–3 per patient). Drives the Prescriptions
+-- dashboard panel. Controlled-substance flags: Methylphenidate ER (C-II)
+-- and Buprenorphine/Naloxone (C-III, MAT) get refills=0 so the SE demo
+-- reflects real DEA prescribing limits.
+-- =============================================================================
+
+INSERT INTO `prescriptions`
+    (uuid, patient_id, provider_id, start_date, drug, drug_id, rxnorm_drugcode,
+     dosage, quantity, route, refills, active, datetime, user, txDate,
+     usage_category, usage_category_title, request_intent, request_intent_title)
+VALUES
+-- PID 100 James Harrison
+(UNHEX(REPLACE(UUID(),'-','')), 100, 10, DATE_SUB(CURDATE(), INTERVAL 6 YEAR), 'Lisinopril 10mg tab',          0, '314076',  '10mg', '30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 100, 10, DATE_SUB(CURDATE(), INTERVAL 4 YEAR), 'Atorvastatin 20mg tab',         0, '617314',  '20mg', '30', 'PO at bedtime',     5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 101 Sofia Reyes
+(UNHEX(REPLACE(UUID(),'-','')), 101, 11, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Sertraline 50mg tab',           0, '313989',  '50mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 102 David Kim
+(UNHEX(REPLACE(UUID(),'-','')), 102, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Aspirin 81mg tab',              0, '243670',  '81mg', '90', 'PO daily',          5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 102, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Atorvastatin 80mg tab',         0, '617318',  '80mg', '30', 'PO at bedtime',     5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 102, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Metoprolol succinate ER 50mg',  0, '866412',  '50mg', '30', 'PO daily',          5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 103 Rachel Nguyen
+(UNHEX(REPLACE(UUID(),'-','')), 103, 12, DATE_SUB(CURDATE(), INTERVAL 8 YEAR), 'Sertraline 100mg tab',          0, '313990',  '100mg','30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 104 Carlos Mendez
+(UNHEX(REPLACE(UUID(),'-','')), 104, 10, DATE_SUB(CURDATE(), INTERVAL 7 YEAR), 'Lisinopril 10mg tab',          0, '314076',  '10mg', '30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 104, 10, DATE_SUB(CURDATE(), INTERVAL 3 YEAR), 'Sertraline 100mg tab',          0, '313990',  '100mg','30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 105 Linda Patel
+(UNHEX(REPLACE(UUID(),'-','')), 105, 11, DATE_SUB(CURDATE(), INTERVAL 15 YEAR),'Lisinopril 20mg tab',          0, '314077',  '20mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 105, 11, DATE_SUB(CURDATE(), INTERVAL 12 YEAR),'Levothyroxine 75mcg tab',       0, '966222',  '75mcg','30', 'PO daily on empty stomach', 5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 105, 11, DATE_SUB(CURDATE(), INTERVAL 5 YEAR), 'Alendronate 70mg tab',          0, '197910',  '70mg', '4',  'PO weekly',         5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 106 Ethan Brooks (Schedule II — no auto-refill)
+(UNHEX(REPLACE(UUID(),'-','')), 106, 12, DATE_SUB(CURDATE(), INTERVAL 6 YEAR), 'Methylphenidate ER 36mg tab',   0, '847218',  '36mg', '30', 'PO every morning',  0, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 107 Maria Chen
+(UNHEX(REPLACE(UUID(),'-','')), 107, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Metoprolol tartrate 25mg tab',  0, '866435',  '25mg', '60', 'PO twice daily PRN', 5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 108 Thomas Walsh ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), 108, 10, DATE_SUB(CURDATE(), INTERVAL 5 YEAR), 'Metformin 1000mg tab',          0, '860975',  '1000mg','60','PO twice daily with meals', 5, 1, NOW(), 'moconnor', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 108, 10, DATE_SUB(CURDATE(), INTERVAL 8 YEAR), 'Lisinopril 20mg tab',           0, '314077',  '20mg', '30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 108, 10, DATE_SUB(CURDATE(), INTERVAL 7 YEAR), 'Atorvastatin 40mg tab',         0, '617312',  '40mg', '30', 'PO at bedtime',     5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 109 Aisha Johnson
+(UNHEX(REPLACE(UUID(),'-','')), 109, 11, DATE_SUB(CURDATE(), INTERVAL 4 YEAR), 'Escitalopram 10mg tab',         0, '321988',  '10mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 110 Brian Foster
+(UNHEX(REPLACE(UUID(),'-','')), 110, 12, DATE_SUB(CURDATE(), INTERVAL 7 YEAR), 'Sertraline 100mg tab',          0, '313990',  '100mg','30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 110, 12, DATE_SUB(CURDATE(), INTERVAL 3 YEAR), 'Bupropion XL 300mg tab',        0, '1232588', '300mg','30', 'PO every morning',  5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 112 Omar Hassan
+(UNHEX(REPLACE(UUID(),'-','')), 112, 10, DATE_SUB(CURDATE(), INTERVAL 5 YEAR), 'Lisinopril 20mg tab',           0, '314077',  '20mg', '30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 113 Patricia Monroe
+(UNHEX(REPLACE(UUID(),'-','')), 113, 11, DATE_SUB(CURDATE(), INTERVAL 14 YEAR),'Lisinopril 10mg tab',          0, '314076',  '10mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 113, 11, DATE_SUB(CURDATE(), INTERVAL 10 YEAR),'Atorvastatin 20mg tab',         0, '617314',  '20mg', '30', 'PO at bedtime',     5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 113, 11, DATE_SUB(CURDATE(), INTERVAL 9 YEAR), 'Levothyroxine 100mcg tab',      0, '966224',  '100mcg','30','PO daily on empty stomach', 5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 114 Kevin Park
+(UNHEX(REPLACE(UUID(),'-','')), 114, 12, DATE_SUB(CURDATE(), INTERVAL 10 YEAR),'Lamotrigine 200mg tab',         0, '197716',  '200mg','30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 116 Gregory Stone
+(UNHEX(REPLACE(UUID(),'-','')), 116, 10, DATE_SUB(CURDATE(), INTERVAL 4 YEAR), 'Amlodipine 5mg tab',            0, '308135',  '5mg',  '30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 116, 10, DATE_SUB(CURDATE(), INTERVAL 15 YEAR),'Atorvastatin 40mg tab',         0, '617312',  '40mg', '30', 'PO at bedtime',     5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 116, 10, DATE_SUB(CURDATE(), INTERVAL 8 YEAR), 'Tamsulosin 0.4mg cap',          0, '313988',  '0.4mg','30', 'PO daily 30 min after dinner', 5, 1, NOW(), 'moconnor', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 117 Nadia Okafor
+(UNHEX(REPLACE(UUID(),'-','')), 117, 11, DATE_SUB(CURDATE(), INTERVAL 1 YEAR), 'Metformin 500mg tab',           0, '861007',  '500mg','60', 'PO twice daily with meals', 5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 117, 11, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Atorvastatin 10mg tab',         0, '617310',  '10mg', '30', 'PO at bedtime',     5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 118 Samuel Wright
+(UNHEX(REPLACE(UUID(),'-','')), 118, 12, DATE_SUB(CURDATE(), INTERVAL 5 YEAR), 'Duloxetine 60mg cap',           0, '596926',  '60mg', '30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 119 Claire Bennett
+(UNHEX(REPLACE(UUID(),'-','')), 119, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Metoprolol tartrate 25mg tab',  0, '866435',  '25mg', '60', 'PO twice daily',    5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 120 Andre Dubois (Schedule III — MAT, monthly refill cycle, no auto-refill)
+(UNHEX(REPLACE(UUID(),'-','')), 120, 10, DATE_SUB(CURDATE(), INTERVAL 3 YEAR), 'Buprenorphine/Naloxone 8mg/2mg SL film', 0, '1010600', '8/2mg','30','SL daily', 0, 1, NOW(), 'moconnor', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 120, 10, DATE_SUB(CURDATE(), INTERVAL 4 YEAR), 'Sertraline 100mg tab',          0, '313990',  '100mg','30', 'PO daily',          5, 1, NOW(), 'moconnor',   CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 122 Robert Castillo
+(UNHEX(REPLACE(UUID(),'-','')), 122, 12, DATE_SUB(CURDATE(), INTERVAL 4 YEAR), 'Mirtazapine 30mg tab',          0, '15996',   '30mg', '30', 'PO at bedtime',     5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 122, 12, DATE_SUB(CURDATE(), INTERVAL 10 YEAR),'Sertraline 100mg tab',          0, '313990',  '100mg','30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 126 Jerome Washington
+(UNHEX(REPLACE(UUID(),'-','')), 126, 12, DATE_SUB(CURDATE(), INTERVAL 12 YEAR),'Sertraline 50mg tab',           0, '313989',  '50mg', '30', 'PO daily',          5, 1, NOW(), 'amiller',    CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 127 Mei Liu
+(UNHEX(REPLACE(UUID(),'-','')), 127, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Apixaban 5mg tab',              0, '1364430', '5mg',  '60', 'PO twice daily',    5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 127, 13, DATE_SUB(CURDATE(), INTERVAL 2 YEAR), 'Metoprolol succinate ER 50mg',  0, '866412',  '50mg', '30', 'PO daily',          5, 1, NOW(), 'mthompson',  CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+-- PID 129 Amara Diallo
+(UNHEX(REPLACE(UUID(),'-','')), 129, 11, DATE_SUB(CURDATE(), INTERVAL 1 YEAR), 'Sertraline 50mg tab',           0, '313989',  '50mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order'),
+(UNHEX(REPLACE(UUID(),'-','')), 129, 11, DATE_SUB(CURDATE(), INTERVAL 3 YEAR), 'Lisinopril 10mg tab',           0, '314076',  '10mg', '30', 'PO daily',          5, 1, NOW(), 'erodriguez', CURDATE(), 'outpatient', 'Outpatient', 'order', 'Order');
+
+-- =============================================================================
+-- VITALS  (Sprint 12 / S12-10)
+--
+-- One form_vitals row per patient (29 patients; PID 124 NEW persona skipped),
+-- dated to match the S12-05 historical encounter (30–59 days ago, offset by
+-- 30 + (PID - 100) days). Values tuned per persona:
+--   CHR / GER w/ HTN: BP 130–155 / 80–95, BMI 28–35
+--   CV-F:             BP controlled 118–138 / 70–85
+--   PSY-S / BH-PC:    Mostly normal BP, weight varies (some psych meds → gain)
+--   HYA:              Normal across the board
+--   SUD:              Normal, slightly underweight
+-- Matching forms registry row inserted via JOIN-based INSERT so the visit
+-- shows vitals under its Visit History entry.
+-- =============================================================================
+
+INSERT INTO `form_vitals`
+    (uuid, date, pid, user, groupname, authorized, activity,
+     bps, bpd, weight, height, BMI, temperature, pulse, respiration, oxygen_saturation)
+VALUES
+-- PID 100 James Harrison CHR HTN+HLD M48
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 100, 'moconnor',   'Default', 1, 1, '138', '88',  198.0, 71.0, 27.6, 98.4, 76, 16, 98.00),
+-- PID 101 Sofia Reyes BH-PC F35
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 101, 'erodriguez', 'Default', 1, 1, '118', '76',  135.0, 64.0, 23.2, 98.6, 72, 14, 99.00),
+-- PID 102 David Kim CV-F CAD+OldMI M60
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 102, 'mthompson',  'Default', 1, 1, '128', '78',  175.0, 68.0, 26.6, 98.2, 68, 14, 97.00),
+-- PID 103 Rachel Nguyen PSY-S F41
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 103, 'amiller',    'Default', 1, 1, '116', '74',  142.0, 65.0, 23.6, 98.6, 80, 16, 99.00),
+-- PID 104 Carlos Mendez BH-PC HTN+MDD M53
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 104, 'moconnor',   'Default', 1, 1, '142', '90',  215.0, 70.0, 30.8, 98.4, 78, 16, 97.00),
+-- PID 105 Linda Patel GER F67
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 105, 'erodriguez', 'Default', 1, 1, '146', '82',  148.0, 62.0, 27.1, 98.0, 70, 16, 96.00),
+-- PID 106 Ethan Brooks PSY-S ADHD M31
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 106, 'amiller',    'Default', 1, 1, '120', '76',  160.0, 70.0, 23.0, 98.6, 74, 14, 99.00),
+-- PID 107 Maria Chen CV-F SVT F43
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 107, 'mthompson',  'Default', 1, 1, '122', '78',  138.0, 64.0, 23.7, 98.4, 72, 16, 99.00),
+-- PID 108 Thomas Walsh CHR T2DM+HTN+HLD M56 ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 108, 'moconnor',   'Default', 1, 1, '148', '92',  225.0, 70.0, 32.3, 98.4, 82, 18, 96.00),
+-- PID 109 Aisha Johnson BH-PC GAD+Obesity F33
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 39 DAY), 109, 'erodriguez', 'Default', 1, 1, '126', '82',  198.0, 65.0, 32.9, 98.6, 78, 16, 98.00),
+-- PID 110 Brian Foster PSY-S MDD M46
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 40 DAY), 110, 'amiller',    'Default', 1, 1, '124', '80',  188.0, 71.0, 26.2, 98.4, 76, 16, 98.00),
+-- PID 111 Yuki Tanaka CV-F MVP F28
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 41 DAY), 111, 'mthompson',  'Default', 1, 1, '114', '72',  118.0, 63.0, 20.9, 98.6, 68, 14, 100.00),
+-- PID 112 Omar Hassan CHR HTN M51
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 42 DAY), 112, 'moconnor',   'Default', 1, 1, '136', '86',  185.0, 69.0, 27.3, 98.4, 74, 16, 98.00),
+-- PID 113 Patricia Monroe GER HTN+HLD+hypothyroid F63
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 43 DAY), 113, 'erodriguez', 'Default', 1, 1, '144', '84',  168.0, 64.0, 28.8, 98.2, 72, 16, 97.00),
+-- PID 114 Kevin Park PSY-S Bipolar II M37
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 44 DAY), 114, 'amiller',    'Default', 1, 1, '122', '78',  178.0, 70.0, 25.5, 98.6, 78, 16, 99.00),
+-- PID 115 Fatima Ali CV-F PSVT F34
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 45 DAY), 115, 'mthompson',  'Default', 1, 1, '116', '74',  130.0, 63.0, 23.0, 98.6, 70, 14, 99.00),
+-- PID 116 Gregory Stone GER HTN+HLD+BPH+CKD3 M71 polypharmacy
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 46 DAY), 116, 'moconnor',   'Default', 1, 1, '152', '86',  168.0, 69.0, 24.8, 98.0, 68, 18, 95.00),
+-- PID 117 Nadia Okafor CHR prediabetes+HLD F40
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 47 DAY), 117, 'erodriguez', 'Default', 1, 1, '128', '82',  175.0, 67.0, 27.4, 98.4, 76, 16, 98.00),
+-- PID 118 Samuel Wright PSY-S MDD+GAD M55
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 48 DAY), 118, 'amiller',    'Default', 1, 1, '128', '82',  195.0, 71.0, 27.2, 98.4, 76, 16, 98.00),
+-- PID 119 Claire Bennett CV-F IST F31
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 49 DAY), 119, 'mthompson',  'Default', 1, 1, '110', '70',  128.0, 65.0, 21.3, 98.6, 88, 16, 99.00),
+-- PID 120 Andre Dubois SUD OUD+PTSD M42
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 50 DAY), 120, 'moconnor',   'Default', 1, 1, '122', '78',  155.0, 70.0, 22.2, 98.4, 76, 16, 98.00),
+-- PID 121 Priya Sharma HYA F34
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 51 DAY), 121, 'erodriguez', 'Default', 1, 1, '110', '70',  128.0, 64.0, 22.0, 98.6, 70, 14, 100.00),
+-- PID 122 Robert Castillo PSY-S MDD+GAD+insomnia M58
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 52 DAY), 122, 'amiller',    'Default', 1, 1, '124', '78',  205.0, 70.0, 29.4, 98.4, 74, 16, 97.00),
+-- PID 123 Hannah Scott CV-F PVCs F36
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 53 DAY), 123, 'mthompson',  'Default', 1, 1, '116', '74',  135.0, 65.0, 22.5, 98.6, 72, 14, 99.00),
+-- PID 124 NEW persona — skipped
+-- PID 125 Isabelle Martin HYA F27
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 55 DAY), 125, 'erodriguez', 'Default', 1, 1, '108', '68',  120.0, 63.0, 21.3, 98.6, 68, 14, 100.00),
+-- PID 126 Jerome Washington PSY-S MDD remission M65
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 56 DAY), 126, 'amiller',    'Default', 1, 1, '130', '80',  182.0, 70.0, 26.1, 98.4, 70, 16, 97.00),
+-- PID 127 Mei Liu CV-F paroxysmal afib F38
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 57 DAY), 127, 'mthompson',  'Default', 1, 1, '120', '76',  140.0, 64.0, 24.0, 98.6, 74, 16, 99.00),
+-- PID 128 Tyler Hughes HYA M30
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 58 DAY), 128, 'moconnor',   'Default', 1, 1, '118', '74',  165.0, 71.0, 23.0, 98.6, 64, 14, 100.00),
+-- PID 129 Amara Diallo BH-PC MDD+HTN F41
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 59 DAY), 129, 'erodriguez', 'Default', 1, 1, '136', '86',  155.0, 65.0, 25.8, 98.4, 74, 16, 98.00);
+
+-- Forms registry row per vitals so it appears under the historical encounter
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1, 0, 'vitals', fe.provider_id
+  FROM form_vitals fv
+  JOIN form_encounter fe ON fe.pid = fv.pid AND fe.encounter BETWEEN 30001 AND 30029
+  JOIN users u ON u.id = fe.provider_id
+ WHERE fv.pid BETWEEN 100 AND 129;
+
+-- =============================================================================
+-- LAB RESULTS  (Sprint 12 / S12-11)
+--
+-- 10 lab panels across 6 chronic-disease patients via the four-table chain:
+-- procedure_order → procedure_order_code → procedure_report → procedure_result.
+-- Hardcoded IDs (orders 40001–40010, reports 50001–50010) so the chain can
+-- reference itself in plain SQL without LAST_INSERT_ID gymnastics.
+-- encounter_id is looked up by subquery against the S12-05 historical encounter.
+-- LOINC codes in result_code; abnormal flag (H/L/'') reflects clinical reality.
+--
+-- Coverage:
+--   PID 108 Thomas Walsh (CHR T2DM+HTN+HLD): CMP + Lipid + A1c        ← dashboard test pt
+--   PID 102 David Kim    (CV-F post-MI):     Lipid + BNP
+--   PID 116 Gregory Stone (GER CKD3):        CMP + Lipid              (creatinine elevated)
+--   PID 105 Linda Patel   (GER hypothyroid): TSH
+--   PID 117 Nadia Okafor  (CHR prediabetes): A1c
+--   PID 118 Samuel Wright (PSY-S duloxetine):LFTs                     (drug monitoring)
+-- =============================================================================
+
+INSERT INTO `procedure_order`
+    (procedure_order_id, uuid, provider_id, patient_id, encounter_id,
+     date_collected, date_ordered, order_status, activity, procedure_order_type, order_intent, lab_id)
+VALUES
+(40001, UNHEX(REPLACE(UUID(),'-','')), 10, 108, (SELECT id FROM form_encounter WHERE encounter=30009 LIMIT 1), DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 38 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40002, UNHEX(REPLACE(UUID(),'-','')), 10, 108, (SELECT id FROM form_encounter WHERE encounter=30009 LIMIT 1), DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 38 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40003, UNHEX(REPLACE(UUID(),'-','')), 10, 108, (SELECT id FROM form_encounter WHERE encounter=30009 LIMIT 1), DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 38 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40004, UNHEX(REPLACE(UUID(),'-','')), 13, 102, (SELECT id FROM form_encounter WHERE encounter=30003 LIMIT 1), DATE_SUB(NOW(), INTERVAL 32 DAY), DATE_SUB(NOW(), INTERVAL 32 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40005, UNHEX(REPLACE(UUID(),'-','')), 13, 102, (SELECT id FROM form_encounter WHERE encounter=30003 LIMIT 1), DATE_SUB(NOW(), INTERVAL 32 DAY), DATE_SUB(NOW(), INTERVAL 32 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40006, UNHEX(REPLACE(UUID(),'-','')), 10, 116, (SELECT id FROM form_encounter WHERE encounter=30017 LIMIT 1), DATE_SUB(NOW(), INTERVAL 46 DAY), DATE_SUB(NOW(), INTERVAL 46 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40007, UNHEX(REPLACE(UUID(),'-','')), 10, 116, (SELECT id FROM form_encounter WHERE encounter=30017 LIMIT 1), DATE_SUB(NOW(), INTERVAL 46 DAY), DATE_SUB(NOW(), INTERVAL 46 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40008, UNHEX(REPLACE(UUID(),'-','')), 11, 105, (SELECT id FROM form_encounter WHERE encounter=30006 LIMIT 1), DATE_SUB(NOW(), INTERVAL 35 DAY), DATE_SUB(NOW(), INTERVAL 35 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40009, UNHEX(REPLACE(UUID(),'-','')), 11, 117, (SELECT id FROM form_encounter WHERE encounter=30018 LIMIT 1), DATE_SUB(NOW(), INTERVAL 47 DAY), DATE_SUB(NOW(), INTERVAL 47 DAY), 'completed', 1, 'laboratory_test', 'order', 0),
+(40010, UNHEX(REPLACE(UUID(),'-','')), 12, 118, (SELECT id FROM form_encounter WHERE encounter=30019 LIMIT 1), DATE_SUB(NOW(), INTERVAL 48 DAY), DATE_SUB(NOW(), INTERVAL 48 DAY), 'completed', 1, 'laboratory_test', 'order', 0);
+
+-- Order codes — what was ordered (panel name + procedure code)
+INSERT INTO `procedure_order_code`
+    (procedure_order_id, procedure_order_seq, procedure_code, procedure_name, procedure_source, procedure_order_title)
+VALUES
+(40001, 1, '80053', 'Comprehensive Metabolic Panel',  '1', 'CMP'),
+(40002, 1, '80061', 'Lipid Panel',                    '1', 'Lipid Panel'),
+(40003, 1, '83036', 'Hemoglobin A1c',                 '1', 'HbA1c'),
+(40004, 1, '80061', 'Lipid Panel',                    '1', 'Lipid Panel'),
+(40005, 1, '83880', 'BNP (B-type Natriuretic Peptide)','1','BNP'),
+(40006, 1, '80053', 'Comprehensive Metabolic Panel',  '1', 'CMP'),
+(40007, 1, '80061', 'Lipid Panel',                    '1', 'Lipid Panel'),
+(40008, 1, '84443', 'TSH (Thyroid Stimulating Hormone)','1','TSH'),
+(40009, 1, '83036', 'Hemoglobin A1c',                 '1', 'HbA1c'),
+(40010, 1, '80076', 'Hepatic Function Panel',         '1', 'LFTs');
+
+-- Reports — final / reviewed
+INSERT INTO `procedure_report`
+    (procedure_report_id, uuid, procedure_order_id, procedure_order_seq,
+     date_collected, date_report, source, specimen_num, report_status, review_status)
+VALUES
+(50001, UNHEX(REPLACE(UUID(),'-','')), 40001, 1, DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 37 DAY), 1, 'SPEC108-CMP', 'final', 'reviewed'),
+(50002, UNHEX(REPLACE(UUID(),'-','')), 40002, 1, DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 37 DAY), 1, 'SPEC108-LIP', 'final', 'reviewed'),
+(50003, UNHEX(REPLACE(UUID(),'-','')), 40003, 1, DATE_SUB(NOW(), INTERVAL 38 DAY), DATE_SUB(NOW(), INTERVAL 37 DAY), 1, 'SPEC108-A1C', 'final', 'reviewed'),
+(50004, UNHEX(REPLACE(UUID(),'-','')), 40004, 1, DATE_SUB(NOW(), INTERVAL 32 DAY), DATE_SUB(NOW(), INTERVAL 31 DAY), 1, 'SPEC102-LIP', 'final', 'reviewed'),
+(50005, UNHEX(REPLACE(UUID(),'-','')), 40005, 1, DATE_SUB(NOW(), INTERVAL 32 DAY), DATE_SUB(NOW(), INTERVAL 31 DAY), 1, 'SPEC102-BNP', 'final', 'reviewed'),
+(50006, UNHEX(REPLACE(UUID(),'-','')), 40006, 1, DATE_SUB(NOW(), INTERVAL 46 DAY), DATE_SUB(NOW(), INTERVAL 45 DAY), 1, 'SPEC116-CMP', 'final', 'reviewed'),
+(50007, UNHEX(REPLACE(UUID(),'-','')), 40007, 1, DATE_SUB(NOW(), INTERVAL 46 DAY), DATE_SUB(NOW(), INTERVAL 45 DAY), 1, 'SPEC116-LIP', 'final', 'reviewed'),
+(50008, UNHEX(REPLACE(UUID(),'-','')), 40008, 1, DATE_SUB(NOW(), INTERVAL 35 DAY), DATE_SUB(NOW(), INTERVAL 34 DAY), 1, 'SPEC105-TSH', 'final', 'reviewed'),
+(50009, UNHEX(REPLACE(UUID(),'-','')), 40009, 1, DATE_SUB(NOW(), INTERVAL 47 DAY), DATE_SUB(NOW(), INTERVAL 46 DAY), 1, 'SPEC117-A1C', 'final', 'reviewed'),
+(50010, UNHEX(REPLACE(UUID(),'-','')), 40010, 1, DATE_SUB(NOW(), INTERVAL 48 DAY), DATE_SUB(NOW(), INTERVAL 47 DAY), 1, 'SPEC118-LFT', 'final', 'reviewed');
+
+-- Individual results — LOINC-coded with reference ranges + abnormal flags
+INSERT INTO `procedure_result`
+    (uuid, procedure_report_id, result_data_type, result_code, result_text, date, units, result, `range`, abnormal, result_status)
+VALUES
+-- 50001 PID 108 CMP (glucose elevated, creatinine borderline, potassium normal)
+(UNHEX(REPLACE(UUID(),'-','')), 50001, 'N', '2345-7',  'Glucose',       DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL',  '168', '70-99',    'H', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50001, 'N', '2160-0',  'Creatinine',    DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL',  '1.05','0.7-1.3',  '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50001, 'N', '2823-3',  'Potassium',     DATE_SUB(NOW(), INTERVAL 37 DAY), 'mmol/L', '4.2', '3.5-5.0',  '',  'final'),
+-- 50002 PID 108 Lipid (elevated despite statin)
+(UNHEX(REPLACE(UUID(),'-','')), 50002, 'N', '2093-3',  'Total Cholesterol', DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL', '212', '<200',    'H', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50002, 'N', '2085-9',  'HDL',            DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL', '38',  '>40',      'L', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50002, 'N', '2089-1',  'LDL',            DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL', '128', '<100',     'H', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50002, 'N', '2571-8',  'Triglycerides',  DATE_SUB(NOW(), INTERVAL 37 DAY), 'mg/dL', '188', '<150',     'H', 'final'),
+-- 50003 PID 108 A1c (uncontrolled T2DM)
+(UNHEX(REPLACE(UUID(),'-','')), 50003, 'N', '4548-4',  'Hemoglobin A1c', DATE_SUB(NOW(), INTERVAL 37 DAY), '%',     '7.8', '<7.0',     'H', 'final'),
+-- 50004 PID 102 Lipid (well-controlled on atorvastatin 80mg)
+(UNHEX(REPLACE(UUID(),'-','')), 50004, 'N', '2093-3',  'Total Cholesterol', DATE_SUB(NOW(), INTERVAL 31 DAY), 'mg/dL', '162', '<200',  '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50004, 'N', '2085-9',  'HDL',            DATE_SUB(NOW(), INTERVAL 31 DAY), 'mg/dL', '48',  '>40',      '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50004, 'N', '2089-1',  'LDL',            DATE_SUB(NOW(), INTERVAL 31 DAY), 'mg/dL', '68',  '<70',      '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50004, 'N', '2571-8',  'Triglycerides',  DATE_SUB(NOW(), INTERVAL 31 DAY), 'mg/dL', '142', '<150',     '',  'final'),
+-- 50005 PID 102 BNP (mildly elevated, post-MI stable)
+(UNHEX(REPLACE(UUID(),'-','')), 50005, 'N', '30934-4', 'BNP',            DATE_SUB(NOW(), INTERVAL 31 DAY), 'pg/mL', '128', '<100',     'H', 'final'),
+-- 50006 PID 116 CMP (creatinine elevated — CKD3)
+(UNHEX(REPLACE(UUID(),'-','')), 50006, 'N', '2345-7',  'Glucose',       DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL',  '94',  '70-99',   '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50006, 'N', '2160-0',  'Creatinine',    DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL',  '1.78','0.7-1.3', 'H', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50006, 'N', '2823-3',  'Potassium',     DATE_SUB(NOW(), INTERVAL 45 DAY), 'mmol/L', '4.5', '3.5-5.0', '',  'final'),
+-- 50007 PID 116 Lipid (controlled on statin)
+(UNHEX(REPLACE(UUID(),'-','')), 50007, 'N', '2093-3',  'Total Cholesterol', DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL', '178', '<200',  '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50007, 'N', '2085-9',  'HDL',            DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL', '52',  '>40',      '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50007, 'N', '2089-1',  'LDL',            DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL', '88',  '<100',     '',  'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50007, 'N', '2571-8',  'Triglycerides',  DATE_SUB(NOW(), INTERVAL 45 DAY), 'mg/dL', '162', '<150',     'H', 'final'),
+-- 50008 PID 105 TSH (well-replaced on levothyroxine)
+(UNHEX(REPLACE(UUID(),'-','')), 50008, 'N', '3024-7',  'TSH',            DATE_SUB(NOW(), INTERVAL 34 DAY), 'mIU/L', '2.4', '0.4-4.0',  '',  'final'),
+-- 50009 PID 117 A1c (prediabetes range, lifestyle counseling)
+(UNHEX(REPLACE(UUID(),'-','')), 50009, 'N', '4548-4',  'Hemoglobin A1c', DATE_SUB(NOW(), INTERVAL 46 DAY), '%',     '6.1', '<5.7',     'H', 'final'),
+-- 50010 PID 118 LFTs (mild duloxetine-related ALT bump)
+(UNHEX(REPLACE(UUID(),'-','')), 50010, 'N', '1742-6',  'ALT',            DATE_SUB(NOW(), INTERVAL 47 DAY), 'U/L',   '52',  '<40',      'H', 'final'),
+(UNHEX(REPLACE(UUID(),'-','')), 50010, 'N', '1920-8',  'AST',            DATE_SUB(NOW(), INTERVAL 47 DAY), 'U/L',   '38',  '<35',      'H', 'final');
+
+-- =============================================================================
+-- LIFESTYLE + FAMILY HISTORY  (Sprint 12 / S12-12)
+--
+-- One history_data row per patient (29 rows; PID 124 NEW persona skipped).
+-- Tobacco status clears the "Past Due Assessment: Tobacco" reminder for every
+-- patient who has one set. Smoking-cessation HYA targets (PIDs 125, 128) are
+-- intentionally current smokers so the telehealth counseling visit has a
+-- legitimate reason. PID 120 (SUD persona) is also a current smoker, which
+-- matches the high tobacco/OUD comorbidity in real practice.
+--
+-- Family history `relatives_*` flags use 'YES' / 'NO' strings to drive the
+-- corresponding dashboard checkmarks.
+-- =============================================================================
+
+INSERT INTO `history_data`
+    (uuid, pid, date, tobacco, alcohol, exercise_patterns, sleep_patterns, coffee, seatbelt_use,
+     history_mother, history_father,
+     relatives_cancer, relatives_diabetes, relatives_high_blood_pressure, relatives_heart_problems, relatives_stroke, relatives_mental_illness)
+VALUES
+-- PID 100 James Harrison CHR M48
+(UNHEX(REPLACE(UUID(),'-','')), 100, NOW(), 'Former smoker',              'Light drinker (1-2/wk)',  'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'HTN, T2DM',         'HTN, CAD',          'NO',  'YES', 'YES', 'YES', 'NO',  'NO'),
+-- PID 101 Sofia Reyes BH-PC F35
+(UNHEX(REPLACE(UUID(),'-','')), 101, NOW(), 'Never smoker',               'Light drinker (1/wk)',    'Light',     '6 hrs/night', '1 cup/day',    'Always', 'Anxiety',           'Healthy',           'NO',  'NO',  'NO',  'NO',  'NO',  'YES'),
+-- PID 102 David Kim CV-F M60
+(UNHEX(REPLACE(UUID(),'-','')), 102, NOW(), 'Former smoker (quit 2024)',  'Non-drinker',             'Light',     '7 hrs/night', '1 cup/day',    'Always', 'HTN',               'CAD, MI age 58',    'NO',  'YES', 'YES', 'YES', 'YES', 'NO'),
+-- PID 103 Rachel Nguyen PSY-S F41
+(UNHEX(REPLACE(UUID(),'-','')), 103, NOW(), 'Never smoker',               'Moderate (4-6/wk)',       'Light',     '5 hrs/night', '3 cups/day',   'Always', 'Anxiety, depression', 'Healthy',         'NO',  'NO',  'NO',  'NO',  'NO',  'YES'),
+-- PID 104 Carlos Mendez BH-PC M53
+(UNHEX(REPLACE(UUID(),'-','')), 104, NOW(), 'Current Every Day Smoker (1 ppd, 30 yrs)', 'Heavy drinker (10+/wk)', 'Sedentary', '6 hrs/night', '3 cups/day', 'Sometimes', 'HTN, MDD', 'HTN, ETOH', 'NO', 'YES', 'YES', 'NO', 'NO', 'YES'),
+-- PID 105 Linda Patel GER F67
+(UNHEX(REPLACE(UUID(),'-','')), 105, NOW(), 'Never smoker',               'Non-drinker',             'Light',     '7 hrs/night', '1 cup/day',    'Always', 'Hypothyroid, OA',   'CAD',               'YES', 'NO',  'YES', 'YES', 'NO',  'NO'),
+-- PID 106 Ethan Brooks PSY-S M31
+(UNHEX(REPLACE(UUID(),'-','')), 106, NOW(), 'Former smoker (vapes)',      'Moderate (3-5/wk)',       'Vigorous',  '6 hrs/night', '4 cups/day',   'Always', 'ADHD',              'ADHD',              'NO',  'NO',  'NO',  'NO',  'NO',  'YES'),
+-- PID 107 Maria Chen CV-F F43
+(UNHEX(REPLACE(UUID(),'-','')), 107, NOW(), 'Never smoker',               'Light drinker',           'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'Healthy',           'SVT',               'NO',  'NO',  'NO',  'YES', 'NO',  'NO'),
+-- PID 108 Thomas Walsh CHR M56 ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), 108, NOW(), 'Former smoker (quit 2018)',  'Moderate (5-7/wk)',       'Sedentary', '6 hrs/night', '3 cups/day',   'Always', 'T2DM, HTN',         'T2DM, MI age 62, CAD', 'YES', 'YES', 'YES', 'YES', 'NO',  'NO'),
+-- PID 109 Aisha Johnson BH-PC F33
+(UNHEX(REPLACE(UUID(),'-','')), 109, NOW(), 'Never smoker',               'Light drinker',           'Light',     '7 hrs/night', '2 cups/day',   'Always', 'Anxiety, obesity',  'HTN, T2DM',         'NO',  'YES', 'YES', 'NO',  'NO',  'YES'),
+-- PID 110 Brian Foster PSY-S M46
+(UNHEX(REPLACE(UUID(),'-','')), 110, NOW(), 'Current Every Day Smoker (0.5 ppd)', 'Moderate (5/wk)', 'Light',     '5 hrs/night', '4 cups/day',   'Always', 'MDD',               'MDD, ETOH',         'NO',  'NO',  'NO',  'NO',  'NO',  'YES'),
+-- PID 111 Yuki Tanaka CV-F F28
+(UNHEX(REPLACE(UUID(),'-','')), 111, NOW(), 'Never smoker',               'Non-drinker',             'Vigorous',  '8 hrs/night', '1 cup/day',    'Always', 'MVP',               'Healthy',           'NO',  'NO',  'NO',  'YES', 'NO',  'NO'),
+-- PID 112 Omar Hassan CHR M51
+(UNHEX(REPLACE(UUID(),'-','')), 112, NOW(), 'Former smoker',              'Non-drinker',             'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'HTN',               'HTN, T2DM',         'NO',  'YES', 'YES', 'NO',  'YES', 'NO'),
+-- PID 113 Patricia Monroe GER F63
+(UNHEX(REPLACE(UUID(),'-','')), 113, NOW(), 'Never smoker',               'Light drinker',           'Light',     '7 hrs/night', '1 cup/day',    'Always', 'Hypothyroid, HTN',  'HLD, stroke age 70', 'YES', 'NO', 'YES', 'NO',  'YES', 'NO'),
+-- PID 114 Kevin Park PSY-S M37
+(UNHEX(REPLACE(UUID(),'-','')), 114, NOW(), 'Current Every Day Smoker',   'Heavy (8-10/wk)',         'Light',     '5 hrs/night', '4 cups/day',   'Always', 'Bipolar',           'Bipolar',           'NO',  'NO',  'NO',  'NO',  'NO',  'YES'),
+-- PID 115 Fatima Ali CV-F F34
+(UNHEX(REPLACE(UUID(),'-','')), 115, NOW(), 'Never smoker',               'Non-drinker',             'Moderate',  '8 hrs/night', '1 cup/day',    'Always', 'Healthy',           'PSVT',              'NO',  'NO',  'NO',  'YES', 'NO',  'NO'),
+-- PID 116 Gregory Stone GER M71 polypharmacy
+(UNHEX(REPLACE(UUID(),'-','')), 116, NOW(), 'Former smoker (quit 1999)',  'Light drinker',           'Light',     '7 hrs/night', '2 cups/day',   'Always', 'HTN, stroke age 75', 'CAD, MI age 65',   'YES', 'NO',  'YES', 'YES', 'YES', 'NO'),
+-- PID 117 Nadia Okafor CHR F40
+(UNHEX(REPLACE(UUID(),'-','')), 117, NOW(), 'Never smoker',               'Light drinker',           'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'T2DM',              'T2DM, HTN',         'NO',  'YES', 'YES', 'NO',  'NO',  'NO'),
+-- PID 118 Samuel Wright PSY-S M55
+(UNHEX(REPLACE(UUID(),'-','')), 118, NOW(), 'Current Every Day Smoker',   'Moderate (5/wk)',         'Sedentary', '5 hrs/night', '4 cups/day',   'Always', 'MDD, HTN',          'MDD',               'NO',  'NO',  'YES', 'NO',  'NO',  'YES'),
+-- PID 119 Claire Bennett CV-F F31
+(UNHEX(REPLACE(UUID(),'-','')), 119, NOW(), 'Never smoker',               'Light drinker',           'Vigorous',  '7 hrs/night', '3 cups/day',   'Always', 'Anxiety',           'Healthy',           'NO',  'NO',  'NO',  'NO',  'NO',  'NO'),
+-- PID 120 Andre Dubois SUD M42 — high tobacco/OUD comorbidity
+(UNHEX(REPLACE(UUID(),'-','')), 120, NOW(), 'Current Every Day Smoker (1 ppd, 20 yrs)', 'Non-drinker (in recovery)', 'Sedentary', '6 hrs/night', '4 cups/day', 'Always', 'ETOH', 'OUD, ETOH', 'NO', 'NO', 'NO', 'NO', 'NO', 'YES'),
+-- PID 121 Priya Sharma HYA F34
+(UNHEX(REPLACE(UUID(),'-','')), 121, NOW(), 'Never smoker',               'Light drinker (2/wk)',    'Vigorous',  '8 hrs/night', '1 cup/day',    'Always', 'Healthy',           'Healthy',           'NO',  'NO',  'NO',  'NO',  'NO',  'NO'),
+-- PID 122 Robert Castillo PSY-S M58
+(UNHEX(REPLACE(UUID(),'-','')), 122, NOW(), 'Former smoker',              'Moderate (4-6/wk)',       'Light',     '5 hrs/night', '3 cups/day',   'Always', 'MDD',               'MDD, CAD',          'NO',  'NO',  'YES', 'YES', 'NO',  'YES'),
+-- PID 123 Hannah Scott CV-F F36
+(UNHEX(REPLACE(UUID(),'-','')), 123, NOW(), 'Never smoker',               'Light drinker',           'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'Healthy',           'Healthy',           'NO',  'NO',  'NO',  'NO',  'NO',  'NO'),
+-- PID 124 (NEW) intentionally skipped
+-- PID 125 Isabelle Martin HYA F27 — smoking cessation persona
+(UNHEX(REPLACE(UUID(),'-','')), 125, NOW(), 'Current Every Day Smoker (0.5 ppd, 8 yrs)', 'Moderate (3-5/wk)', 'Light', '6 hrs/night', '2 cups/day', 'Always', 'Healthy', 'Healthy', 'NO', 'NO', 'NO', 'NO', 'NO', 'NO'),
+-- PID 126 Jerome Washington PSY-S M65
+(UNHEX(REPLACE(UUID(),'-','')), 126, NOW(), 'Former smoker (quit 1990)',  'Non-drinker',             'Light',     '6 hrs/night', '2 cups/day',   'Always', 'MDD',               'HTN, MDD',          'NO',  'NO',  'YES', 'NO',  'NO',  'YES'),
+-- PID 127 Mei Liu CV-F F38
+(UNHEX(REPLACE(UUID(),'-','')), 127, NOW(), 'Never smoker',               'Light drinker',           'Moderate',  '7 hrs/night', '2 cups/day',   'Always', 'Afib',              'Afib, CAD',         'NO',  'NO',  'NO',  'YES', 'NO',  'NO'),
+-- PID 128 Tyler Hughes HYA M30 — smoking cessation persona
+(UNHEX(REPLACE(UUID(),'-','')), 128, NOW(), 'Current Every Day Smoker (1 ppd, 10 yrs)', 'Moderate (5-7/wk)', 'Vigorous', '7 hrs/night', '3 cups/day', 'Always', 'Healthy', 'HTN', 'NO', 'NO', 'YES', 'NO', 'NO', 'NO'),
+-- PID 129 Amara Diallo BH-PC F41
+(UNHEX(REPLACE(UUID(),'-','')), 129, NOW(), 'Former smoker (quit 2015)',  'Light drinker',           'Moderate',  '6 hrs/night', '2 cups/day',   'Always', 'Anxiety, HTN',      'HTN',               'YES', 'NO',  'YES', 'NO',  'NO',  'YES');
+
+-- =============================================================================
+-- IMMUNIZATIONS  (Sprint 12 / S12-13)
+--
+-- CVX-coded immunization rows applied by SELECT-based INSERTs against each
+-- target cohort. PID 124 (NEW persona) skipped throughout.
+--
+-- Coverage strategy:
+--   Flu (CVX 140)       — every non-skip patient,        current season
+--   COVID booster (208) — every adult except HYA-young   2026-01-15
+--   Tdap (CVX 115)      — every adult                    4 years ago
+--   Shingrix (CVX 187)  — 50+                            2024-03-15
+--   Pneumovax-23 (33)   — 65+                            2023-06-15
+-- =============================================================================
+
+-- Flu (current season, intramuscular, left deltoid)
+INSERT INTO `immunizations`
+    (uuid, patient_id, administered_date, cvx_code, manufacturer, lot_number,
+     administered_by_id, route, administration_site, completion_status, added_erroneously, update_date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2025-10-15', '140', 'Sanofi Pasteur', 'FL2025-Q4-A',
+       providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
+  FROM patient_data
+ WHERE pid BETWEEN 100 AND 129 AND pid != 124;
+
+-- COVID booster (everyone except NEW + HYA-young)
+INSERT INTO `immunizations`
+    (uuid, patient_id, administered_date, cvx_code, manufacturer, lot_number,
+     administered_by_id, route, administration_site, completion_status, added_erroneously, update_date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2026-01-15', '208', 'Pfizer-BioNTech', 'COV2026A',
+       providerID, 'Intramuscular', 'Right deltoid', 'Completed', 0, NOW()
+  FROM patient_data
+ WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 121, 125, 128);
+
+-- Tdap (every non-skip adult, given ~4 years ago)
+INSERT INTO `immunizations`
+    (uuid, patient_id, administered_date, cvx_code, manufacturer, lot_number,
+     administered_by_id, route, administration_site, completion_status, added_erroneously, update_date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2022-05-15', '115', 'Sanofi Pasteur', 'TD2022B',
+       providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
+  FROM patient_data
+ WHERE pid BETWEEN 100 AND 129 AND pid != 124;
+
+-- Shingrix — recombinant zoster vaccine for adults 50+
+INSERT INTO `immunizations`
+    (uuid, patient_id, administered_date, cvx_code, manufacturer, lot_number,
+     administered_by_id, route, administration_site, completion_status, added_erroneously, update_date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2024-03-15', '187', 'GSK', 'SHG2024A',
+       providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
+  FROM patient_data
+ WHERE pid BETWEEN 100 AND 129 AND pid != 124 AND DOB <= DATE_SUB(CURDATE(), INTERVAL 50 YEAR);
+
+-- Pneumovax-23 — for adults 65+
+INSERT INTO `immunizations`
+    (uuid, patient_id, administered_date, cvx_code, manufacturer, lot_number,
+     administered_by_id, route, administration_site, completion_status, added_erroneously, update_date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2023-06-15', '33', 'Merck', 'PN2023A',
+       providerID, 'Intramuscular', 'Right deltoid', 'Completed', 0, NOW()
+  FROM patient_data
+ WHERE pid BETWEEN 100 AND 129 AND pid != 124 AND DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR);
+
+-- =============================================================================
+-- INSURANCE ASSIGNMENT PER PATIENT  (Sprint 12 / S12-14)
+--
+-- One primary insurance_data row per patient (30 patients including PID 124),
+-- FK'd to one of the S12-03 insurance_companies (id range 200–207).
+-- Distribution: Medicare for 65+, Medicaid CO for the SUD patient + 2 young
+-- adults, Tricare for 1 (military), commercial mix (Aetna/BCBS/UHC/Cigna/
+-- Kaiser) across the rest. subscriber_* fields use 'self' relationship —
+-- the patient is their own subscriber.
+-- =============================================================================
+
+INSERT INTO `insurance_data`
+    (uuid, type, provider, plan_name, policy_number, group_number,
+     subscriber_fname, subscriber_lname, subscriber_DOB, subscriber_relationship,
+     pid, date)
+SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
+       CASE pd.pid
+           WHEN 100 THEN 207 WHEN 101 THEN 200 WHEN 102 THEN 202 WHEN 103 THEN 201
+           WHEN 104 THEN 203 WHEN 105 THEN 205 WHEN 106 THEN 204 WHEN 107 THEN 200
+           WHEN 108 THEN 202 WHEN 109 THEN 201 WHEN 110 THEN 203 WHEN 111 THEN 204
+           WHEN 112 THEN 200 WHEN 113 THEN 202 WHEN 114 THEN 201 WHEN 115 THEN 203
+           WHEN 116 THEN 205 WHEN 117 THEN 204 WHEN 118 THEN 200 WHEN 119 THEN 202
+           WHEN 120 THEN 206 WHEN 121 THEN 206 WHEN 122 THEN 201 WHEN 123 THEN 203
+           WHEN 124 THEN 204 WHEN 125 THEN 206 WHEN 126 THEN 205 WHEN 127 THEN 200
+           WHEN 128 THEN 202 WHEN 129 THEN 201
+       END AS provider,
+       CASE pd.pid
+           WHEN 100 THEN 'Tricare Select'             WHEN 101 THEN 'Aetna Choice POS II'
+           WHEN 102 THEN 'UHC Choice Plus'             WHEN 103 THEN 'BCBS CO Anthem PPO'
+           WHEN 104 THEN 'Cigna PPO Plus'              WHEN 105 THEN 'Medicare Part B'
+           WHEN 106 THEN 'Kaiser Permanente HMO'       WHEN 107 THEN 'Aetna Open Access'
+           WHEN 108 THEN 'UHC Choice Plus'             WHEN 109 THEN 'BCBS CO Anthem PPO'
+           WHEN 110 THEN 'Cigna LocalPlus'             WHEN 111 THEN 'Kaiser Permanente HMO'
+           WHEN 112 THEN 'Aetna Choice POS II'         WHEN 113 THEN 'UHC Navigate'
+           WHEN 114 THEN 'BCBS CO Anthem HMO'          WHEN 115 THEN 'Cigna Connect'
+           WHEN 116 THEN 'Medicare Part B + Medigap F' WHEN 117 THEN 'Kaiser Permanente HMO'
+           WHEN 118 THEN 'Aetna PPO'                   WHEN 119 THEN 'UHC Choice Plus'
+           WHEN 120 THEN 'Health First Colorado'       WHEN 121 THEN 'Health First Colorado'
+           WHEN 122 THEN 'BCBS CO Anthem PPO'          WHEN 123 THEN 'Cigna PPO Plus'
+           WHEN 124 THEN 'Kaiser Permanente HMO'       WHEN 125 THEN 'Health First Colorado'
+           WHEN 126 THEN 'Medicare Part B'             WHEN 127 THEN 'Aetna Choice POS II'
+           WHEN 128 THEN 'UHC Choice Plus'             WHEN 129 THEN 'BCBS CO Anthem HMO'
+       END AS plan_name,
+       CONCAT('POL', LPAD(pd.pid, 7, '0')) AS policy_number,
+       CONCAT('GRP-ZOOMLY-', FLOOR(100 + (pd.pid - 100) / 5)) AS group_number,
+       pd.fname, pd.lname, pd.DOB, 'self',
+       pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
+  FROM patient_data pd
+ WHERE pd.pid BETWEEN 100 AND 129;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================
