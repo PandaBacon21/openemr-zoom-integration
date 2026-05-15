@@ -8,13 +8,16 @@
 -- To reset:
 --   ./seed_data/reset.sh
 --
--- Appointment types picked up by Zoomly:
---   Telehealth Zoom, New Patient Zoom
+-- Appointment categories in this seed (all Zoom-prefixed, telehealth-themed):
+--   Zoom Behavioral Health, Zoom Cardiology, Zoom Chronic Care,
+--   Zoom MAT (Suboxone), Zoom New Patient, Zoom Preventive
 --
--- Appointment types dropped by Zoomly filter (OpenEMR built-ins):
---   Office Visit, Established Patient, New Patient,
---   Health and Behavioral Assessment, Preventive Care Services,
---   Ophthalmological Services
+-- Every appointment row in this seed lives under one of the six categories
+-- above. OpenEMR built-in categories (Office Visit, Established Patient,
+-- New Patient, etc.) remain in the DB but are no longer referenced. Zoomly's
+-- per-account AppointmentTypeFilter can opt in/out of the Zoom set as a
+-- group, or by specialty (e.g. a cardiology-focused SE picks only
+-- Zoom Cardiology + Zoom New Patient).
 --
 -- =============================================================================
 
@@ -155,6 +158,9 @@ INSERT IGNORE INTO groups (name, user) VALUES
 -- Only Zoomly-specific types — use OpenEMR built-ins for everything else
 -- =============================================================================
 
+-- Legacy suffix-style categories (referenced by the existing appointment
+-- INSERT block below). Removed at end of file by the S12-02 retarget step
+-- once every appointment has been moved to a Zoom-prefixed category.
 INSERT INTO `openemr_postcalendar_categories` (
     `pc_catname`, `pc_catcolor`, `pc_catdesc`,
     `pc_duration`, `pc_cattype`, `pc_active`, `pc_seq`,
@@ -167,6 +173,27 @@ INSERT INTO `openemr_postcalendar_categories` (
 ('New Patient Zoom', '#b4d0f8', 'New patient intake via Zoom video',
  2700, 0, 1, 20, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'new_patient_zoom');
 
+-- S12-02 Zoom-prefixed telehealth-themed categories
+INSERT INTO `openemr_postcalendar_categories` (
+    `pc_catname`, `pc_catcolor`, `pc_catdesc`,
+    `pc_duration`, `pc_cattype`, `pc_active`, `pc_seq`,
+    `pc_recurrtype`, `pc_recurrfreq`, `pc_end_date_flag`,
+    `pc_end_date_freq`, `pc_end_all_day`, `pc_dailylimit`,
+    `aco_spec`, `pc_constant_id`
+) VALUES
+('Zoom Behavioral Health', '#7E57C2', 'Psychiatry / behavioral health video visit',
+ 1800, 0, 1, 30, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_behavioral_health'),
+('Zoom Cardiology',        '#E53935', 'Cardiology follow-up video visit',
+ 1800, 0, 1, 40, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_cardiology'),
+('Zoom Chronic Care',      '#0B5CFF', 'Chronic disease stable follow-up video visit',
+ 1800, 0, 1, 50, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_chronic_care'),
+('Zoom MAT (Suboxone)',    '#43A047', 'Buprenorphine / MAT maintenance video visit',
+ 1800, 0, 1, 60, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_mat'),
+('Zoom New Patient',       '#FB8C00', 'New patient intake via Zoom — any specialty',
+ 2700, 0, 1, 70, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_new_patient'),
+('Zoom Preventive',        '#00ACC1', 'Preventive / wellness video touchpoint',
+ 1800, 0, 1, 80, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_preventive');
+
 -- =============================================================================
 -- CATEGORY ID VARIABLES
 -- Custom types: looked up by name after insert
@@ -175,6 +202,14 @@ INSERT INTO `openemr_postcalendar_categories` (
 
 SET @zoom_telehealth_catid  = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Telehealth Zoom');
 SET @new_patient_zoom_catid = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'New Patient Zoom');
+
+-- S12-02 Zoom-prefixed telehealth-themed categories
+SET @zoom_behavioral_health_catid = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Behavioral Health');
+SET @zoom_cardiology_catid        = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Cardiology');
+SET @zoom_chronic_care_catid      = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Chronic Care');
+SET @zoom_mat_catid               = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom MAT (Suboxone)');
+SET @zoom_new_patient_catid       = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom New Patient');
+SET @zoom_preventive_catid        = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Preventive');
 
 -- OpenEMR built-in category IDs (verified from openemr_postcalendar_categories)
 SET @office_visit_catid     = 5;   -- Office Visit (15 min)
@@ -796,6 +831,438 @@ INSERT INTO `openemr_postcalendar_events` (
  DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 900, 0, 0, @recurrspec, @location,
  '14:00:00', '14:15:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
 
+-- =============================================================================
+-- CLINICAL DATA — PERSONA MATRIX  (Sprint 12 / S12-01)
+--
+-- Source of truth for how PIDs 100–129 map to clinical personas. Every
+-- downstream Sprint 12 seed section (categories, encounters, allergies,
+-- problems, medications, prescriptions, vitals, labs, history, immunizations,
+-- insurance) consults this matrix to decide what to seed per patient.
+--
+-- The personas are deliberately telehealth-skewed. Every condition is one a
+-- clinician can realistically manage via Zoom — chronic disease follow-up,
+-- behavioral health, post-event cardiology, MAT — not acute presentations
+-- that need in-person exam or imaging.
+--
+-- Persona codes (with telehealth use case):
+--   PSY-S  Severe Psychiatric         "Monthly med management video visit, 30 min"
+--   BH-PC  Behavioral Health in PC    "SSRI refill + side-effect check, 15 min"
+--   CHR    Chronic Disease Follow-up  "Quarterly check-in, home BP/glucose review"
+--   CV-F   Cardiology Follow-up       "Post-event or anticoag follow-up, no new sx"
+--   GER    Geriatric polypharmacy     "Annual wellness video visit w/ caregiver"
+--   SUD    Substance Use MAT          "Monthly buprenorphine refill via video"
+--   HYA    Healthy young adult        "Contraception / MH screening / smoking cessation"
+--   NEW    New patient first visit    Intentionally sparse — "fresh chart" demo target
+--
+-- Primary provider key (patient_data.providerID):
+--   10  OConnor    Internal Medicine
+--   11  Rodriguez  Family Medicine
+--   12  Miller     Psychiatry
+--   13  Thompson   Cardiology
+--
+-- Specialty → persona alignment:
+--   All Miller patients     → PSY-S  (psychiatry practice ≡ psych dx)
+--   All Thompson patients   → CV-F   (cardiology practice ≡ cardiac dx)
+--   OConnor + Rodriguez     → CHR / BH-PC / GER / HYA / SUD / NEW mix by age + sex
+--
+-- PID  Age  Sex  Provider     Persona  Headline phenotype + telehealth context
+-- ---  ---  ---  -----------  -------  --------------------------------------------
+-- 100   48   M   OConnor      CHR      HTN + HLD stable, home BP log review
+-- 101   35   F   Rodriguez    BH-PC    Postpartum depression on sertraline
+-- 102   60   M   Thompson     CV-F     CAD s/p PCI 2024, on optimal medical therapy
+-- 103   41   F   Miller       PSY-S    GAD severe, sertraline monthly mgmt
+-- 104   53   M   OConnor      BH-PC    HTN + comorbid MDD on sertraline
+-- 105   67   F   Rodriguez    GER      OA + osteoporosis + hypothyroid, caregiver-assist
+-- 106   31   M   Miller       PSY-S    Adult ADHD, extended-release stimulant refill
+-- 107   43   F   Thompson     CV-F     Post-ablation SVT, stable follow-up
+-- 108   56   M   OConnor      CHR      T2DM + HTN + HLD          ← dashboard test pt
+-- 109   33   F   Rodriguez    BH-PC    GAD + weight mgmt on escitalopram
+-- 110   46   M   Miller       PSY-S    MDD recurrent, bupropion augmentation
+-- 111   28   F   Thompson     CV-F     MVP asymptomatic, annual telehealth check
+-- 112   51   M   OConnor      CHR      HTN stable
+-- 113   63   F   Rodriguez    GER      HTN + HLD + hypothyroid
+-- 114   37   M   Miller       PSY-S    Bipolar II, lamotrigine, mood log review
+-- 115   34   F   Thompson     CV-F     PSVT post-EP study, follow-up
+-- 116   71   M   OConnor      GER      HTN + HLD + BPH + CKD3 polypharmacy
+-- 117   40   F   Rodriguez    CHR      Prediabetes + HLD lifestyle counseling
+-- 118   55   M   Miller       PSY-S    MDD recurrent + GAD, duloxetine
+-- 119   31   F   Thompson     CV-F     Inappropriate sinus tach on metoprolol
+-- 120   42   M   OConnor      SUD      Buprenorphine maintenance for OUD — telehealth MAT
+-- 121   34   F   Rodriguez    HYA      Contraception consult, MH screening
+-- 122   58   M   Miller       PSY-S    MDD + insomnia on mirtazapine
+-- 123   36   F   Thompson     CV-F     PVCs low burden, reassurance visit
+-- 124   50   M   OConnor      NEW      Sparse — new-patient telehealth intake demo
+-- 125   27   F   Rodriguez    HYA      Preventive video visit, smoking cessation
+-- 126   65   M   Miller       PSY-S    MDD chronic + insomnia, careful prescriber
+-- 127   38   F   Thompson     CV-F     Paroxysmal afib on apixaban + metoprolol
+-- 128   30   M   OConnor      HYA      Smoking cessation telehealth touchpoint
+-- 129   41   F   Rodriguez    BH-PC    Perimenopausal mood + HTN
+--
+-- Persona totals: PSY-S=7  CV-F=7  CHR=4  BH-PC=4  GER=3  HYA=3  SUD=1  NEW=1 = 30
+-- =============================================================================
+
+-- =============================================================================
+-- TELEHEALTH APPOINTMENT CATEGORY PIVOT  (Sprint 12 / S12-02)
+--
+-- Retarget the 112 appointment rows above from OpenEMR built-in categories
+-- (Office Visit, Established Patient, New Patient, Behavioral Assessment,
+-- Preventive Care) and the legacy suffix-style custom categories (Telehealth
+-- Zoom, New Patient Zoom) onto the 6 Zoom-prefixed telehealth categories.
+-- Mapping driven by the S12-01 persona matrix above.
+-- =============================================================================
+
+-- 1. Universal: every first-visit appointment → Zoom New Patient
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_new_patient_catid
+ WHERE pc_aid IN ('10','11','12','13')
+   AND pc_catid IN (@new_patient_catid, @new_patient_zoom_catid);
+
+-- 2. Miller (psychiatry) established → Zoom Behavioral Health
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_behavioral_health_catid
+ WHERE pc_aid = '12'
+   AND pc_catid != @zoom_new_patient_catid;
+
+-- 3. Thompson (cardiology) established → Zoom Cardiology
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_cardiology_catid
+ WHERE pc_aid = '13'
+   AND pc_catid != @zoom_new_patient_catid;
+
+-- 4. BH-PC patients (PCP-managed depression / anxiety) → Zoom Behavioral Health
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_behavioral_health_catid
+ WHERE pc_pid IN ('101','104','109','129')
+   AND pc_catid != @zoom_new_patient_catid;
+
+-- 5. SUD patient (PID 120, buprenorphine maintenance) → Zoom MAT (Suboxone)
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_mat_catid
+ WHERE pc_pid = '120'
+   AND pc_catid != @zoom_new_patient_catid;
+
+-- 6. HYA preventive-touchpoint patients → Zoom Preventive
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_preventive_catid
+ WHERE pc_pid IN ('121','125','128')
+   AND pc_catid != @zoom_new_patient_catid;
+
+-- 7. Catch-all: remaining established appointments → Zoom Chronic Care
+--    (CHR, GER, NEW personas — OConnor + Rodriguez chronic disease follow-ups)
+UPDATE openemr_postcalendar_events
+   SET pc_catid = @zoom_chronic_care_catid
+ WHERE pc_aid IN ('10','11','12','13')
+   AND pc_catid NOT IN (
+       @zoom_new_patient_catid,
+       @zoom_behavioral_health_catid,
+       @zoom_cardiology_catid,
+       @zoom_mat_catid,
+       @zoom_preventive_catid
+   );
+
+-- Sync pc_title to match the new category so the calendar display matches
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom New Patient'       WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_new_patient_catid;
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Behavioral Health' WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_behavioral_health_catid;
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Cardiology'        WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_cardiology_catid;
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Chronic Care'      WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_chronic_care_catid;
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom MAT (Suboxone)'    WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_mat_catid;
+UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Preventive'        WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_preventive_catid;
+
+-- Drop the legacy suffix-style custom categories — no appointments reference
+-- them anymore and we want only Zoom-prefixed entries in the calendar dropdown.
+DELETE FROM openemr_postcalendar_categories
+ WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
+
+-- =============================================================================
+-- INSURANCE COMPANY MASTER DATA  (Sprint 12 / S12-03)
+--
+-- Fixed-ID payer master records (200–207). Per-patient insurance_data rows in
+-- S12-14 FK back to these via the `provider` column. ins_type_code values pull
+-- from insurance_type_codes lookup table.
+-- =============================================================================
+
+INSERT INTO `insurance_companies` (id, uuid, name, cms_id, ins_type_code, inactive) VALUES
+(200, UNHEX(REPLACE(UUID(), '-', '')), 'Aetna',                       '60054', 17, 0),
+(201, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Colorado',               '00060',  6, 0),
+(202, UNHEX(REPLACE(UUID(), '-', '')), 'UnitedHealthcare',            '87726', 17, 0),
+(203, UNHEX(REPLACE(UUID(), '-', '')), 'Cigna',                       '62308', 17, 0),
+(204, UNHEX(REPLACE(UUID(), '-', '')), 'Kaiser Permanente Colorado',  '93079', 19, 0),
+(205, UNHEX(REPLACE(UUID(), '-', '')), 'Medicare',                    '00580',  2, 0),
+(206, UNHEX(REPLACE(UUID(), '-', '')), 'Medicaid Colorado',           '00781',  3, 0),
+(207, UNHEX(REPLACE(UUID(), '-', '')), 'Tricare',                     '99726',  5, 0);
+
+INSERT INTO `addresses` (id, line1, city, state, zip, country, foreign_id) VALUES
+(200, '151 Farmington Avenue',  'Hartford',     'CT', '06156', 'USA', 200),
+(201, '700 Broadway',           'Denver',       'CO', '80273', 'USA', 201),
+(202, '9700 Health Care Lane',  'Minnetonka',   'MN', '55343', 'USA', 202),
+(203, '900 Cottage Grove Rd',   'Bloomfield',   'CT', '06002', 'USA', 203),
+(204, '10350 E Dakota Ave',     'Denver',       'CO', '80231', 'USA', 204),
+(205, '7500 Security Blvd',     'Baltimore',    'MD', '21244', 'USA', 205),
+(206, '303 E 17th Avenue',      'Denver',       'CO', '80203', 'USA', 206),
+(207, '16401 East Centretech',  'Aurora',       'CO', '80011', 'USA', 207);
+
+-- =============================================================================
+-- PATIENT DEMOGRAPHIC ENRICHMENT  (Sprint 12 / S12-04)
+--
+-- Fill race / ethnicity / occupation / emergency contact on PIDs 100–129 so
+-- the OpenEMR Demographics panel displays real data instead of blanks.
+-- Race + ethnicity use OpenEMR's list_options option_id values (race, ethnicity).
+-- Occupations chosen to lean telehealth-friendly (knowledge workers, parents,
+-- retirees, remote-flexible roles). Emergency contact relationship varies by
+-- the patient's existing marital status; phone_contact uses a synthetic
+-- 303-555-02xx range to keep them visually distinct from the 303-555-01xx
+-- primary cell numbers in the original seed.
+-- =============================================================================
+
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Software Engineer',     contact_relationship='Spouse',  phone_contact='303-555-0201' WHERE pid=100;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Marketing Manager',     contact_relationship='Parent',  phone_contact='303-555-0202' WHERE pid=101;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Retired Accountant',    contact_relationship='Spouse',  phone_contact='303-555-0203' WHERE pid=102;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Attorney',              contact_relationship='Sibling', phone_contact='303-555-0204' WHERE pid=103;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Construction Manager',  contact_relationship='Spouse',  phone_contact='303-555-0205' WHERE pid=104;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Retired Teacher',       contact_relationship='Spouse',  phone_contact='303-555-0206' WHERE pid=105;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Graphic Designer',      contact_relationship='Parent',  phone_contact='303-555-0207' WHERE pid=106;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Restaurant Owner',      contact_relationship='Sibling', phone_contact='303-555-0208' WHERE pid=107;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Sales Director',        contact_relationship='Spouse',  phone_contact='303-555-0209' WHERE pid=108;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Registered Nurse',      contact_relationship='Parent',  phone_contact='303-555-0210' WHERE pid=109;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Architect',             contact_relationship='Spouse',  phone_contact='303-555-0211' WHERE pid=110;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Software Developer',    contact_relationship='Parent',  phone_contact='303-555-0212' WHERE pid=111;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Restaurant Manager',    contact_relationship='Spouse',  phone_contact='303-555-0213' WHERE pid=112;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Librarian',     contact_relationship='Spouse',  phone_contact='303-555-0214' WHERE pid=113;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Product Manager',       contact_relationship='Parent',  phone_contact='303-555-0215' WHERE pid=114;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Pharmacist',            contact_relationship='Sibling', phone_contact='303-555-0216' WHERE pid=115;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Engineer',      contact_relationship='Child',   phone_contact='303-555-0217' WHERE pid=116;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='University Professor',  contact_relationship='Sibling', phone_contact='303-555-0218' WHERE pid=117;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Insurance Agent',       contact_relationship='Spouse',  phone_contact='303-555-0219' WHERE pid=118;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Veterinarian',          contact_relationship='Parent',  phone_contact='303-555-0220' WHERE pid=119;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Auto Mechanic',         contact_relationship='Spouse',  phone_contact='303-555-0221' WHERE pid=120;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Data Scientist',        contact_relationship='Sibling', phone_contact='303-555-0222' WHERE pid=121;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Real Estate Agent',     contact_relationship='Spouse',  phone_contact='303-555-0223' WHERE pid=122;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Physical Therapist',    contact_relationship='Sibling', phone_contact='303-555-0224' WHERE pid=123;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Restaurant Owner',      contact_relationship='Sibling', phone_contact='303-555-0225' WHERE pid=124;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Graduate Student',      contact_relationship='Parent',  phone_contact='303-555-0226' WHERE pid=125;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Retired Postal Worker', contact_relationship='Spouse',  phone_contact='303-555-0227' WHERE pid=126;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Financial Analyst',     contact_relationship='Spouse',  phone_contact='303-555-0228' WHERE pid=127;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Personal Trainer',      contact_relationship='Parent',  phone_contact='303-555-0229' WHERE pid=128;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Marketing Director',    contact_relationship='Sibling', phone_contact='303-555-0230' WHERE pid=129;
+
+-- =============================================================================
+-- HISTORICAL TELEHEALTH ENCOUNTER SCAFFOLD  (Sprint 12 / S12-05)
+--
+-- One past telehealth encounter per patient (encounter numbers 30001–30029,
+-- dated 30–59 days ago), serving as the anchor encounter for the vitals
+-- (S12-10) and lab results (S12-11) seeded later. Encounter pc_catid matches
+-- the patient's persona category from S12-02 so the chart's prior visit
+-- appears under the correct telehealth specialty. pos_code=10 (CMS Place of
+-- Service: Telehealth Provided in Patient's Home) marks every encounter as a
+-- video visit.
+--
+-- PID 124 (NEW persona) is intentionally excluded — the demo wants his chart
+-- to look fresh, with no historical encounter, vitals, labs, problems, or
+-- meds. He still has scheduled future appointments per the original seed.
+-- =============================================================================
+
+INSERT INTO `form_encounter`
+    (encounter, uuid, date, pid, provider_id, pc_catid, facility_id, reason,
+     pos_code, class_code, encounter_type_code, encounter_type_description)
+VALUES
+(30001, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 100, 10, @zoom_chronic_care_catid,      1, 'Quarterly chronic care check-in — HTN, HLD',          10, 'AMB', 'VR', 'virtual'),
+(30002, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 101, 11, @zoom_behavioral_health_catid, 1, 'Postpartum depression follow-up — sertraline check',  10, 'AMB', 'VR', 'virtual'),
+(30003, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 102, 13, @zoom_cardiology_catid,        1, 'Cardiology follow-up — post-PCI med review',          10, 'AMB', 'VR', 'virtual'),
+(30004, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 103, 12, @zoom_behavioral_health_catid, 1, 'Psychiatric med management — GAD',                    10, 'AMB', 'VR', 'virtual'),
+(30005, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 104, 10, @zoom_behavioral_health_catid, 1, 'Depression follow-up — sertraline refill',            10, 'AMB', 'VR', 'virtual'),
+(30006, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 105, 11, @zoom_chronic_care_catid,      1, 'Geriatric wellness video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30007, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 106, 12, @zoom_behavioral_health_catid, 1, 'Adult ADHD med management — methylphenidate ER',      10, 'AMB', 'VR', 'virtual'),
+(30008, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 107, 13, @zoom_cardiology_catid,        1, 'Post-ablation follow-up — SVT',                       10, 'AMB', 'VR', 'virtual'),
+(30009, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 108, 10, @zoom_chronic_care_catid,      1, 'Quarterly chronic care check-in — T2DM, HTN, HLD',    10, 'AMB', 'VR', 'virtual'),
+(30010, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 39 DAY), 109, 11, @zoom_behavioral_health_catid, 1, 'GAD follow-up — escitalopram tolerance',              10, 'AMB', 'VR', 'virtual'),
+(30011, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 40 DAY), 110, 12, @zoom_behavioral_health_catid, 1, 'MDD med management — bupropion augmentation',         10, 'AMB', 'VR', 'virtual'),
+(30012, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 41 DAY), 111, 13, @zoom_cardiology_catid,        1, 'Annual cardiology check-in — MVP',                    10, 'AMB', 'VR', 'virtual'),
+(30013, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 42 DAY), 112, 10, @zoom_chronic_care_catid,      1, 'HTN follow-up',                                       10, 'AMB', 'VR', 'virtual'),
+(30014, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 43 DAY), 113, 11, @zoom_chronic_care_catid,      1, 'Geriatric wellness video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30015, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 44 DAY), 114, 12, @zoom_behavioral_health_catid, 1, 'Bipolar II med management — lamotrigine mood log',    10, 'AMB', 'VR', 'virtual'),
+(30016, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 45 DAY), 115, 13, @zoom_cardiology_catid,        1, 'Post-EP study follow-up — PSVT',                      10, 'AMB', 'VR', 'virtual'),
+(30017, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 46 DAY), 116, 10, @zoom_chronic_care_catid,      1, 'Geriatric polypharmacy review',                       10, 'AMB', 'VR', 'virtual'),
+(30018, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 47 DAY), 117, 11, @zoom_chronic_care_catid,      1, 'Prediabetes + HLD lifestyle counseling',              10, 'AMB', 'VR', 'virtual'),
+(30019, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 48 DAY), 118, 12, @zoom_behavioral_health_catid, 1, 'MDD/GAD med management — duloxetine',                 10, 'AMB', 'VR', 'virtual'),
+(30020, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 49 DAY), 119, 13, @zoom_cardiology_catid,        1, 'Inappropriate sinus tachycardia follow-up',           10, 'AMB', 'VR', 'virtual'),
+(30021, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 50 DAY), 120, 10, @zoom_mat_catid,               1, 'Buprenorphine maintenance — monthly check-in',        10, 'AMB', 'VR', 'virtual'),
+(30022, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 51 DAY), 121, 11, @zoom_preventive_catid,        1, 'Contraception consult + annual MH screening',         10, 'AMB', 'VR', 'virtual'),
+(30023, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 52 DAY), 122, 12, @zoom_behavioral_health_catid, 1, 'MDD + insomnia med management — mirtazapine',         10, 'AMB', 'VR', 'virtual'),
+(30024, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 53 DAY), 123, 13, @zoom_cardiology_catid,        1, 'PVC follow-up — reassurance visit',                   10, 'AMB', 'VR', 'virtual'),
+-- PID 124 (NEW persona) intentionally skipped — sparse fresh-chart demo target
+(30025, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 55 DAY), 125, 11, @zoom_preventive_catid,        1, 'Preventive video visit — smoking cessation',          10, 'AMB', 'VR', 'virtual'),
+(30026, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 56 DAY), 126, 12, @zoom_behavioral_health_catid, 1, 'MDD chronic + insomnia — med management',             10, 'AMB', 'VR', 'virtual'),
+(30027, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 57 DAY), 127, 13, @zoom_cardiology_catid,        1, 'Paroxysmal afib follow-up — anticoag review',         10, 'AMB', 'VR', 'virtual'),
+(30028, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 58 DAY), 128, 10, @zoom_preventive_catid,        1, 'Annual preventive video visit',                       10, 'AMB', 'VR', 'virtual'),
+(30029, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 59 DAY), 129, 11, @zoom_behavioral_health_catid, 1, 'Perimenopausal mood + HTN follow-up',                 10, 'AMB', 'VR', 'virtual');
+
+-- Forms registry row per encounter so it shows up in Visit History tab
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fe.date, fe.encounter, 'New Patient Encounter', fe.id, fe.pid,
+       u.username, 'Default', 1, 0, 'newpatient', fe.provider_id
+  FROM form_encounter fe
+  JOIN users u ON u.id = fe.provider_id
+ WHERE fe.encounter BETWEEN 30001 AND 30029;
+
+-- Bump sequences past our hardcoded encounter numbers so future
+-- create_encounter() calls don't collide.
+UPDATE sequences SET id = GREATEST(id, 30029);
+
+-- =============================================================================
+-- ALLERGIES  (Sprint 12 / S12-06)
+--
+-- 27 allergy rows across 20 patients. 9 patients have NKDA (no rows). PID 124
+-- (NEW persona) intentionally skipped — sparse fresh-chart demo target.
+-- `reaction` uses OpenEMR's reaction list_options vocabulary (hives / nausea /
+-- shortness_of_breath / unassigned); `severity_al` uses severity_ccda
+-- (mild / moderate / severe). `user` set to the patient's PCP username so
+-- the chart attribution is coherent.
+-- =============================================================================
+
+INSERT INTO `lists`
+    (uuid, type, subtype, title, pid, date, begdate, activity, user, severity_al, reaction)
+VALUES
+-- PID 100 James Harrison (CHR M48)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  100, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'moconnor',   'moderate', 'hives'),
+-- PID 102 David Kim (CV-F M60)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Aspirin',     102, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'mthompson',  'mild',     'nausea'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Sulfa drugs', 102, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'mthompson',  'moderate', 'hives'),
+-- PID 103 Rachel Nguyen (PSY-S F41)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'environmental', 'Latex',    103, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'amiller',    'moderate', 'hives'),
+-- PID 105 Linda Patel (GER F67)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  105, NOW(), DATE_SUB(NOW(), INTERVAL 30 YEAR), 1, 'erodriguez', 'mild',     'hives'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Codeine',     105, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'erodriguez', 'mild',     'nausea'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Iodine contrast', 105, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 'moderate', 'hives'),
+-- PID 106 Ethan Brooks (PSY-S M31)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'food', 'Peanuts',           106, NOW(), DATE_SUB(NOW(), INTERVAL 25 YEAR), 1, 'amiller',    'severe',   'shortness_of_breath'),
+-- PID 107 Maria Chen (CV-F F43)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'food', 'Shellfish',         107, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'mthompson',  'moderate', 'hives'),
+-- PID 108 Thomas Walsh (CHR M56) ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  108, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'moconnor',   'moderate', 'hives'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Sulfa drugs', 108, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'moconnor',   'moderate', 'hives'),
+-- PID 110 Brian Foster (PSY-S M46)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'NSAIDs',      110, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'amiller',    'mild',     'nausea'),
+-- PID 112 Omar Hassan (CHR M51)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  112, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'moconnor',   'mild',     'hives'),
+-- PID 113 Patricia Monroe (GER F63)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Sulfa drugs', 113, NOW(), DATE_SUB(NOW(), INTERVAL 25 YEAR), 1, 'erodriguez', 'severe',   'hives'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'NSAIDs',      113, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'erodriguez', 'severe',   'nausea'),
+-- PID 115 Fatima Ali (CV-F F34)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'environmental', 'Latex',    115, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'mthompson',  'moderate', 'hives'),
+-- PID 116 Gregory Stone (GER M71)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  116, NOW(), DATE_SUB(NOW(), INTERVAL 40 YEAR), 1, 'moconnor',   'mild',     'hives'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Codeine',     116, NOW(), DATE_SUB(NOW(), INTERVAL 22 YEAR), 1, 'moconnor',   'mild',     'nausea'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Lisinopril (ACE-induced cough)', 116, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor', 'moderate', 'unassigned'),
+-- PID 117 Nadia Okafor (CHR F40)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'food', 'Tree nuts',         117, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'erodriguez', 'severe',   'shortness_of_breath'),
+-- PID 118 Samuel Wright (PSY-S M55)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  118, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'amiller',    'moderate', 'hives'),
+-- PID 121 Priya Sharma (HYA F34)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  121, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 'mild',     'hives'),
+-- PID 122 Robert Castillo (PSY-S M58)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Sulfa drugs', 122, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'amiller',    'moderate', 'hives'),
+-- PID 125 Isabelle Martin (HYA F27)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'environmental', 'Latex',    125, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'erodriguez', 'mild',     'hives'),
+-- PID 126 Jerome Washington (PSY-S M65)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Penicillin',  126, NOW(), DATE_SUB(NOW(), INTERVAL 35 YEAR), 1, 'amiller',    'mild',     'hives'),
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'Sulfa drugs', 126, NOW(), DATE_SUB(NOW(), INTERVAL 28 YEAR), 1, 'amiller',    'moderate', 'hives'),
+-- PID 127 Mei Liu (CV-F F38)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'food', 'Shellfish',         127, NOW(), DATE_SUB(NOW(), INTERVAL 14 YEAR), 1, 'mthompson',  'moderate', 'hives'),
+-- PID 129 Amara Diallo (BH-PC F41)
+(UNHEX(REPLACE(UUID(),'-','')), 'allergy', 'medication', 'NSAIDs',      129, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'erodriguez', 'mild',     'nausea');
+
+-- =============================================================================
+-- MEDICAL PROBLEMS  (Sprint 12 / S12-07)
+--
+-- ~58 problem rows across 25 patients, ICD-10 coded per OpenEMR convention
+-- (`ICD10:CODE` in the `diagnosis` column). HYA persona patients (121, 125,
+-- 128) intentionally have no chronic problems — preventive-only chart. PID
+-- 124 (NEW) skipped. Diagnoses chosen to align with each persona's medication
+-- regimen seeded in S12-08.
+-- =============================================================================
+
+INSERT INTO `lists`
+    (uuid, type, subtype, title, diagnosis, pid, date, begdate, activity, user, outcome)
+VALUES
+-- PID 100 James Harrison (CHR M48)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    100, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  100, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'moconnor',   0),
+-- PID 101 Sofia Reyes (BH-PC F35)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, mild', 'ICD10:F33.0', 101, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',  'ICD10:F41.1',  101, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'erodriguez', 0),
+-- PID 102 David Kim (CV-F M60)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Coronary artery disease',       'ICD10:I25.10', 102, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'mthompson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Old myocardial infarction',     'ICD10:I25.2',  102, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'mthompson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    102, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'mthompson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  102, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'mthompson',  0),
+-- PID 103 Rachel Nguyen (PSY-S F41)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',  'ICD10:F41.1',  103, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'amiller',    0),
+-- PID 104 Carlos Mendez (BH-PC M53)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    104, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, moderate', 'ICD10:F33.1', 104, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor', 0),
+-- PID 105 Linda Patel (GER F67)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                'ICD10:M19.90', 105, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',      'ICD10:M81.0',  105, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                'ICD10:E03.9',  105, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    105, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'erodriguez', 0),
+-- PID 106 Ethan Brooks (PSY-S M31)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Adult ADHD, inattentive type',  'ICD10:F90.0',  106, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'amiller',    0),
+-- PID 107 Maria Chen (CV-F F43)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Supraventricular tachycardia',  'ICD10:I47.1',  107, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'mthompson',  0),
+-- PID 108 Thomas Walsh (CHR M56) ← dashboard test pt
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',      'ICD10:E11.9',  108, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    108, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  108, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'moconnor',   0),
+-- PID 109 Aisha Johnson (BH-PC F33)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',  'ICD10:F41.1',  109, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Obesity',                       'ICD10:E66.9',  109, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'erodriguez', 0),
+-- PID 110 Brian Foster (PSY-S M46)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, moderate', 'ICD10:F33.1', 110, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR), 1, 'amiller', 0),
+-- PID 111 Yuki Tanaka (CV-F F28)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Mitral valve prolapse',         'ICD10:I34.1',  111, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'mthompson',  0),
+-- PID 112 Omar Hassan (CHR M51)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    112, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'moconnor',   0),
+-- PID 113 Patricia Monroe (GER F63)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    113, NOW(), DATE_SUB(NOW(), INTERVAL 14 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  113, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                'ICD10:E03.9',  113, NOW(), DATE_SUB(NOW(), INTERVAL 9 YEAR),  1, 'erodriguez', 0),
+-- PID 114 Kevin Park (PSY-S M37)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Bipolar II disorder',           'ICD10:F31.81', 114, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'amiller',    0),
+-- PID 115 Fatima Ali (CV-F F34)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Paroxysmal supraventricular tachycardia', 'ICD10:I47.1', 115, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson', 0),
+-- PID 116 Gregory Stone (GER M71)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    116, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  116, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Benign prostatic hyperplasia',  'ICD10:N40.0',  116, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'moconnor',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Chronic kidney disease, stage 3', 'ICD10:N18.3', 116, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR), 1, 'moconnor',   0),
+-- PID 117 Nadia Okafor (CHR F40)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Prediabetes',                   'ICD10:R73.03', 117, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                'ICD10:E78.5',  117, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'erodriguez', 0),
+-- PID 118 Samuel Wright (PSY-S M55)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, moderate', 'ICD10:F33.1', 118, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR), 1, 'amiller', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',  'ICD10:F41.1',  118, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'amiller',    0),
+-- PID 119 Claire Bennett (CV-F F31)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Inappropriate sinus tachycardia', 'ICD10:R00.0', 119, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson', 0),
+-- PID 120 Andre Dubois (SUD M42)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Opioid dependence, in remission', 'ICD10:F11.21', 120, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Long-term opiate analgesic management', 'ICD10:Z79.891', 120, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR), 1, 'moconnor', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Post-traumatic stress disorder', 'ICD10:F43.10', 120, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR), 1, 'moconnor',   0),
+-- PID 122 Robert Castillo (PSY-S M58)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, moderate', 'ICD10:F33.1', 122, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'amiller', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',  'ICD10:F41.1',  122, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'amiller',    0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Insomnia',                      'ICD10:G47.00', 122, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'amiller',    0),
+-- PID 123 Hannah Scott (CV-F F36)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Premature ventricular complexes', 'ICD10:I49.3', 123, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'mthompson', 0),
+-- PID 126 Jerome Washington (PSY-S M65)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, recurrent, in full remission', 'ICD10:F33.42', 126, NOW(), DATE_SUB(NOW(), INTERVAL 15 YEAR), 1, 'amiller', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Primary insomnia',              'ICD10:F51.01', 126, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'amiller',    0),
+-- PID 127 Mei Liu (CV-F F38)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Paroxysmal atrial fibrillation', 'ICD10:I48.0', 127, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR), 1, 'mthompson',  0),
+-- PID 129 Amara Diallo (BH-PC F41)
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, single episode, moderate', 'ICD10:F32.1', 129, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'erodriguez', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',        'ICD10:I10',    129, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'erodriguez', 0);
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================
@@ -806,14 +1273,13 @@ SELECT 'Seed complete.' AS status;
 SELECT CONCAT(fname, ' ', lname) AS provider, id, abook_type
 FROM users WHERE id IN (10,11,12,13,20,21,30,31) ORDER BY id;
 
-SELECT c.pc_catname AS appt_type, COUNT(*) AS count,
-       CASE WHEN c.pc_catname IN ('Telehealth Zoom', 'New Patient Zoom')
-            THEN 'PICKED UP' ELSE 'DROPPED' END AS zoomly_filter
+SELECT c.pc_catname AS appt_category, COUNT(*) AS count
 FROM openemr_postcalendar_events e
 JOIN openemr_postcalendar_categories c ON e.pc_catid = c.pc_catid
 WHERE e.pc_aid IN ('10','11','12','13')
-GROUP BY c.pc_catname ORDER BY zoomly_filter, c.pc_catname;
+GROUP BY c.pc_catname ORDER BY c.pc_catname;
 
 SELECT COUNT(*) AS total_appointments FROM openemr_postcalendar_events WHERE pc_aid IN ('10','11','12','13');
 SELECT COUNT(*) AS patient_count FROM patient_data WHERE pid BETWEEN 100 AND 129;
 SELECT name, id FROM facility WHERE id = 1;
+SELECT name AS insurance_company FROM insurance_companies WHERE id BETWEEN 200 AND 207 ORDER BY id;
