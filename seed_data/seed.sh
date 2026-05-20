@@ -36,6 +36,9 @@ DB_CONTAINER=${MARIADB_CONTAINER:-${DOTENV_MARIADB_CONTAINER:-mariadb-emr}}
 DB_NAME=${OPENEMR_DB_NAME:-${DOTENV_OPENEMR_DB_NAME:-openemr}}
 
 echo "Seeding demo data into $DB_CONTAINER..."
-docker exec -i "$DB_CONTAINER" mariadb -u root -p"$DB_ROOT_PASS" "$DB_NAME" < "$SCRIPT_DIR/demo_data.sql"
+# Seed is split into 7 ordered files (01_globals.sql through 07_clinical_data.sql).
+# Cat them in order into a single mariadb session so SQL session variables
+# (@zoom_*_catid, @recurrspec, @location) persist across file boundaries.
+cat "$SCRIPT_DIR"/0[1-7]_*.sql | docker exec -i "$DB_CONTAINER" mariadb -u root -p"$DB_ROOT_PASS" "$DB_NAME"
 
 echo "Done."
