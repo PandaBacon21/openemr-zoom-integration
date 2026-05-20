@@ -9,15 +9,15 @@
 --   ./seed_data/reset.sh
 --
 -- Appointment categories in this seed (all Zoom-prefixed, telehealth-themed):
---   Zoom Behavioral Health, Zoom Cardiology, Zoom Chronic Care,
---   Zoom MAT (Suboxone), Zoom New Patient, Zoom Preventive
+--   Zoom Behavioral Health, Zoom Chronic Care, Zoom MAT (Suboxone),
+--   Zoom New Patient, Zoom Preventive
 --
--- Every appointment row in this seed lives under one of the six categories
+-- Every appointment row in this seed lives under one of the five categories
 -- above. OpenEMR built-in categories (Office Visit, Established Patient,
 -- New Patient, etc.) remain in the DB but are no longer referenced. Zoomly's
 -- per-account AppointmentTypeFilter can opt in/out of the Zoom set as a
--- group, or by specialty (e.g. a cardiology-focused SE picks only
--- Zoom Cardiology + Zoom New Patient).
+-- group, or by specialty (e.g. a behavioral-health-focused SE picks only
+-- Zoom Behavioral Health + Zoom MAT + Zoom New Patient).
 --
 -- =============================================================================
 
@@ -38,24 +38,42 @@ UPDATE globals SET gl_value = '0' WHERE gl_name = 'schedule_limit';
 
 UPDATE `facility` SET `inactive` = 1, `name` = 'Default Facility (Unused)' WHERE `id` = 3;
 
+-- Four facilities, one per US time zone (Mountain/Eastern/Pacific/Central).
+-- Each facility hosts providers + 1 nurse + 1 MA per the S12-17 matrix.
 INSERT INTO `facility` (
     `id`, `uuid`, `name`, `phone`,
     `street`, `city`, `state`, `postal_code`, `country_code`,
     `facility_npi`, `color`,
     `service_location`, `billing_location`, `accepts_assignment`,
     `primary_business_entity`, `inactive`
-) VALUES (
-    1, UNHEX(REPLACE(UUID(), '-', '')),
-    'Zoomly Medical Center', '303-555-0100',
-    '100 Health Plaza', 'Denver', 'CO', '80201', 'USA',
-    '1234567890', '#0b5cff',
-    1, 1, 1, 1, 0
-);
+) VALUES
+(1, UNHEX(REPLACE(UUID(), '-', '')),
+ 'Zoomly Medical Center',         '303-555-0100',
+ '100 Health Plaza',     'Denver',        'CO', '80201', 'USA',
+ '1234567890', '#0b5cff', 1, 1, 1, 1, 0),
+(2, UNHEX(REPLACE(UUID(), '-', '')),
+ 'Zoomly Medical Center East',    '617-555-0100',
+ '25 Cambridge Street',  'Boston',        'MA', '02114', 'USA',
+ '1234567891', '#00053d', 1, 1, 1, 1, 0),
+(4, UNHEX(REPLACE(UUID(), '-', '')),
+ 'Zoomly Medical Center West',    '415-555-0100',
+ '200 Parnassus Avenue', 'San Francisco', 'CA', '94143', 'USA',
+ '1234567892', '#b4d0f8', 1, 1, 1, 1, 0),
+(5, UNHEX(REPLACE(UUID(), '-', '')),
+ 'Zoomly Medical Center Central', '816-555-0100',
+ '456 Truman Road',      'Kansas City',   'MO', '64106', 'USA',
+ '1234567893', '#f7f2e3', 1, 1, 1, 1, 0);
 
 UPDATE `users` SET `facility_id` = 1 WHERE `id` = 1;
 
 -- =============================================================================
--- PROVIDERS (physicians) — IDs 10-13
+-- PROVIDERS — 17 total, all Primary Care or Behavioral Health
+--   IDs 10-13: original four (OConnor, Rodriguez, Miller, Thompson*)
+--             * Thompson reframed from Cardiology to Internal Medicine
+--   IDs 14-19, 22-27: 12 new providers (S12-21)
+--   ID  21: Amy Martin (promoted RN → Family NP, S12-22)
+--
+-- Facility distribution: East=10, Mountain=4, West=2, Central=1
 -- =============================================================================
 
 INSERT INTO `users` (
@@ -64,21 +82,64 @@ INSERT INTO `users` (
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
     `main_menu_role`, `patient_menu_role`, `physician_type`, `npi`
 ) VALUES
-(10, UNHEX(REPLACE(UUID(), '-', '')), 'moconnor', '', 1, 1,
- 'Michael', 'OConnor', 'Dr.', 'Internal Medicine', 'michael.oconnor@example.org', 'michael.oconnor@example.org',
- 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567890'),
-(11, UNHEX(REPLACE(UUID(), '-', '')), 'erodriguez', '', 1, 1,
- 'Elena', 'Rodriguez', 'Dr.', 'Family Medicine', 'elena.rodriguez@example.org', 'elena.rodriguez@example.org',
- 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567891'),
-(12, UNHEX(REPLACE(UUID(), '-', '')), 'amiller', '', 1, 1,
- 'Amelia', 'Miller', 'Dr.', 'Psychiatry', 'amelia.miller@example.org', 'amelia.miller@example.org',
- 1, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567892'),
-(13, UNHEX(REPLACE(UUID(), '-', '')), 'mthompson', '', 1, 1,
- 'Marcus', 'Thompson', 'Dr.', 'Cardiology', 'marcus.thompson@example.org', 'marcus.thompson@example.org',
- 1, 1, 'physician', '207RC0000X', 'standard', 'standard', 'MD', '1234567893');
+-- East (id=2)
+(10, UNHEX(REPLACE(UUID(), '-', '')), 'moconnor',         '', 1, 1,
+ 'Michael',  'OConnor',   'Dr.',  'Internal Medicine',    'michael.oconnor@example.org',  'michael.oconnor@example.org',
+ 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567890'),
+(11, UNHEX(REPLACE(UUID(), '-', '')), 'erodriguez',       '', 1, 1,
+ 'Elena',    'Rodriguez', 'Dr.',  'Family Medicine',      'elena.rodriguez@example.org',  'elena.rodriguez@example.org',
+ 2, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567891'),
+(12, UNHEX(REPLACE(UUID(), '-', '')), 'amiller',          '', 1, 1,
+ 'Amelia',   'Miller',    'Dr.',  'Psychiatry',           'amelia.miller@example.org',    'amelia.miller@example.org',
+ 2, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567892'),
+(16, UNHEX(REPLACE(UUID(), '-', '')), 'michael.chen',     '', 1, 1,
+ 'Michael',  'Chen',      'Dr.',  'Internal Medicine',    'michael.chen@example.org',     'michael.chen@example.org',
+ 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567896'),
+(17, UNHEX(REPLACE(UUID(), '-', '')), 'marcus.eriksson',  '', 1, 1,
+ 'Marcus',   'Eriksson',  'Dr.',  'Psychiatry',           'marcus.eriksson@example.org',  'marcus.eriksson@example.org',
+ 2, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567897'),
+(18, UNHEX(REPLACE(UUID(), '-', '')), 'yuki.tanaka',      '', 1, 1,
+ 'Yuki',     'Tanaka',    'LCSW', 'Clinical Social Work', 'yuki.tanaka@example.org',      'yuki.tanaka@example.org',
+ 2, 1, 'physician', '1041C0700X', 'standard', 'standard', 'LCSW', '1234567898'),
+(19, UNHEX(REPLACE(UUID(), '-', '')), 'ethan.garcia',     '', 1, 1,
+ 'Ethan',    'Garcia',    'Dr.',  'Internal Medicine',    'ethan.garcia@example.org',     'ethan.garcia@example.org',
+ 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567899'),
+(21, UNHEX(REPLACE(UUID(), '-', '')), 'amartin',          '', 1, 1,
+ 'Amy',      'Martin',    'NP',   'Family Medicine',      'amy.martin@example.org',       'amy.martin@example.org',
+ 2, 1, 'physician', '363LF0000X', 'standard', 'standard', 'FNP', '1234567906'),
+(22, UNHEX(REPLACE(UUID(), '-', '')), 'lucas.johnson',    '', 1, 1,
+ 'Lucas',    'Johnson',   'Dr.',  'Addiction Medicine',   'lucas.johnson@example.org',    'lucas.johnson@example.org',
+ 2, 1, 'physician', '207RA0401X', 'standard', 'standard', 'MD', '1234567900'),
+(25, UNHEX(REPLACE(UUID(), '-', '')), 'lisa.patel',       '', 1, 1,
+ 'Lisa',     'Patel',     'Dr.',  'Internal Medicine',    'lisa.patel@example.org',       'lisa.patel@example.org',
+ 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567903'),
+-- Mountain (id=1)
+(14, UNHEX(REPLACE(UUID(), '-', '')), 'jonathan.nelson',  '', 1, 1,
+ 'Jonathan', 'Nelson',    'Dr.',  'Family Medicine',      'jonathan.nelson@example.org',  'jonathan.nelson@example.org',
+ 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567894'),
+(15, UNHEX(REPLACE(UUID(), '-', '')), 'priya.patel',      '', 1, 1,
+ 'Priya',    'Patel',     'NP',   'Psychiatric Nurse Practitioner', 'priya.patel@example.org', 'priya.patel@example.org',
+ 1, 1, 'physician', '363LP0808X', 'standard', 'standard', 'NP', '1234567895'),
+(26, UNHEX(REPLACE(UUID(), '-', '')), 'hiroshi.tanaka',   '', 1, 1,
+ 'Hiroshi',  'Tanaka',    'Dr.',  'Family Medicine',      'hiroshi.tanaka@example.org',   'hiroshi.tanaka@example.org',
+ 1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567904'),
+(27, UNHEX(REPLACE(UUID(), '-', '')), 'david.thompson',   '', 1, 1,
+ 'David',    'Thompson',  'Dr.',  'Internal Medicine',    'david.thompson@example.org',   'david.thompson@example.org',
+ 1, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567905'),
+-- West (id=4)
+(13, UNHEX(REPLACE(UUID(), '-', '')), 'mthompson',        '', 1, 1,
+ 'Marcus',   'Thompson',  'Dr.',  'Internal Medicine',    'marcus.thompson@example.org',  'marcus.thompson@example.org',
+ 4, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567893'),
+(23, UNHEX(REPLACE(UUID(), '-', '')), 'dave.anderson',    '', 1, 1,
+ 'Dave',     'Anderson',  'Dr.',  'Family Medicine',      'dave.anderson@example.org',    'dave.anderson@example.org',
+ 4, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567901'),
+-- Central (id=5)
+(24, UNHEX(REPLACE(UUID(), '-', '')), 'joe.smith',        '', 1, 1,
+ 'Joe',      'Smith',     'Dr.',  'Family Medicine',      'joe.smith@example.org',        'joe.smith@example.org',
+ 5, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567902');
 
 -- =============================================================================
--- NURSES — IDs 20-21
+-- NURSES — 1 per facility (Lee at Mountain; 3 new at East/Central/West)
 -- =============================================================================
 
 INSERT INTO `users` (
@@ -87,12 +148,18 @@ INSERT INTO `users` (
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
     `main_menu_role`, `patient_menu_role`
 ) VALUES
-(20, UNHEX(REPLACE(UUID(), '-', '')), 'blee', '', 0, 1,
- 'Bill', 'Lee', 'RN', 'Nursing', 'bill.lee@example.org', 'bill.lee@example.org',
+(20, UNHEX(REPLACE(UUID(), '-', '')), 'blee',            '', 0, 1,
+ 'Bill',  'Lee',       'RN', 'Nursing', 'bill.lee@example.org',        'bill.lee@example.org',
  1, 0, 'nurse', '163W00000X', 'standard', 'standard'),
-(21, UNHEX(REPLACE(UUID(), '-', '')), 'amartin', '', 0, 1,
- 'Amy', 'Martin', 'RN', 'Nursing', 'amy.martin@example.org', 'amy.martin@example.org',
- 1, 0, 'nurse', '163W00000X', 'standard', 'standard');
+(32, UNHEX(REPLACE(UUID(), '-', '')), 'sarah.martinez',  '', 0, 1,
+ 'Sarah', 'Martinez',  'RN', 'Nursing', 'sarah.martinez@example.org',  'sarah.martinez@example.org',
+ 2, 0, 'nurse', '163W00000X', 'standard', 'standard'),
+(33, UNHEX(REPLACE(UUID(), '-', '')), 'ken.watanabe',    '', 0, 1,
+ 'Ken',   'Watanabe',  'RN', 'Nursing', 'ken.watanabe@example.org',    'ken.watanabe@example.org',
+ 5, 0, 'nurse', '163W00000X', 'standard', 'standard'),
+(34, UNHEX(REPLACE(UUID(), '-', '')), 'maria.rodriguez', '', 0, 1,
+ 'Maria', 'Rodriguez', 'RN', 'Nursing', 'maria.rodriguez@example.org', 'maria.rodriguez@example.org',
+ 4, 0, 'nurse', '163W00000X', 'standard', 'standard');
 
 -- =============================================================================
 -- MEDICAL ASSISTANTS — IDs 30-31
@@ -104,12 +171,18 @@ INSERT INTO `users` (
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
     `main_menu_role`, `patient_menu_role`
 ) VALUES
-(30, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams', '', 0, 1,
- 'Ben', 'Williams', 'MA', 'Medical Assistant', 'ben.williams@example.org', 'ben.williams@example.org',
+(30, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams',    '', 0, 1,
+ 'Ben',    'Williams', 'MA', 'Medical Assistant', 'ben.williams@example.org',    'ben.williams@example.org',
  1, 0, 'med_asst', '356AM0700X', 'standard', 'standard'),
-(31, UNHEX(REPLACE(UUID(), '-', '')), 'hsong', '', 0, 1,
- 'Hana', 'Song', 'MA', 'Medical Assistant', 'hana.song@example.org', 'hana.song@example.org',
- 1, 0, 'med_asst', '356AM0700X', 'standard', 'standard');
+(31, UNHEX(REPLACE(UUID(), '-', '')), 'hsong',        '', 0, 1,
+ 'Hana',   'Song',     'MA', 'Medical Assistant', 'hana.song@example.org',       'hana.song@example.org',
+ 2, 0, 'med_asst', '356AM0700X', 'standard', 'standard'),
+(35, UNHEX(REPLACE(UUID(), '-', '')), 'emma.wilson',  '', 0, 1,
+ 'Emma',   'Wilson',   'MA', 'Medical Assistant', 'emma.wilson@example.org',     'emma.wilson@example.org',
+ 5, 0, 'med_asst', '356AM0700X', 'standard', 'standard'),
+(36, UNHEX(REPLACE(UUID(), '-', '')), 'cheryl.lewis', '', 0, 1,
+ 'Cheryl', 'Lewis',    'MA', 'Medical Assistant', 'cheryl.lewis@example.org',    'cheryl.lewis@example.org',
+ 4, 0, 'med_asst', '356AM0700X', 'standard', 'standard');
 
 -- =============================================================================
 -- STAFF SECURE PASSWORDS (ZoomDem0!)
@@ -123,35 +196,98 @@ INSERT INTO users_secure (id, username, password, last_update_password) VALUES
 (20, 'blee',       '$2y$12$4GWtwxpsqqwSYwAE58stXuyHu9wE7YYkQh/mvBb/Jw3tFXPZ9155m', NOW()),
 (21, 'amartin',    '$2y$12$LfXdio/YMJ7br6BFTgWd3e9kgMKf173W2dqUzXoBjmIcmPXmrlDnS', NOW()),
 (30, 'bwilliams',  '$2y$12$CBV47dDP/2CvTxaO7bER4.XTm0z6zTJSrfKLcz6gOk5ViFJWGTFHi', NOW()),
-(31, 'hsong',      '$2y$12$9jMeSDX.LGvUw61ENWAXyenoSGfXrQ4gMS2rI6klVr0kdF5LP6kxK', NOW());
+(31, 'hsong',      '$2y$12$9jMeSDX.LGvUw61ENWAXyenoSGfXrQ4gMS2rI6klVr0kdF5LP6kxK', NOW()),
+-- New providers + new support staff — bcrypt of ZoomDem0! reused
+(14, 'jonathan.nelson', '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(15, 'priya.patel',     '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(16, 'michael.chen',    '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(17, 'marcus.eriksson', '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(18, 'yuki.tanaka',     '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(19, 'ethan.garcia',    '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(22, 'lucas.johnson',   '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(23, 'dave.anderson',   '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(24, 'joe.smith',       '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(25, 'lisa.patel',      '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(26, 'hiroshi.tanaka',  '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(27, 'david.thompson',  '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(32, 'sarah.martinez',  '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(33, 'ken.watanabe',    '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(34, 'maria.rodriguez', '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(35, 'emma.wilson',     '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(36, 'cheryl.lewis',    '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW());
 
 -- =============================================================================
 -- ACL
 -- =============================================================================
 
 INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden) VALUES
-(12, 'users', 'moconnor',   10, 'Michael OConnor',  0),
-(13, 'users', 'amiller',    10, 'Amelia Miller',    0),
-(14, 'users', 'mthompson',  10, 'Marcus Thompson',  0),
-(15, 'users', 'blee',       10, 'Bill Lee',         0),
-(16, 'users', 'amartin',    10, 'Amy Martin',       0),
-(17, 'users', 'bwilliams',  10, 'Ben Williams',     0),
-(18, 'users', 'hsong',      10, 'Hana Song',        0),
-(19, 'users', 'erodriguez', 10, 'Elena Rodriguez',  0);
+-- Original 8 staff
+(12, 'users', 'moconnor',        10, 'Michael OConnor',  0),
+(13, 'users', 'amiller',         10, 'Amelia Miller',    0),
+(14, 'users', 'mthompson',       10, 'Marcus Thompson',  0),
+(15, 'users', 'blee',            10, 'Bill Lee',         0),
+(16, 'users', 'amartin',         10, 'Amy Martin',       0),
+(17, 'users', 'bwilliams',       10, 'Ben Williams',     0),
+(18, 'users', 'hsong',           10, 'Hana Song',        0),
+(19, 'users', 'erodriguez',      10, 'Elena Rodriguez',  0),
+-- New providers
+(20, 'users', 'jonathan.nelson', 10, 'Jonathan Nelson',  0),
+(21, 'users', 'priya.patel',     10, 'Priya Patel',      0),
+(22, 'users', 'michael.chen',    10, 'Michael Chen',     0),
+(23, 'users', 'marcus.eriksson', 10, 'Marcus Eriksson',  0),
+(24, 'users', 'yuki.tanaka',     10, 'Yuki Tanaka',      0),
+(25, 'users', 'ethan.garcia',    10, 'Ethan Garcia',     0),
+(26, 'users', 'lucas.johnson',   10, 'Lucas Johnson',    0),
+(27, 'users', 'dave.anderson',   10, 'Dave Anderson',    0),
+(28, 'users', 'joe.smith',       10, 'Joe Smith',        0),
+(29, 'users', 'lisa.patel',      10, 'Lisa Patel',       0),
+(30, 'users', 'hiroshi.tanaka',  10, 'Hiroshi Tanaka',   0),
+(31, 'users', 'david.thompson',  10, 'David Thompson',   0),
+-- New support staff
+(32, 'users', 'sarah.martinez',  10, 'Sarah Martinez',   0),
+(33, 'users', 'ken.watanabe',    10, 'Ken Watanabe',     0),
+(34, 'users', 'maria.rodriguez', 10, 'Maria Rodriguez',  0),
+(35, 'users', 'emma.wilson',     10, 'Emma Wilson',      0),
+(36, 'users', 'cheryl.lewis',    10, 'Cheryl Lewis',     0);
 
+-- group_id 13 = Physicians, 12 = Clinicians
+-- Amy Martin (aro 16) moves from Clinicians to Physicians (promoted to FNP)
 INSERT IGNORE INTO gacl_groups_aro_map (group_id, aro_id) VALUES
-(13,12),(13,19),(13,13),(13,14),
-(12,15),(12,16),(12,17),(12,18);
+-- Original providers + Amy promoted to Physicians
+(13,12),(13,13),(13,14),(13,16),(13,19),
+-- New providers → Physicians
+(13,20),(13,21),(13,22),(13,23),(13,24),(13,25),(13,26),(13,27),(13,28),(13,29),(13,30),(13,31),
+-- Support staff → Clinicians
+(12,15),(12,17),(12,18),(12,32),(12,33),(12,34),(12,35),(12,36);
 
 INSERT IGNORE INTO groups (name, user) VALUES
+-- Providers (Physicians group)
 ('Physicians', 'moconnor'),
 ('Physicians', 'erodriguez'),
 ('Physicians', 'amiller'),
 ('Physicians', 'mthompson'),
+('Physicians', 'amartin'),
+('Physicians', 'jonathan.nelson'),
+('Physicians', 'priya.patel'),
+('Physicians', 'michael.chen'),
+('Physicians', 'marcus.eriksson'),
+('Physicians', 'yuki.tanaka'),
+('Physicians', 'ethan.garcia'),
+('Physicians', 'lucas.johnson'),
+('Physicians', 'dave.anderson'),
+('Physicians', 'joe.smith'),
+('Physicians', 'lisa.patel'),
+('Physicians', 'hiroshi.tanaka'),
+('Physicians', 'david.thompson'),
+-- Support staff (Clinicians group)
 ('Clinicians', 'blee'),
-('Clinicians', 'amartin'),
 ('Clinicians', 'bwilliams'),
-('Clinicians', 'hsong');
+('Clinicians', 'hsong'),
+('Clinicians', 'sarah.martinez'),
+('Clinicians', 'ken.watanabe'),
+('Clinicians', 'maria.rodriguez'),
+('Clinicians', 'emma.wilson'),
+('Clinicians', 'cheryl.lewis');
 
 -- =============================================================================
 -- CUSTOM APPOINTMENT TYPES
@@ -183,8 +319,6 @@ INSERT INTO `openemr_postcalendar_categories` (
 ) VALUES
 ('Zoom Behavioral Health', '#7E57C2', 'Psychiatry / behavioral health video visit',
  1800, 0, 1, 30, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_behavioral_health'),
-('Zoom Cardiology',        '#E53935', 'Cardiology follow-up video visit',
- 1800, 0, 1, 40, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_cardiology'),
 ('Zoom Chronic Care',      '#0B5CFF', 'Chronic disease stable follow-up video visit',
  1800, 0, 1, 50, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_chronic_care'),
 ('Zoom MAT (Suboxone)',    '#43A047', 'Buprenorphine / MAT maintenance video visit',
@@ -205,7 +339,6 @@ SET @new_patient_zoom_catid = (SELECT pc_catid FROM openemr_postcalendar_categor
 
 -- S12-02 Zoom-prefixed telehealth-themed categories
 SET @zoom_behavioral_health_catid = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Behavioral Health');
-SET @zoom_cardiology_catid        = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Cardiology');
 SET @zoom_chronic_care_catid      = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Chronic Care');
 SET @zoom_mat_catid               = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom MAT (Suboxone)');
 SET @zoom_new_patient_catid       = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom New Patient');
@@ -255,27 +388,27 @@ INSERT INTO `patient_data` (
 (104, UNHEX(REPLACE(UUID(), '-', '')), 'Carlos', 'Mendez', 'R', 'Mr.',
  '1972-09-17', 'Male', 'married', '731 Cedar Blvd', 'Denver', 'CO', '80205', 'USA',
  '303-555-0105', 'carlos.mendez@example.org', 10, '104', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
-(105, UNHEX(REPLACE(UUID(), '-', '')), 'Linda', 'Patel', '', 'Mrs.',
+(105, UNHEX(REPLACE(UUID(), '-', '')), 'Linda', 'Whitaker', '', 'Mrs.',
  '1958-06-30', 'Female', 'married', '1020 Birch Court', 'Denver', 'CO', '80206', 'USA',
- '303-555-0106', 'linda.patel@example.org', 11, '105', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+ '303-555-0106', 'linda.whitaker@example.org', 11, '105', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (106, UNHEX(REPLACE(UUID(), '-', '')), 'Ethan', 'Brooks', 'J', 'Mr.',
  '1995-04-11', 'Male', 'single', '348 Walnut Street', 'Denver', 'CO', '80207', 'USA',
  '303-555-0107', 'ethan.brooks@example.org', 12, '106', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
-(107, UNHEX(REPLACE(UUID(), '-', '')), 'Maria', 'Chen', 'L', 'Ms.',
+(107, UNHEX(REPLACE(UUID(), '-', '')), 'Maria', 'Wong', 'L', 'Ms.',
  '1982-12-03', 'Female', 'divorced', '675 Spruce Way', 'Denver', 'CO', '80208', 'USA',
- '303-555-0108', 'maria.chen@example.org', 13, '107', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+ '303-555-0108', 'maria.wong@example.org', 13, '107', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (108, UNHEX(REPLACE(UUID(), '-', '')), 'Thomas', 'Walsh', 'P', 'Mr.',
  '1969-08-19', 'Male', 'married', '512 Hickory Drive', 'Denver', 'CO', '80209', 'USA',
  '303-555-0109', 'thomas.walsh@example.org', 10, '108', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
-(109, UNHEX(REPLACE(UUID(), '-', '')), 'Aisha', 'Johnson', 'K', 'Ms.',
+(109, UNHEX(REPLACE(UUID(), '-', '')), 'Aisha', 'Carter', 'K', 'Ms.',
  '1993-01-25', 'Female', 'single', '890 Willow Lane', 'Denver', 'CO', '80210', 'USA',
- '303-555-0110', 'aisha.johnson@example.org', 11, '109', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+ '303-555-0110', 'aisha.carter@example.org', 11, '109', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (110, UNHEX(REPLACE(UUID(), '-', '')), 'Brian', 'Foster', 'E', 'Mr.',
  '1980-05-12', 'Male', 'married', '23 Aspen Court', 'Denver', 'CO', '80211', 'USA',
  '303-555-0111', 'brian.foster@example.org', 12, '110', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
-(111, UNHEX(REPLACE(UUID(), '-', '')), 'Yuki', 'Tanaka', '', 'Ms.',
+(111, UNHEX(REPLACE(UUID(), '-', '')), 'Yuki', 'Sato', '', 'Ms.',
  '1997-08-03', 'Female', 'single', '67 Larimer Street', 'Denver', 'CO', '80212', 'USA',
- '303-555-0112', 'yuki.tanaka@example.org', 13, '111', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+ '303-555-0112', 'yuki.sato@example.org', 13, '111', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (112, UNHEX(REPLACE(UUID(), '-', '')), 'Omar', 'Hassan', 'A', 'Mr.',
  '1975-03-29', 'Male', 'married', '140 Colfax Ave', 'Denver', 'CO', '80213', 'USA',
  '303-555-0113', 'omar.hassan@example.org', 10, '112', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
@@ -315,9 +448,9 @@ INSERT INTO `patient_data` (
 (124, UNHEX(REPLACE(UUID(), '-', '')), 'Derek', 'Nguyen', 'T', 'Mr.',
  '1976-01-14', 'Male', 'divorced', '678 Gilpin Street', 'Denver', 'CO', '80225', 'USA',
  '303-555-0125', 'derek.nguyen@example.org', 10, '124', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
-(125, UNHEX(REPLACE(UUID(), '-', '')), 'Isabelle', 'Martin', 'A', 'Ms.',
+(125, UNHEX(REPLACE(UUID(), '-', '')), 'Isabelle', 'Vasquez', 'A', 'Ms.',
  '1998-11-03', 'Female', 'single', '342 Clarkson Street', 'Denver', 'CO', '80226', 'USA',
- '303-555-0126', 'isabelle.martin@example.org', 11, '125', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+ '303-555-0126', 'isabelle.vasquez@example.org', 11, '125', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (126, UNHEX(REPLACE(UUID(), '-', '')), 'Jerome', 'Washington', 'L', 'Mr.',
  '1960-06-20', 'Male', 'married', '119 Corona Street', 'Denver', 'CO', '80227', 'USA',
  '303-555-0127', 'jerome.washington@example.org', 12, '126', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
@@ -344,7 +477,7 @@ UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'sofia.r
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'david.kim'      WHERE pid = 102;
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'rachel.nguyen'  WHERE pid = 103;
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'carlos.mendez'  WHERE pid = 104;
-UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'linda.patel'    WHERE pid = 105;
+UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'linda.whitaker'    WHERE pid = 105;
 
 -- =============================================================================
 -- PATIENT PASSWORDS (ZoomDem0!)
@@ -358,7 +491,7 @@ VALUES
     (102, 'david.kim',      '$2y$12$y0OO0j0eanYZh7tZX61OdOd3Ax.FMF15kgcyiXEuWtdwFS0kA49tm', 1, 'david.kim'),
     (103, 'rachel.nguyen',  '$2y$12$DJHYhWP.Y/pl4OWBRKCOOuEsJwbSuPQ6xWtgjaO3ak0CajnBUdffu', 1, 'rachel.nguyen'),
     (104, 'carlos.mendez',  '$2y$12$x//cQ7uVV1QpGENhd3MQu.o/.EAfV6mVin2n1nj4/uv0YSgFFYSpW', 1, 'carlos.mendez'),
-    (105, 'linda.patel',    '$2y$12$8JnLYbEzToMoMYIQ1Lsm8ulVHXye46./se7QyURqhkS2MAswPxrAO', 1, 'linda.patel');
+    (105, 'linda.whitaker',    '$2y$12$8JnLYbEzToMoMYIQ1Lsm8ulVHXye46./se7QyURqhkS2MAswPxrAO', 1, 'linda.whitaker');
 
 -- =============================================================================
 -- APPOINTMENTS
@@ -872,7 +1005,7 @@ INSERT INTO `openemr_postcalendar_events` (
 -- 102   60   M   Thompson     CV-F     CAD s/p PCI 2024, on optimal medical therapy
 -- 103   41   F   Miller       PSY-S    GAD severe, sertraline monthly mgmt
 -- 104   53   M   OConnor      BH-PC    HTN + comorbid MDD on sertraline
--- 105   67   F   Rodriguez    GER      OA + osteoporosis + hypothyroid, caregiver-assist
+-- 105   67   F   Rodriguez    GER      OA + osteoporosis + hypothyroid, caregiver-assist  (Whitaker)
 -- 106   31   M   Miller       PSY-S    Adult ADHD, extended-release stimulant refill
 -- 107   43   F   Thompson     CV-F     Post-ablation SVT, stable follow-up
 -- 108   56   M   OConnor      CHR      T2DM + HTN + HLD          ← dashboard test pt
@@ -923,12 +1056,6 @@ UPDATE openemr_postcalendar_events
  WHERE pc_aid = '12'
    AND pc_catid != @zoom_new_patient_catid;
 
--- 3. Thompson (cardiology) established → Zoom Cardiology
-UPDATE openemr_postcalendar_events
-   SET pc_catid = @zoom_cardiology_catid
- WHERE pc_aid = '13'
-   AND pc_catid != @zoom_new_patient_catid;
-
 -- 4. BH-PC patients (PCP-managed depression / anxiety) → Zoom Behavioral Health
 UPDATE openemr_postcalendar_events
    SET pc_catid = @zoom_behavioral_health_catid
@@ -955,7 +1082,6 @@ UPDATE openemr_postcalendar_events
    AND pc_catid NOT IN (
        @zoom_new_patient_catid,
        @zoom_behavioral_health_catid,
-       @zoom_cardiology_catid,
        @zoom_mat_catid,
        @zoom_preventive_catid
    );
@@ -963,7 +1089,6 @@ UPDATE openemr_postcalendar_events
 -- Sync pc_title to match the new category so the calendar display matches
 UPDATE openemr_postcalendar_events SET pc_title = 'Zoom New Patient'       WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_new_patient_catid;
 UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Behavioral Health' WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_behavioral_health_catid;
-UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Cardiology'        WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_cardiology_catid;
 UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Chronic Care'      WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_chronic_care_catid;
 UPDATE openemr_postcalendar_events SET pc_title = 'Zoom MAT (Suboxone)'    WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_mat_catid;
 UPDATE openemr_postcalendar_events SET pc_title = 'Zoom Preventive'        WHERE pc_aid IN ('10','11','12','13') AND pc_catid = @zoom_preventive_catid;
@@ -1067,32 +1192,32 @@ INSERT INTO `form_encounter`
 VALUES
 (30001, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 100, 10, @zoom_chronic_care_catid,      1, 'Quarterly chronic care check-in — HTN, HLD',          10, 'AMB', 'VR', 'virtual'),
 (30002, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 101, 11, @zoom_behavioral_health_catid, 1, 'Postpartum depression follow-up — sertraline check',  10, 'AMB', 'VR', 'virtual'),
-(30003, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 102, 13, @zoom_cardiology_catid,        1, 'Cardiology follow-up — post-PCI med review',          10, 'AMB', 'VR', 'virtual'),
+(30003, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 102, 13, @zoom_chronic_care_catid,        1, 'Cardiology follow-up — post-PCI med review',          10, 'AMB', 'VR', 'virtual'),
 (30004, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 103, 12, @zoom_behavioral_health_catid, 1, 'Psychiatric med management — GAD',                    10, 'AMB', 'VR', 'virtual'),
 (30005, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 104, 10, @zoom_behavioral_health_catid, 1, 'Depression follow-up — sertraline refill',            10, 'AMB', 'VR', 'virtual'),
 (30006, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 105, 11, @zoom_chronic_care_catid,      1, 'Geriatric wellness video visit',                      10, 'AMB', 'VR', 'virtual'),
 (30007, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 106, 12, @zoom_behavioral_health_catid, 1, 'Adult ADHD med management — methylphenidate ER',      10, 'AMB', 'VR', 'virtual'),
-(30008, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 107, 13, @zoom_cardiology_catid,        1, 'Post-ablation follow-up — SVT',                       10, 'AMB', 'VR', 'virtual'),
+(30008, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 107, 13, @zoom_chronic_care_catid,        1, 'Post-ablation follow-up — SVT',                       10, 'AMB', 'VR', 'virtual'),
 (30009, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 108, 10, @zoom_chronic_care_catid,      1, 'Quarterly chronic care check-in — T2DM, HTN, HLD',    10, 'AMB', 'VR', 'virtual'),
 (30010, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 39 DAY), 109, 11, @zoom_behavioral_health_catid, 1, 'GAD follow-up — escitalopram tolerance',              10, 'AMB', 'VR', 'virtual'),
 (30011, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 40 DAY), 110, 12, @zoom_behavioral_health_catid, 1, 'MDD med management — bupropion augmentation',         10, 'AMB', 'VR', 'virtual'),
-(30012, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 41 DAY), 111, 13, @zoom_cardiology_catid,        1, 'Annual cardiology check-in — MVP',                    10, 'AMB', 'VR', 'virtual'),
+(30012, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 41 DAY), 111, 13, @zoom_chronic_care_catid,        1, 'Annual cardiology check-in — MVP',                    10, 'AMB', 'VR', 'virtual'),
 (30013, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 42 DAY), 112, 10, @zoom_chronic_care_catid,      1, 'HTN follow-up',                                       10, 'AMB', 'VR', 'virtual'),
 (30014, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 43 DAY), 113, 11, @zoom_chronic_care_catid,      1, 'Geriatric wellness video visit',                      10, 'AMB', 'VR', 'virtual'),
 (30015, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 44 DAY), 114, 12, @zoom_behavioral_health_catid, 1, 'Bipolar II med management — lamotrigine mood log',    10, 'AMB', 'VR', 'virtual'),
-(30016, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 45 DAY), 115, 13, @zoom_cardiology_catid,        1, 'Post-EP study follow-up — PSVT',                      10, 'AMB', 'VR', 'virtual'),
+(30016, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 45 DAY), 115, 13, @zoom_chronic_care_catid,        1, 'Post-EP study follow-up — PSVT',                      10, 'AMB', 'VR', 'virtual'),
 (30017, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 46 DAY), 116, 10, @zoom_chronic_care_catid,      1, 'Geriatric polypharmacy review',                       10, 'AMB', 'VR', 'virtual'),
 (30018, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 47 DAY), 117, 11, @zoom_chronic_care_catid,      1, 'Prediabetes + HLD lifestyle counseling',              10, 'AMB', 'VR', 'virtual'),
 (30019, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 48 DAY), 118, 12, @zoom_behavioral_health_catid, 1, 'MDD/GAD med management — duloxetine',                 10, 'AMB', 'VR', 'virtual'),
-(30020, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 49 DAY), 119, 13, @zoom_cardiology_catid,        1, 'Inappropriate sinus tachycardia follow-up',           10, 'AMB', 'VR', 'virtual'),
+(30020, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 49 DAY), 119, 13, @zoom_chronic_care_catid,        1, 'Inappropriate sinus tachycardia follow-up',           10, 'AMB', 'VR', 'virtual'),
 (30021, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 50 DAY), 120, 10, @zoom_mat_catid,               1, 'Buprenorphine maintenance — monthly check-in',        10, 'AMB', 'VR', 'virtual'),
 (30022, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 51 DAY), 121, 11, @zoom_preventive_catid,        1, 'Contraception consult + annual MH screening',         10, 'AMB', 'VR', 'virtual'),
 (30023, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 52 DAY), 122, 12, @zoom_behavioral_health_catid, 1, 'MDD + insomnia med management — mirtazapine',         10, 'AMB', 'VR', 'virtual'),
-(30024, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 53 DAY), 123, 13, @zoom_cardiology_catid,        1, 'PVC follow-up — reassurance visit',                   10, 'AMB', 'VR', 'virtual'),
+(30024, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 53 DAY), 123, 13, @zoom_chronic_care_catid,        1, 'PVC follow-up — reassurance visit',                   10, 'AMB', 'VR', 'virtual'),
 -- PID 124 (NEW persona) intentionally skipped — sparse fresh-chart demo target
 (30025, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 55 DAY), 125, 11, @zoom_preventive_catid,        1, 'Preventive video visit — smoking cessation',          10, 'AMB', 'VR', 'virtual'),
 (30026, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 56 DAY), 126, 12, @zoom_behavioral_health_catid, 1, 'MDD chronic + insomnia — med management',             10, 'AMB', 'VR', 'virtual'),
-(30027, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 57 DAY), 127, 13, @zoom_cardiology_catid,        1, 'Paroxysmal afib follow-up — anticoag review',         10, 'AMB', 'VR', 'virtual'),
+(30027, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 57 DAY), 127, 13, @zoom_chronic_care_catid,        1, 'Paroxysmal afib follow-up — anticoag review',         10, 'AMB', 'VR', 'virtual'),
 (30028, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 58 DAY), 128, 10, @zoom_preventive_catid,        1, 'Annual preventive video visit',                       10, 'AMB', 'VR', 'virtual'),
 (30029, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 59 DAY), 129, 11, @zoom_behavioral_health_catid, 1, 'Perimenopausal mood + HTN follow-up',                 10, 'AMB', 'VR', 'virtual');
 
@@ -1818,6 +1943,7 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
        pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
   FROM patient_data pd
  WHERE pd.pid BETWEEN 100 AND 129;
+
 
 SET FOREIGN_KEY_CHECKS = 1;
 

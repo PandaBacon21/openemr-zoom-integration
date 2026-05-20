@@ -24,11 +24,14 @@ DELETE FROM openemr_postcalendar_events WHERE pc_aid IN ('10','11','12','13');
 DELETE FROM patient_data WHERE pid BETWEEN 100 AND 129;
 DELETE FROM openemr_postcalendar_categories
   WHERE pc_catname IN ('zoom-telehealth','new-patient-zoom','new-patient-in-person','phone-consult','in-person');
-DELETE FROM users WHERE id IN (10,11,12,13,20,21,30,31);
-DELETE FROM users_secure WHERE id IN (10,11,12,13,20,21,30,31);
-DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 19;
-DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong');
-DELETE FROM facility WHERE id = 1;
+DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
+DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
+DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 36;
+DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong',
+                                  'jonathan.nelson','priya.patel','michael.chen','marcus.eriksson','yuki.tanaka','ethan.garcia',
+                                  'lucas.johnson','dave.anderson','joe.smith','lisa.patel','hiroshi.tanaka','david.thompson',
+                                  'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis');
+DELETE FROM facility WHERE id IN (1, 2, 4, 5);
 DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 129;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';

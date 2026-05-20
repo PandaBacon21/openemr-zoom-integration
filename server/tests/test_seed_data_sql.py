@@ -79,7 +79,7 @@ def test_seed_data_includes_patient_portal_credentials_for_demo_patients():
         "david.kim",
         "rachel.nguyen",
         "carlos.mendez",
-        "linda.patel",
+        "linda.whitaker",
     ]:
         assert f"'{portal_username}'" in text
 
