@@ -88,7 +88,18 @@ INSERT INTO `insurance_companies` (id, uuid, name, cms_id, ins_type_code, inacti
 (204, UNHEX(REPLACE(UUID(), '-', '')), 'Kaiser Permanente Colorado',  '93079', 19, 0),
 (205, UNHEX(REPLACE(UUID(), '-', '')), 'Medicare',                    '00580',  2, 0),
 (206, UNHEX(REPLACE(UUID(), '-', '')), 'Medicaid Colorado',           '00781',  3, 0),
-(207, UNHEX(REPLACE(UUID(), '-', '')), 'Tricare',                     '99726',  5, 0);
+(207, UNHEX(REPLACE(UUID(), '-', '')), 'Tricare',                     '99726',  5, 0),
+-- Regional BCBS / Kaiser plans for the 4-facility footprint
+(208, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Massachusetts',          '20208',  6, 0),
+(209, UNHEX(REPLACE(UUID(), '-', '')), 'Empire BCBS New York',        '21209',  6, 0),
+(210, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Highmark Pennsylvania',  '23210',  6, 0),
+(211, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Georgia',                '32211',  6, 0),
+(212, UNHEX(REPLACE(UUID(), '-', '')), 'Florida Blue (BCBS Florida)', '34212',  6, 0),
+(213, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS North Carolina',         '37213',  6, 0),
+(214, UNHEX(REPLACE(UUID(), '-', '')), 'Anthem Blue Cross California','43214',  6, 0),
+(215, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Kansas',                 '54215',  6, 0),
+(216, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Texas',                  '47216',  6, 0),
+(217, UNHEX(REPLACE(UUID(), '-', '')), 'BCBS Illinois',               '51217',  6, 0);
 
 INSERT INTO `addresses` (id, line1, city, state, zip, country, foreign_id) VALUES
 (200, '151 Farmington Avenue',  'Hartford',     'CT', '06156', 'USA', 200),
@@ -97,6 +108,16 @@ INSERT INTO `addresses` (id, line1, city, state, zip, country, foreign_id) VALUE
 (203, '900 Cottage Grove Rd',   'Bloomfield',   'CT', '06002', 'USA', 203),
 (204, '10350 E Dakota Ave',     'Denver',       'CO', '80231', 'USA', 204),
 (205, '7500 Security Blvd',     'Baltimore',    'MD', '21244', 'USA', 205),
+(208, '101 Huntington Avenue',  'Boston',       'MA', '02199', 'USA', 208),
+(209, '11 W 42nd Street',       'New York',     'NY', '10036', 'USA', 209),
+(210, 'Fifth Avenue Place',     'Pittsburgh',   'PA', '15222', 'USA', 210),
+(211, '3350 Peachtree Road',    'Atlanta',      'GA', '30326', 'USA', 211),
+(212, '4800 Deerwood Campus',   'Jacksonville', 'FL', '32246', 'USA', 212),
+(213, '4615 University Drive',  'Durham',       'NC', '27707', 'USA', 213),
+(214, '21555 Oxnard Street',    'Woodland Hills','CA','91367', 'USA', 214),
+(215, '1133 Topeka Boulevard',  'Topeka',       'KS', '66629', 'USA', 215),
+(216, '1001 E Lookout Drive',   'Richardson',   'TX', '75082', 'USA', 216),
+(217, '300 E Randolph Street',  'Chicago',      'IL', '60601', 'USA', 217),
 (206, '303 E 17th Avenue',      'Denver',       'CO', '80203', 'USA', 206),
 (207, '16401 East Centretech',  'Aurora',       'CO', '80011', 'USA', 207);
 
@@ -983,6 +1004,37 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
  WHERE pd.pid BETWEEN 100 AND 150;
 
 -- =============================================================================
+-- REGIONAL INSURANCE REASSIGNMENT — override the per-PID CASE assignments
+-- with payers that match each patient's NEW facility region.
+-- =============================================================================
+
+-- East coast regional BCBS
+UPDATE insurance_data SET provider=208, plan_name='BCBS Massachusetts HMO Blue'  WHERE pid IN (100, 135, 140);
+UPDATE insurance_data SET provider=209, plan_name='Empire BCBS NY PPO'           WHERE pid IN (101, 103, 130, 141);
+UPDATE insurance_data SET provider=210, plan_name='Highmark BCBS PA PPO'         WHERE pid IN (106, 109);
+UPDATE insurance_data SET provider=211, plan_name='BCBS GA Anthem HMO'           WHERE pid IN (114, 132);
+UPDATE insurance_data SET provider=212, plan_name='Florida Blue BlueCare HMO'    WHERE pid IN (118, 121, 136, 138);
+UPDATE insurance_data SET provider=213, plan_name='BCBS NC Blue Advantage'       WHERE pid IN (123, 129, 134);
+
+-- West coast regional
+UPDATE insurance_data SET provider=214, plan_name='Anthem Blue Cross CA Pathway' WHERE pid IN (102, 107, 111, 147);
+
+-- Central regional
+UPDATE insurance_data SET provider=216, plan_name='BCBS Texas Blue Choice PPO'   WHERE pid = 149;
+UPDATE insurance_data SET provider=217, plan_name='BCBS Illinois Blue Cross PPO' WHERE pid = 150;
+
+-- Mountain (CO/UT) — BCBS CO + Kaiser CO + Medicare
+UPDATE insurance_data SET provider=201, plan_name='BCBS CO Anthem HMO'           WHERE pid IN (104, 113, 131, 144);
+UPDATE insurance_data SET provider=204, plan_name='Kaiser Permanente Colorado'   WHERE pid = 122;
+UPDATE insurance_data SET provider=205, plan_name='Medicare Part B + Medigap'    WHERE pid IN (105, 116, 126, 142, 146);
+UPDATE insurance_data SET provider=206, plan_name='Health First Colorado'        WHERE pid = 120;
+
+-- National commercial (Aetna / UHC / Cigna) — DC, MO, WA, OR + a few NC/GA/FL/PA
+UPDATE insurance_data SET provider=200, plan_name='Aetna Choice POS II'          WHERE pid IN (110, 124, 137, 139, 143, 145, 148);
+UPDATE insurance_data SET provider=202, plan_name='UHC Choice Plus'              WHERE pid IN (108, 115, 119, 128, 133);
+UPDATE insurance_data SET provider=203, plan_name='Cigna LocalPlus'              WHERE pid IN (112, 117, 125, 127);
+
+-- =============================================================================
 -- CLINICAL DATA FOR NEW PATIENTS (Sprint 12 / S12-28e)
 -- Persona-appropriate problems, medications, prescriptions, vitals, history.
 -- NEW persona patients (134, 147, 148) intentionally skipped — sparse charts.
@@ -992,54 +1044,54 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
 INSERT INTO `lists`
     (uuid, type, subtype, title, diagnosis, pid, date, begdate, activity, user, outcome)
 VALUES
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Obsessive-compulsive disorder',         'ICD10:F42.2',  130, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'marcus.eriksson',  0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Post-traumatic stress disorder',        'ICD10:F43.10', 131, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'priya.patel',      0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Alcohol dependence, in remission',      'ICD10:F10.21', 132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'lucas.johnson',    0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Opioid dependence, in remission',       'ICD10:F11.21', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'lucas.johnson',    0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'michael.chen',     0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'michael.chen',     0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'ethan.garcia',     0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'ethan.garcia',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Obsessive-compulsive disorder',         'ICD10:F42.2',  130, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'meriksson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Post-traumatic stress disorder',        'ICD10:F43.10', 131, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'ppatel',      0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Alcohol dependence, in remission',      'ICD10:F10.21', 132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'ljohnson',    0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Opioid dependence, in remission',       'ICD10:F11.21', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'ljohnson',    0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'mchen',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'mchen',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'egarcia',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'egarcia',     0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, single episode, mild', 'ICD10:F32.0', 139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'amartin', 0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lisa.patel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lisa.patel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lisa.patel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',              'ICD10:M81.0',  142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jonathan.nelson',  0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'hiroshi.tanaka',   0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                        'ICD10:E03.9',  146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'hiroshi.tanaka',   0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 146, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'hiroshi.tanaka',   0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'joe.smith',        0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'joe.smith',        0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'joe.smith',        0);
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',              'ICD10:M81.0',  142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jnelson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'htanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                        'ICD10:E03.9',  146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'htanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 146, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'htanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'jsmith',        0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'jsmith',        0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jsmith',        0);
 
 -- Medications for new patients (with RxNorm codes)
 INSERT INTO `lists`
     (uuid, type, subtype, title, pid, date, begdate, activity, user, comments)
 VALUES
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 200mg tab',          130, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'marcus.eriksson',  'rxnorm:312941 — 1 tab PO daily (OCD)'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          131, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'priya.patel',      'rxnorm:313990 — 1 tab PO daily (PTSD)'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Prazosin 2mg cap',              131, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'priya.patel',      'rxnorm:198148 — 1 cap PO at bedtime (PTSD nightmares)'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Naltrexone 50mg tab',           132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'lucas.johnson',    'rxnorm:798832 — 1 tab PO daily (AUD MAT)'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Buprenorphine/Naloxone 8mg/2mg SL film', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'lucas.johnson', 'rxnorm:1010600 — 1 film SL daily (Suboxone; OUD MAT; X-DEA)'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'michael.chen',     'rxnorm:860975 — 1 tab PO twice daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 40mg tab',         135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'michael.chen',     'rxnorm:617312 — 1 tab PO at bedtime'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'ethan.garcia',     'rxnorm:314077 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'ethan.garcia',     'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 200mg tab',          130, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'meriksson',  'rxnorm:312941 — 1 tab PO daily (OCD)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          131, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'ppatel',      'rxnorm:313990 — 1 tab PO daily (PTSD)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Prazosin 2mg cap',              131, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'ppatel',      'rxnorm:198148 — 1 cap PO at bedtime (PTSD nightmares)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Naltrexone 50mg tab',           132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'ljohnson',    'rxnorm:798832 — 1 tab PO daily (AUD MAT)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Buprenorphine/Naloxone 8mg/2mg SL film', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'ljohnson', 'rxnorm:1010600 — 1 film SL daily (Suboxone; OUD MAT; X-DEA)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'mchen',     'rxnorm:860975 — 1 tab PO twice daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 40mg tab',         135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'mchen',     'rxnorm:617312 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'egarcia',     'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'egarcia',     'rxnorm:617314 — 1 tab PO at bedtime'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          'rxnorm:321988 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       'rxnorm:314076 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lisa.patel',       'rxnorm:617314 — 1 tab PO at bedtime'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lisa.patel',       'rxnorm:314076 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       'rxnorm:197910 — 1 tab PO weekly'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lisa.patel',       'rxnorm:198440 — 1-2 tabs PO every 6 hours PRN for OA'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jonathan.nelson',  'rxnorm:321988 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'hiroshi.tanaka',   'rxnorm:314076 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 75mcg tab',       146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'hiroshi.tanaka',   'rxnorm:966222 — 1 tab PO daily on empty stomach'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'joe.smith',        'rxnorm:314077 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'joe.smith',        'rxnorm:617314 — 1 tab PO at bedtime'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'joe.smith',        'rxnorm:860975 — 1 tab PO twice daily');
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lpatel',       'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lpatel',       'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       'rxnorm:197910 — 1 tab PO weekly'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lpatel',       'rxnorm:198440 — 1-2 tabs PO every 6 hours PRN for OA'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jnelson',  'rxnorm:321988 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'htanaka',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 75mcg tab',       146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'htanaka',   'rxnorm:966222 — 1 tab PO daily on empty stomach'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'jsmith',        'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'jsmith',        'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jsmith',        'rxnorm:860975 — 1 tab PO twice daily');
 
 -- Companion lists_medication sidecar for new meds
 INSERT INTO `lists_medication`
@@ -1053,24 +1105,24 @@ INSERT INTO `form_vitals`
     (uuid, date, pid, user, groupname, authorized, activity,
      bps, bpd, weight, height, BMI, temperature, pulse, respiration, oxygen_saturation)
 VALUES
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 21 DAY), 130, 'marcus.eriksson',  'Default', 1, 1, '124', '78', 178.0, 70.0, 25.5, 98.6, 76, 16, 98.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 22 DAY), 131, 'priya.patel',      'Default', 1, 1, '116', '74', 138.0, 64.0, 23.7, 98.6, 78, 16, 99.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 23 DAY), 132, 'lucas.johnson',    'Default', 1, 1, '128', '82', 195.0, 71.0, 27.2, 98.4, 78, 16, 98.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 24 DAY), 133, 'lucas.johnson',    'Default', 1, 1, '118', '74', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 25 DAY), 135, 'michael.chen',     'Default', 1, 1, '140', '88', 168.0, 64.0, 28.8, 98.4, 74, 16, 97.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 26 DAY), 136, 'ethan.garcia',     'Default', 1, 1, '142', '90', 198.0, 69.0, 29.2, 98.4, 76, 16, 97.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 27 DAY), 137, 'ethan.garcia',     'Default', 1, 1, '112', '70', 125.0, 64.0, 21.5, 98.6, 68, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 21 DAY), 130, 'meriksson',  'Default', 1, 1, '124', '78', 178.0, 70.0, 25.5, 98.6, 76, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 22 DAY), 131, 'ppatel',      'Default', 1, 1, '116', '74', 138.0, 64.0, 23.7, 98.6, 78, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 23 DAY), 132, 'ljohnson',    'Default', 1, 1, '128', '82', 195.0, 71.0, 27.2, 98.4, 78, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 24 DAY), 133, 'ljohnson',    'Default', 1, 1, '118', '74', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 25 DAY), 135, 'mchen',     'Default', 1, 1, '140', '88', 168.0, 64.0, 28.8, 98.4, 74, 16, 97.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 26 DAY), 136, 'egarcia',     'Default', 1, 1, '142', '90', 198.0, 69.0, 29.2, 98.4, 76, 16, 97.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 27 DAY), 137, 'egarcia',     'Default', 1, 1, '112', '70', 125.0, 64.0, 21.5, 98.6, 68, 14, 100.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 28 DAY), 138, 'amartin',          'Default', 1, 1, '118', '74', 175.0, 72.0, 23.8, 98.6, 70, 14, 100.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 29 DAY), 139, 'amartin',          'Default', 1, 1, '120', '76', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 140, 'amartin',          'Default', 1, 1, '110', '70', 130.0, 65.0, 21.6, 98.6, 68, 14, 100.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 'lisa.patel',       'Default', 1, 1, '136', '86', 190.0, 71.0, 26.5, 98.4, 74, 16, 98.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 'lisa.patel',       'Default', 1, 1, '142', '84', 145.0, 62.0, 26.5, 98.2, 70, 16, 96.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 'lisa.patel',       'Default', 1, 1, '118', '76', 165.0, 70.0, 23.7, 98.6, 72, 14, 100.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 'jonathan.nelson',  'Default', 1, 1, '116', '74', 138.0, 65.0, 23.0, 98.6, 76, 16, 99.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 'hiroshi.tanaka',   'Default', 1, 1, '114', '72', 175.0, 72.0, 23.7, 98.6, 64, 14, 100.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 'hiroshi.tanaka',   'Default', 1, 1, '148', '84', 152.0, 63.0, 26.9, 98.0, 68, 16, 96.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 149, 'joe.smith',        'Default', 1, 1, '116', '74', 170.0, 72.0, 23.1, 98.6, 70, 14, 99.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 150, 'joe.smith',        'Default', 1, 1, '138', '86', 158.0, 64.0, 27.1, 98.4, 74, 16, 97.00);
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 'lpatel',       'Default', 1, 1, '136', '86', 190.0, 71.0, 26.5, 98.4, 74, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 'lpatel',       'Default', 1, 1, '142', '84', 145.0, 62.0, 26.5, 98.2, 70, 16, 96.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 'lpatel',       'Default', 1, 1, '118', '76', 165.0, 70.0, 23.7, 98.6, 72, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 'jnelson',  'Default', 1, 1, '116', '74', 138.0, 65.0, 23.0, 98.6, 76, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 'htanaka',   'Default', 1, 1, '114', '72', 175.0, 72.0, 23.7, 98.6, 64, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 'htanaka',   'Default', 1, 1, '148', '84', 152.0, 63.0, 26.9, 98.0, 68, 16, 96.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 149, 'jsmith',        'Default', 1, 1, '116', '74', 170.0, 72.0, 23.1, 98.6, 70, 14, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 150, 'jsmith',        'Default', 1, 1, '138', '86', 158.0, 64.0, 27.1, 98.4, 74, 16, 97.00);
 
 -- Forms registry rows for new vitals
 INSERT INTO `forms`

@@ -29,6 +29,11 @@ ALTER TABLE openemr_postcalendar_events MODIFY pc_website VARCHAR(1024);
 -- Hide SQL debug modal pop up screen
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'sql_string_no_show_screen';
 
--- Disable provider availability check 
+-- Disable provider availability check
 UPDATE globals SET gl_value = '0' WHERE gl_name = 'schedule_limit';
+
+-- Require facility selection on login so the calendar/provider lists scope to
+-- the user's facility from the start (instead of showing all providers across
+-- all facilities until the user picks one from the calendar dropdown).
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'login_into_facility';
 

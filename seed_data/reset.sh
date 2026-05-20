@@ -26,19 +26,22 @@ DELETE FROM openemr_postcalendar_categories
   WHERE pc_catname IN ('zoom-telehealth','new-patient-zoom','new-patient-in-person','phone-consult','in-person');
 DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
 DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
+DELETE FROM gacl_groups_aro_map WHERE aro_id BETWEEN 12 AND 36;
 DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 36;
 DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong',
                                   'jonathan.nelson','priya.patel','michael.chen','marcus.eriksson','yuki.tanaka','ethan.garcia',
                                   'lucas.johnson','dave.anderson','joe.smith','lisa.patel','hiroshi.tanaka','david.thompson',
                                   'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis');
-DELETE FROM facility WHERE id IN (1, 2, 4, 5);
+DELETE FROM facility WHERE id IN (1, 2, 3, 4, 5);
 DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 150;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
 
 -- Sprint 12 master data
-DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 207;
-DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 207;
+DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 220 OR id BETWEEN 300 AND 303;
+DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 220;
+DELETE FROM pharmacies WHERE id BETWEEN 1 AND 4;
+DELETE FROM users_facility WHERE tablename = 'users' AND table_id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
 
 -- Sprint 12 clinical data (must run before patient_data delete; FK_CHECKS=0
 -- means order is for clarity rather than constraint enforcement, but the
@@ -66,7 +69,10 @@ DELETE FROM form_clinical_notes WHERE pid BETWEEN 100 AND 150;
 UPDATE sequences SET id = COALESCE((SELECT MAX(encounter) FROM form_encounter), 1);
 
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'use_email_for_portal_username';
-UPDATE facility SET inactive = 0, name = 'Your Clinic Name Here' WHERE id = 3;
+-- Recreate the OpenEMR default facility (id=3) so the post-reset state matches
+-- a fresh OpenEMR install (default facility id=3 named 'Your Clinic Name Here').
+INSERT IGNORE INTO facility (id, name, color, inactive, service_location, billing_location, accepts_assignment, primary_business_entity)
+VALUES (3, 'Your Clinic Name Here', '', 0, 1, 1, 1, 0);
 UPDATE users SET facility_id = 3 WHERE id = 1;
 
 SET FOREIGN_KEY_CHECKS = 1;

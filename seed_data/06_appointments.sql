@@ -590,7 +590,8 @@ DELETE FROM openemr_postcalendar_categories
 UPDATE openemr_postcalendar_events e
 JOIN patient_data pd ON pd.pid = CAST(e.pc_pid AS UNSIGNED)
    SET e.pc_aid = CAST(pd.providerID AS CHAR)
- WHERE CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+ WHERE e.pc_pid REGEXP '^[0-9]+$'
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
 
 -- New appointments for the 21 new patients (3 each, spread across days 1-14)
 INSERT INTO `openemr_postcalendar_events` (
@@ -689,6 +690,20 @@ INSERT INTO `openemr_postcalendar_events` (
 (@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'HTN + HLD bilingual check-in', @day7, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'T2DM quarterly check-in', @day11, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'Med refill review', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
+
+-- =============================================================================
+-- f) pc_facility + pc_billing_location retarget — every row above was inserted
+-- with pc_facility=1 hardcoded. Set it to the provider's home facility so
+-- the calendar's facility filter actually scopes correctly. pc_billing_location
+-- matches the same facility (visit billing flows through the visit's facility).
+-- =============================================================================
+
+UPDATE openemr_postcalendar_events e
+JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)
+   SET e.pc_facility = u.facility_id,
+       e.pc_billing_location = u.facility_id
+ WHERE e.pc_pid REGEXP '^[0-9]+$'
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
