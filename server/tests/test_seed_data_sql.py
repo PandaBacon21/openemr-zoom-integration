@@ -4,9 +4,12 @@ import re
 
 def _demo_sql_text() -> str:
     repo_root = Path(__file__).resolve().parents[2]
-    sql_path = repo_root / "seed_data" / "demo_data.sql"
-    assert sql_path.exists(), f"Missing seed SQL file: {sql_path}"
-    return sql_path.read_text(encoding="utf-8")
+    seed_dir = repo_root / "seed_data"
+    # Seed is split into ordered 0N_*.sql files; concatenate them in order to
+    # match what seed.sh feeds to mariadb.
+    sql_paths = sorted(seed_dir.glob("0[1-7]_*.sql"))
+    assert sql_paths, f"No 0N_*.sql files found in {seed_dir}"
+    return "\n".join(p.read_text(encoding="utf-8") for p in sql_paths)
 
 
 def _reset_script_text() -> str:
@@ -106,7 +109,7 @@ def test_seed_script_loads_demo_sql_without_email_override():
 
     assert "SEED_EMAIL" not in text
     assert "SEED_EMAIL_PLACEHOLDER" not in text
-    assert "demo_data.sql" in text
+    assert "0[1-7]_*.sql" in text
     assert "docker exec -i" in text
 
 
