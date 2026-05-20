@@ -89,7 +89,7 @@ def test_seed_data_uses_reserved_patient_email_addresses():
     patient_values = _patient_insert_values(text)
     emails = re.findall(r"'([^']+@[^']+)'", patient_values)
 
-    assert len(emails) == 30
+    assert len(emails) == 51
     assert all(email.endswith("@example.org") for email in emails)
 
 

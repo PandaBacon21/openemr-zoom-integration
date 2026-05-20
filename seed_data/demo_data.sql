@@ -36,8 +36,6 @@ UPDATE globals SET gl_value = '0' WHERE gl_name = 'schedule_limit';
 -- FACILITY
 -- =============================================================================
 
-UPDATE `facility` SET `inactive` = 1, `name` = 'Default Facility (Unused)' WHERE `id` = 3;
-
 -- Four facilities, one per US time zone (Mountain/Eastern/Pacific/Central).
 -- Each facility hosts providers + 1 nurse + 1 MA per the S12-17 matrix.
 INSERT INTO `facility` (
@@ -48,23 +46,27 @@ INSERT INTO `facility` (
     `primary_business_entity`, `inactive`
 ) VALUES
 (1, UNHEX(REPLACE(UUID(), '-', '')),
- 'Zoomly Medical Center',         '303-555-0100',
+ 'Zoomly Medical Center - CO',         '303-555-0100',
  '100 Health Plaza',     'Denver',        'CO', '80201', 'USA',
  '1234567890', '#0b5cff', 1, 1, 1, 1, 0),
 (2, UNHEX(REPLACE(UUID(), '-', '')),
- 'Zoomly Medical Center East',    '617-555-0100',
+ 'Zoomly Medical Center - MA',    '617-555-0100',
  '25 Cambridge Street',  'Boston',        'MA', '02114', 'USA',
  '1234567891', '#00053d', 1, 1, 1, 1, 0),
 (4, UNHEX(REPLACE(UUID(), '-', '')),
- 'Zoomly Medical Center West',    '415-555-0100',
+ 'Zoomly Medical Center - CA',    '415-555-0100',
  '200 Parnassus Avenue', 'San Francisco', 'CA', '94143', 'USA',
  '1234567892', '#b4d0f8', 1, 1, 1, 1, 0),
 (5, UNHEX(REPLACE(UUID(), '-', '')),
- 'Zoomly Medical Center Central', '816-555-0100',
+ 'Zoomly Medical Center - MO', '816-555-0100',
  '456 Truman Road',      'Kansas City',   'MO', '64106', 'USA',
  '1234567893', '#f7f2e3', 1, 1, 1, 1, 0);
 
 UPDATE `users` SET `facility_id` = 1 WHERE `id` = 1;
+
+-- Remove the OpenEMR default facility (id=3) entirely. Nothing references it
+-- after admin moves to facility 1.
+DELETE FROM `facility` WHERE `id` = 3;
 
 -- =============================================================================
 -- PROVIDERS — 17 total, all Primary Care or Behavioral Health
@@ -462,7 +464,122 @@ INSERT INTO `patient_data` (
  '303-555-0129', 'tyler.hughes@example.org', 10, '128', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
 (129, UNHEX(REPLACE(UUID(), '-', '')), 'Amara', 'Diallo', 'S', 'Ms.',
  '1984-07-07', 'Female', 'single', '261 Humboldt Street', 'Denver', 'CO', '80230', 'USA',
- '303-555-0130', 'amara.diallo@example.org', 11, '129', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW());
+ '303-555-0130', 'amara.diallo@example.org', 11, '129', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+-- =============================================================================
+-- NEW PATIENTS (Sprint 12 / S12-28) — PIDs 130-150
+-- 21 new patients to bring totals to 3 patients per provider × 17 providers = 51.
+-- Each row already carries the patient's destination facility region in
+-- (street, city, state, postal_code, phone_cell) and target providerID.
+-- =============================================================================
+-- East (13 new patients)
+(130, UNHEX(REPLACE(UUID(), '-', '')), 'Tom',        'Bell',     '',  'Mr.',
+ '1985-05-12', 'Male',   'married',  '220 Madison Avenue',     'New York',     'NY', '10016', 'USA',
+ '212-555-0130', 'tom.bell@example.org',           17, '130', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(132, UNHEX(REPLACE(UUID(), '-', '')), 'Bryan',      'Roberts',  'D', 'Mr.',
+ '1978-03-22', 'Male',   'divorced', '220 Peachtree Street',   'Atlanta',      'GA', '30303', 'USA',
+ '404-555-0132', 'bryan.roberts@example.org',      22, '132', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(133, UNHEX(REPLACE(UUID(), '-', '')), 'Ashley',     'Cohen',    'M', 'Ms.',
+ '1982-11-04', 'Female', 'single',   '200 Spring Garden Street','Philadelphia', 'PA', '19130', 'USA',
+ '215-555-0133', 'ashley.cohen@example.org',       22, '133', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(134, UNHEX(REPLACE(UUID(), '-', '')), 'Marcus',     'Hill',     'J', 'Mr.',
+ '1971-07-15', 'Male',   'married',  '250 N Tryon Street',     'Charlotte',    'NC', '28202', 'USA',
+ '704-555-0134', 'marcus.hill@example.org',        16, '134', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(135, UNHEX(REPLACE(UUID(), '-', '')), 'Linda',      'Kapoor',   'A', 'Mrs.',
+ '1968-09-28', 'Female', 'married',  '412 Commonwealth Avenue','Boston',       'MA', '02215', 'USA',
+ '617-555-0135', 'linda.kapoor@example.org',       16, '135', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(136, UNHEX(REPLACE(UUID(), '-', '')), 'Roberto',    'Cruz',     'A', 'Mr.',
+ '1965-04-10', 'Male',   'married',  '175 Biscayne Boulevard', 'Miami',        'FL', '33132', 'USA',
+ '305-555-0136', 'roberto.cruz@example.org',       19, '136', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(137, UNHEX(REPLACE(UUID(), '-', '')), 'Sasha',      'Yang',     'L', 'Ms.',
+ '1996-12-03', 'Female', 'single',   '89 Lexington Avenue',    'New York',     'NY', '10010', 'USA',
+ '212-555-0137', 'sasha.yang@example.org',         19, '137', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(138, UNHEX(REPLACE(UUID(), '-', '')), 'Tyler',      'Murphy',   'B', 'Mr.',
+ '1992-06-25', 'Male',   'single',   '500 N Florida Avenue',   'Tampa',        'FL', '33602', 'USA',
+ '813-555-0138', 'tyler.murphy@example.org',       21, '138', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(139, UNHEX(REPLACE(UUID(), '-', '')), 'Christina',  'Knight',   'R', 'Ms.',
+ '1988-02-14', 'Female', 'married',  '1200 K Street NW',       'Washington',   'DC', '20005', 'USA',
+ '202-555-0139', 'christina.knight@example.org',   21, '139', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(140, UNHEX(REPLACE(UUID(), '-', '')), 'Hannah',     'Kelly',    'M', 'Ms.',
+ '1994-10-18', 'Female', 'single',   '510 Boylston Street',    'Boston',       'MA', '02116', 'USA',
+ '617-555-0140', 'hannah.kelly@example.org',       21, '140', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(141, UNHEX(REPLACE(UUID(), '-', '')), 'Frank',      'Burke',    'P', 'Mr.',
+ '1972-01-08', 'Male',   'married',  '56 Broadway',            'New York',     'NY', '10004', 'USA',
+ '212-555-0141', 'frank.burke@example.org',        25, '141', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(142, UNHEX(REPLACE(UUID(), '-', '')), 'Margaret',   'Sullivan', 'E', 'Mrs.',
+ '1955-11-30', 'Female', 'widowed',  '1500 Market Street',     'Philadelphia', 'PA', '19102', 'USA',
+ '215-555-0142', 'margaret.sullivan@example.org',  25, '142', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(143, UNHEX(REPLACE(UUID(), '-', '')), 'Devon',      'Banks',    'T', 'Mr.',
+ '1993-07-22', 'Male',   'single',   '875 Spring Street',      'Atlanta',      'GA', '30308', 'USA',
+ '404-555-0143', 'devon.banks@example.org',        25, '143', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+-- Mountain (4 new patients)
+(131, UNHEX(REPLACE(UUID(), '-', '')), 'Janelle',    'Cho',      'S', 'Ms.',
+ '1990-08-19', 'Female', 'single',   '1200 Pearl Street',      'Boulder',      'CO', '80302', 'USA',
+ '720-555-0131', 'janelle.cho@example.org',        15, '131', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(144, UNHEX(REPLACE(UUID(), '-', '')), 'Mia',        'Davies',   'K', 'Ms.',
+ '1991-05-09', 'Female', 'married',  '88 Walnut Street',       'Boulder',      'CO', '80302', 'USA',
+ '720-555-0144', 'mia.davies@example.org',         14, '144', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(145, UNHEX(REPLACE(UUID(), '-', '')), 'Jordan',     'Hayes',    'L', 'Mr.',
+ '1995-09-14', 'Male',   'single',   '350 N Tejon Street',     'Colorado Springs','CO','80903','USA',
+ '719-555-0145', 'jordan.hayes@example.org',       26, '145', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(146, UNHEX(REPLACE(UUID(), '-', '')), 'Beatrice',   'Reed',     'M', 'Mrs.',
+ '1957-03-26', 'Female', 'widowed',  '250 W South Temple',     'Salt Lake City','UT','84111','USA',
+ '801-555-0146', 'beatrice.reed@example.org',      26, '146', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+-- West (1 new patient)
+(147, UNHEX(REPLACE(UUID(), '-', '')), 'Caleb',      'Cole',     'A', 'Mr.',
+ '1980-08-05', 'Male',   'married',  '450 N Vermont Avenue',   'Los Angeles',  'CA', '90027', 'USA',
+ '213-555-0147', 'caleb.cole@example.org',         23, '147', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+-- Central (3 new patients)
+(148, UNHEX(REPLACE(UUID(), '-', '')), 'Olivia',     'Davis',    'R', 'Ms.',
+ '1985-12-21', 'Female', 'married',  '600 Broadway Street',    'Kansas City',  'MO', '64105', 'USA',
+ '816-555-0148', 'olivia.davis@example.org',       24, '148', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(149, UNHEX(REPLACE(UUID(), '-', '')), 'Marcus',     'Curtis',   'J', 'Mr.',
+ '1997-04-17', 'Male',   'single',   '1500 Main Street',       'Dallas',       'TX', '75201', 'USA',
+ '214-555-0149', 'marcus.curtis@example.org',      24, '149', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW()),
+(150, UNHEX(REPLACE(UUID(), '-', '')), 'Patricia',   'Diaz',     'L', 'Mrs.',
+ '1970-10-11', 'Female', 'married',  '220 N State Street',     'Chicago',      'IL', '60601', 'USA',
+ '312-555-0150', 'patricia.diaz@example.org',      24, '150', 'YES', 'YES', 'YES', 'portal', 'YES', 'YES', 'English', '', NOW());
+
+-- =============================================================================
+-- S12-28 — Patient address/phone/providerID redistribution for existing 30
+-- Each patient moves from Denver to their assigned facility's region. Phone
+-- area code matches new city; providerID points to the patient's new provider.
+-- =============================================================================
+
+-- East — Boston / NYC / Philadelphia / DC / Atlanta / Miami / Tampa / Charlotte
+UPDATE patient_data SET street='250 Beacon Street',       city='Boston',       state='MA', postal_code='02116', phone_cell='617-555-0100', providerID=10 WHERE pid=100;
+UPDATE patient_data SET street='175 5th Avenue',          city='New York',     state='NY', postal_code='10010', phone_cell='212-555-0101', providerID=18 WHERE pid=101;
+UPDATE patient_data SET street='412 East 14th Street',    city='New York',     state='NY', postal_code='10009', phone_cell='212-555-0103', providerID=12 WHERE pid=103;
+UPDATE patient_data SET street='320 Chestnut Street',     city='Philadelphia', state='PA', postal_code='19106', phone_cell='215-555-0106', providerID=12 WHERE pid=106;
+UPDATE patient_data SET street='88 Newbury Street',       city='Boston',       state='MA', postal_code='02116', phone_cell='617-555-0108', providerID=10 WHERE pid=108;
+UPDATE patient_data SET street='850 Walnut Street',       city='Philadelphia', state='PA', postal_code='19107', phone_cell='215-555-0109', providerID=18 WHERE pid=109;
+UPDATE patient_data SET street='450 Pennsylvania Avenue', city='Washington',   state='DC', postal_code='20004', phone_cell='202-555-0110', providerID=12 WHERE pid=110;
+UPDATE patient_data SET street='333 Constitution Avenue', city='Washington',   state='DC', postal_code='20001', phone_cell='202-555-0112', providerID=10 WHERE pid=112;
+UPDATE patient_data SET street='100 Edgewood Avenue',     city='Atlanta',      state='GA', postal_code='30303', phone_cell='404-555-0114', providerID=17 WHERE pid=114;
+UPDATE patient_data SET street='555 Marietta Street',     city='Atlanta',      state='GA', postal_code='30313', phone_cell='404-555-0117', providerID=11 WHERE pid=117;
+UPDATE patient_data SET street='200 Brickell Avenue',     city='Miami',        state='FL', postal_code='33131', phone_cell='305-555-0118', providerID=17 WHERE pid=118;
+UPDATE patient_data SET street='1500 NW 7th Street',      city='Miami',        state='FL', postal_code='33125', phone_cell='305-555-0119', providerID=16 WHERE pid=119;
+UPDATE patient_data SET street='920 Bayshore Boulevard',  city='Tampa',        state='FL', postal_code='33606', phone_cell='813-555-0120', providerID=22 WHERE pid=120;
+UPDATE patient_data SET street='1200 W Kennedy Boulevard',city='Tampa',        state='FL', postal_code='33606', phone_cell='813-555-0121', providerID=11 WHERE pid=121;
+UPDATE patient_data SET street='410 S Brevard Street',    city='Charlotte',    state='NC', postal_code='28202', phone_cell='704-555-0123', providerID=19 WHERE pid=123;
+UPDATE patient_data SET street='75 W Trade Street',       city='Charlotte',    state='NC', postal_code='28202', phone_cell='704-555-0125', providerID=11 WHERE pid=125;
+UPDATE patient_data SET street='600 N Davidson Street',   city='Charlotte',    state='NC', postal_code='28206', phone_cell='704-555-0129', providerID=18 WHERE pid=129;
+
+-- Mountain — Denver / Boulder / Colorado Springs / Salt Lake City
+UPDATE patient_data SET street='412 Elm Street',          city='Denver',       state='CO', postal_code='80201', phone_cell='303-555-0104', providerID=14 WHERE pid=104;
+UPDATE patient_data SET street='1020 Birch Court',        city='Denver',       state='CO', postal_code='80206', phone_cell='303-555-0105', providerID=27 WHERE pid=105;
+UPDATE patient_data SET street='555 Broadway',            city='Denver',       state='CO', postal_code='80214', phone_cell='303-555-0113', providerID=27 WHERE pid=113;
+UPDATE patient_data SET street='510 Spruce Street',       city='Boulder',      state='CO', postal_code='80302', phone_cell='720-555-0116', providerID=27 WHERE pid=116;
+UPDATE patient_data SET street='350 University Avenue',   city='Boulder',      state='CO', postal_code='80309', phone_cell='720-555-0122', providerID=15 WHERE pid=122;
+UPDATE patient_data SET street='1500 N Nevada Avenue',    city='Colorado Springs', state='CO', postal_code='80903', phone_cell='719-555-0124', providerID=26 WHERE pid=124;
+UPDATE patient_data SET street='220 E Pikes Peak Avenue', city='Colorado Springs', state='CO', postal_code='80903', phone_cell='719-555-0126', providerID=15 WHERE pid=126;
+UPDATE patient_data SET street='88 Main Street',          city='Salt Lake City', state='UT', postal_code='84101', phone_cell='801-555-0128', providerID=14 WHERE pid=128;
+
+-- West — San Francisco / Los Angeles / San Diego / Seattle / Portland
+UPDATE patient_data SET street='100 Sutter Street',       city='San Francisco', state='CA', postal_code='94104', phone_cell='415-555-0102', providerID=13 WHERE pid=102;
+UPDATE patient_data SET street='1200 Wilshire Boulevard', city='Los Angeles',  state='CA', postal_code='90017', phone_cell='213-555-0107', providerID=23 WHERE pid=107;
+UPDATE patient_data SET street='700 K Street',            city='San Diego',    state='CA', postal_code='92101', phone_cell='619-555-0111', providerID=13 WHERE pid=111;
+UPDATE patient_data SET street='1500 4th Avenue',         city='Seattle',      state='WA', postal_code='98101', phone_cell='206-555-0115', providerID=23 WHERE pid=115;
+UPDATE patient_data SET street='200 SW Salmon Street',    city='Portland',     state='OR', postal_code='97204', phone_cell='503-555-0127', providerID=13 WHERE pid=127;
 
 -- =============================================================================
 -- PATIENT PORTAL ACCESS
@@ -1169,6 +1286,28 @@ UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin'
 UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Financial Analyst',     contact_relationship='Spouse',  phone_contact='303-555-0228' WHERE pid=127;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Personal Trainer',      contact_relationship='Parent',  phone_contact='303-555-0229' WHERE pid=128;
 UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Marketing Director',    contact_relationship='Sibling', phone_contact='303-555-0230' WHERE pid=129;
+-- New patients (PIDs 130-150, S12-28) — phone_contact uses 0300-series area-code-matched emergency
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Software Engineer',     contact_relationship='Spouse',  phone_contact='212-555-0330' WHERE pid=130;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Architect',             contact_relationship='Sibling', phone_contact='720-555-0331' WHERE pid=131;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Bartender',             contact_relationship='Sibling', phone_contact='404-555-0332' WHERE pid=132;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Office Manager',        contact_relationship='Parent',  phone_contact='215-555-0333' WHERE pid=133;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Construction Manager',  contact_relationship='Spouse',  phone_contact='704-555-0334' WHERE pid=134;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Pharmacist',            contact_relationship='Spouse',  phone_contact='617-555-0335' WHERE pid=135;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Restaurant Owner',      contact_relationship='Spouse',  phone_contact='305-555-0336' WHERE pid=136;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Software Engineer',     contact_relationship='Parent',  phone_contact='212-555-0337' WHERE pid=137;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Personal Trainer',      contact_relationship='Sibling', phone_contact='813-555-0338' WHERE pid=138;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Marketing Director',    contact_relationship='Spouse',  phone_contact='202-555-0339' WHERE pid=139;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Graduate Student',      contact_relationship='Parent',  phone_contact='617-555-0340' WHERE pid=140;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Attorney',              contact_relationship='Spouse',  phone_contact='212-555-0341' WHERE pid=141;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Teacher',       contact_relationship='Child',   phone_contact='215-555-0342' WHERE pid=142;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Graphic Designer',      contact_relationship='Parent',  phone_contact='404-555-0343' WHERE pid=143;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='UX Designer',           contact_relationship='Parent',  phone_contact='720-555-0344' WHERE pid=144;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Mountaineering Guide',  contact_relationship='Parent',  phone_contact='719-555-0345' WHERE pid=145;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Nurse',         contact_relationship='Child',   phone_contact='801-555-0346' WHERE pid=146;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Logistics Manager',     contact_relationship='Spouse',  phone_contact='213-555-0347' WHERE pid=147;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Educator',              contact_relationship='Sibling', phone_contact='816-555-0348' WHERE pid=148;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Sales Representative',  contact_relationship='Parent',  phone_contact='214-555-0349' WHERE pid=149;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Bilingual Teacher',     contact_relationship='Spouse',  phone_contact='312-555-0350' WHERE pid=150;
 
 -- =============================================================================
 -- HISTORICAL TELEHEALTH ENCOUNTER SCAFFOLD  (Sprint 12 / S12-05)
@@ -1219,7 +1358,32 @@ VALUES
 (30026, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 56 DAY), 126, 12, @zoom_behavioral_health_catid, 1, 'MDD chronic + insomnia — med management',             10, 'AMB', 'VR', 'virtual'),
 (30027, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 57 DAY), 127, 13, @zoom_chronic_care_catid,        1, 'Paroxysmal afib follow-up — anticoag review',         10, 'AMB', 'VR', 'virtual'),
 (30028, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 58 DAY), 128, 10, @zoom_preventive_catid,        1, 'Annual preventive video visit',                       10, 'AMB', 'VR', 'virtual'),
-(30029, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 59 DAY), 129, 11, @zoom_behavioral_health_catid, 1, 'Perimenopausal mood + HTN follow-up',                 10, 'AMB', 'VR', 'virtual');
+(30029, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 59 DAY), 129, 11, @zoom_behavioral_health_catid, 1, 'Perimenopausal mood + HTN follow-up',                 10, 'AMB', 'VR', 'virtual'),
+-- S12-28 new historical encounters (PIDs 130-150; skip 134/147/148 NEW persona)
+(30030, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 21 DAY), 130, 17, @zoom_behavioral_health_catid, 1, 'OCD med management — sertraline tolerance',          10, 'AMB', 'VR', 'virtual'),
+(30031, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 22 DAY), 131, 15, @zoom_behavioral_health_catid, 1, 'PTSD med management — prazosin + sertraline',        10, 'AMB', 'VR', 'virtual'),
+(30032, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 23 DAY), 132, 22, @zoom_mat_catid,                1, 'Naltrexone MAT — monthly check-in (AUD)',            10, 'AMB', 'VR', 'virtual'),
+(30033, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 24 DAY), 133, 22, @zoom_mat_catid,                1, 'Buprenorphine MAT — monthly check-in (OUD)',         10, 'AMB', 'VR', 'virtual'),
+(30034, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 25 DAY), 135, 16, @zoom_chronic_care_catid,       1, 'T2DM + HLD quarterly check-in',                      10, 'AMB', 'VR', 'virtual'),
+(30035, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 26 DAY), 136, 19, @zoom_chronic_care_catid,       1, 'HTN + HLD quarterly check-in',                       10, 'AMB', 'VR', 'virtual'),
+(30036, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 27 DAY), 137, 19, @zoom_preventive_catid,         1, 'Annual preventive video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30037, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 28 DAY), 138, 21, @zoom_preventive_catid,         1, 'Sports physical + cholesterol screen',               10, 'AMB', 'VR', 'virtual'),
+(30038, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 29 DAY), 139, 21, @zoom_behavioral_health_catid,  1, 'Postpartum anxiety follow-up — escitalopram',        10, 'AMB', 'VR', 'virtual'),
+(30039, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 140, 21, @zoom_preventive_catid,         1, 'Annual well-woman visit + MH screening',             10, 'AMB', 'VR', 'virtual'),
+(30040, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 25, @zoom_chronic_care_catid,       1, 'HTN + HLD med review',                               10, 'AMB', 'VR', 'virtual'),
+(30041, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 25, @zoom_chronic_care_catid,       1, 'Geriatric polypharmacy review',                      10, 'AMB', 'VR', 'virtual'),
+(30042, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 25, @zoom_preventive_catid,         1, 'Annual preventive video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30043, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 14, @zoom_behavioral_health_catid,  1, 'GAD med management — escitalopram check',            10, 'AMB', 'VR', 'virtual'),
+(30044, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 26, @zoom_preventive_catid,         1, 'Annual preventive + outdoor injury follow-up',       10, 'AMB', 'VR', 'virtual'),
+(30045, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 26, @zoom_chronic_care_catid,       1, 'Geriatric polypharmacy review + memory screen',      10, 'AMB', 'VR', 'virtual'),
+(30046, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 149, 24, @zoom_preventive_catid,         1, 'Annual preventive video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30047, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 150, 24, @zoom_chronic_care_catid,       1, 'HTN + HLD bilingual check-in',                       10, 'AMB', 'VR', 'virtual');
+
+-- Sync existing 29 historical encounters' provider_id to each patient's new providerID
+UPDATE form_encounter fe
+JOIN patient_data pd ON pd.pid = fe.pid
+   SET fe.provider_id = pd.providerID
+ WHERE fe.encounter BETWEEN 30001 AND 30029;
 
 -- Forms registry row per encounter so it shows up in Visit History tab
 INSERT INTO `forms`
@@ -1228,11 +1392,11 @@ SELECT fe.date, fe.encounter, 'New Patient Encounter', fe.id, fe.pid,
        u.username, 'Default', 1, 0, 'newpatient', fe.provider_id
   FROM form_encounter fe
   JOIN users u ON u.id = fe.provider_id
- WHERE fe.encounter BETWEEN 30001 AND 30029;
+ WHERE fe.encounter BETWEEN 30001 AND 30047;
 
 -- Bump sequences past our hardcoded encounter numbers so future
 -- create_encounter() calls don't collide.
-UPDATE sequences SET id = GREATEST(id, 30029);
+UPDATE sequences SET id = GREATEST(id, 30047);
 
 -- =============================================================================
 -- ALLERGIES  (Sprint 12 / S12-06)
@@ -1856,7 +2020,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2025-10-15', '140', 'Sanofi Pasteur', 'FL2025-Q4-A',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid != 124;
+ WHERE pid BETWEEN 100 AND 150 AND pid NOT IN (124, 134, 147, 148);
 
 -- COVID booster (everyone except NEW + HYA-young)
 INSERT INTO `immunizations`
@@ -1874,7 +2038,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2022-05-15', '115', 'Sanofi Pasteur', 'TD2022B',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid != 124;
+ WHERE pid BETWEEN 100 AND 150 AND pid NOT IN (124, 134, 147, 148);
 
 -- Shingrix — recombinant zoster vaccine for adults 50+
 INSERT INTO `immunizations`
@@ -1883,7 +2047,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2024-03-15', '187', 'GSK', 'SHG2024A',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid != 124 AND DOB <= DATE_SUB(CURDATE(), INTERVAL 50 YEAR);
+ WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 134, 147, 148) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 50 YEAR);
 
 -- Pneumovax-23 — for adults 65+
 INSERT INTO `immunizations`
@@ -1892,7 +2056,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2023-06-15', '33', 'Merck', 'PN2023A',
        providerID, 'Intramuscular', 'Right deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid != 124 AND DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR);
+ WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 134, 147, 148) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR);
 
 -- =============================================================================
 -- INSURANCE ASSIGNMENT PER PATIENT  (Sprint 12 / S12-14)
@@ -1919,6 +2083,12 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
            WHEN 120 THEN 206 WHEN 121 THEN 206 WHEN 122 THEN 201 WHEN 123 THEN 203
            WHEN 124 THEN 204 WHEN 125 THEN 206 WHEN 126 THEN 205 WHEN 127 THEN 200
            WHEN 128 THEN 202 WHEN 129 THEN 201
+           WHEN 130 THEN 200 WHEN 131 THEN 204 WHEN 132 THEN 203 WHEN 133 THEN 202
+           WHEN 134 THEN 200 WHEN 135 THEN 201 WHEN 136 THEN 203 WHEN 137 THEN 202
+           WHEN 138 THEN 200 WHEN 139 THEN 201 WHEN 140 THEN 202 WHEN 141 THEN 203
+           WHEN 142 THEN 205 WHEN 143 THEN 200 WHEN 144 THEN 201 WHEN 145 THEN 204
+           WHEN 146 THEN 205 WHEN 147 THEN 200 WHEN 148 THEN 206 WHEN 149 THEN 202
+           WHEN 150 THEN 203
        END AS provider,
        CASE pd.pid
            WHEN 100 THEN 'Tricare Select'             WHEN 101 THEN 'Aetna Choice POS II'
@@ -1936,14 +2106,236 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
            WHEN 124 THEN 'Kaiser Permanente HMO'       WHEN 125 THEN 'Health First Colorado'
            WHEN 126 THEN 'Medicare Part B'             WHEN 127 THEN 'Aetna Choice POS II'
            WHEN 128 THEN 'UHC Choice Plus'             WHEN 129 THEN 'BCBS CO Anthem HMO'
+           WHEN 130 THEN 'Aetna Choice POS II'         WHEN 131 THEN 'Kaiser Permanente HMO'
+           WHEN 132 THEN 'Cigna LocalPlus'             WHEN 133 THEN 'UHC Choice Plus'
+           WHEN 134 THEN 'Aetna PPO'                   WHEN 135 THEN 'BCBS Anthem PPO'
+           WHEN 136 THEN 'Cigna Connect'               WHEN 137 THEN 'UHC Navigate'
+           WHEN 138 THEN 'Aetna Open Access'           WHEN 139 THEN 'BCBS Federal'
+           WHEN 140 THEN 'UHC Choice Plus'             WHEN 141 THEN 'Cigna PPO Plus'
+           WHEN 142 THEN 'Medicare Part B + Medigap G' WHEN 143 THEN 'Aetna Choice POS II'
+           WHEN 144 THEN 'BCBS CO Anthem PPO'          WHEN 145 THEN 'Kaiser Permanente HMO'
+           WHEN 146 THEN 'Medicare Part B'             WHEN 147 THEN 'Aetna PPO'
+           WHEN 148 THEN 'Health First Colorado'       WHEN 149 THEN 'UHC Choice Plus'
+           WHEN 150 THEN 'Cigna LocalPlus'
        END AS plan_name,
        CONCAT('POL', LPAD(pd.pid, 7, '0')) AS policy_number,
        CONCAT('GRP-ZOOMLY-', FLOOR(100 + (pd.pid - 100) / 5)) AS group_number,
        pd.fname, pd.lname, pd.DOB, 'self',
        pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
   FROM patient_data pd
- WHERE pd.pid BETWEEN 100 AND 129;
+ WHERE pd.pid BETWEEN 100 AND 150;
 
+-- =============================================================================
+-- CLINICAL DATA FOR NEW PATIENTS (Sprint 12 / S12-28e)
+-- Persona-appropriate problems, medications, prescriptions, vitals, history.
+-- NEW persona patients (134, 147, 148) intentionally skipped — sparse charts.
+-- =============================================================================
+
+-- Problems for new patients (ICD-10 coded, persona-aligned)
+INSERT INTO `lists`
+    (uuid, type, subtype, title, diagnosis, pid, date, begdate, activity, user, outcome)
+VALUES
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Obsessive-compulsive disorder',         'ICD10:F42.2',  130, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'marcus.eriksson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Post-traumatic stress disorder',        'ICD10:F43.10', 131, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'priya.patel',      0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Alcohol dependence, in remission',      'ICD10:F10.21', 132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'lucas.johnson',    0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Opioid dependence, in remission',       'ICD10:F11.21', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'lucas.johnson',    0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'michael.chen',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'michael.chen',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'ethan.garcia',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'ethan.garcia',     0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, single episode, mild', 'ICD10:F32.0', 139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'amartin', 0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lisa.patel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lisa.patel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lisa.patel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',              'ICD10:M81.0',  142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jonathan.nelson',  0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'hiroshi.tanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                        'ICD10:E03.9',  146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'hiroshi.tanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 146, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'hiroshi.tanaka',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'joe.smith',        0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'joe.smith',        0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Type 2 diabetes mellitus',              'ICD10:E11.9',  150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'joe.smith',        0);
+
+-- Medications for new patients (with RxNorm codes)
+INSERT INTO `lists`
+    (uuid, type, subtype, title, pid, date, begdate, activity, user, comments)
+VALUES
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 200mg tab',          130, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'marcus.eriksson',  'rxnorm:312941 — 1 tab PO daily (OCD)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Sertraline 100mg tab',          131, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'priya.patel',      'rxnorm:313990 — 1 tab PO daily (PTSD)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Prazosin 2mg cap',              131, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'priya.patel',      'rxnorm:198148 — 1 cap PO at bedtime (PTSD nightmares)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Naltrexone 50mg tab',           132, NOW(), DATE_SUB(NOW(), INTERVAL 4 YEAR),  1, 'lucas.johnson',    'rxnorm:798832 — 1 tab PO daily (AUD MAT)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Buprenorphine/Naloxone 8mg/2mg SL film', 133, NOW(), DATE_SUB(NOW(), INTERVAL 2 YEAR),  1, 'lucas.johnson', 'rxnorm:1010600 — 1 film SL daily (Suboxone; OUD MAT; X-DEA)'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          135, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'michael.chen',     'rxnorm:860975 — 1 tab PO twice daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 40mg tab',         135, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'michael.chen',     'rxnorm:617312 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'ethan.garcia',     'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'ethan.garcia',     'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          'rxnorm:321988 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lisa.patel',       'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lisa.patel',       'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lisa.patel',       'rxnorm:197910 — 1 tab PO weekly'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lisa.patel',       'rxnorm:198440 — 1-2 tabs PO every 6 hours PRN for OA'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jonathan.nelson',  'rxnorm:321988 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'hiroshi.tanaka',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 75mcg tab',       146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'hiroshi.tanaka',   'rxnorm:966222 — 1 tab PO daily on empty stomach'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           150, NOW(), DATE_SUB(NOW(), INTERVAL 7 YEAR),  1, 'joe.smith',        'rxnorm:314077 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         150, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'joe.smith',        'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Metformin 1000mg tab',          150, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'joe.smith',        'rxnorm:860975 — 1 tab PO twice daily');
+
+-- Companion lists_medication sidecar for new meds
+INSERT INTO `lists_medication`
+    (list_id, usage_category, usage_category_title, request_intent, request_intent_title, is_primary_record)
+SELECT id, 'outpatient', 'Outpatient', 'order', 'Order', 1
+  FROM `lists`
+ WHERE type='medication' AND pid BETWEEN 130 AND 150;
+
+-- Vitals for new patients (skip NEW persona — 134, 147, 148)
+INSERT INTO `form_vitals`
+    (uuid, date, pid, user, groupname, authorized, activity,
+     bps, bpd, weight, height, BMI, temperature, pulse, respiration, oxygen_saturation)
+VALUES
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 21 DAY), 130, 'marcus.eriksson',  'Default', 1, 1, '124', '78', 178.0, 70.0, 25.5, 98.6, 76, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 22 DAY), 131, 'priya.patel',      'Default', 1, 1, '116', '74', 138.0, 64.0, 23.7, 98.6, 78, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 23 DAY), 132, 'lucas.johnson',    'Default', 1, 1, '128', '82', 195.0, 71.0, 27.2, 98.4, 78, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 24 DAY), 133, 'lucas.johnson',    'Default', 1, 1, '118', '74', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 25 DAY), 135, 'michael.chen',     'Default', 1, 1, '140', '88', 168.0, 64.0, 28.8, 98.4, 74, 16, 97.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 26 DAY), 136, 'ethan.garcia',     'Default', 1, 1, '142', '90', 198.0, 69.0, 29.2, 98.4, 76, 16, 97.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 27 DAY), 137, 'ethan.garcia',     'Default', 1, 1, '112', '70', 125.0, 64.0, 21.5, 98.6, 68, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 28 DAY), 138, 'amartin',          'Default', 1, 1, '118', '74', 175.0, 72.0, 23.8, 98.6, 70, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 29 DAY), 139, 'amartin',          'Default', 1, 1, '120', '76', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 140, 'amartin',          'Default', 1, 1, '110', '70', 130.0, 65.0, 21.6, 98.6, 68, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 'lisa.patel',       'Default', 1, 1, '136', '86', 190.0, 71.0, 26.5, 98.4, 74, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 'lisa.patel',       'Default', 1, 1, '142', '84', 145.0, 62.0, 26.5, 98.2, 70, 16, 96.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 'lisa.patel',       'Default', 1, 1, '118', '76', 165.0, 70.0, 23.7, 98.6, 72, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 'jonathan.nelson',  'Default', 1, 1, '116', '74', 138.0, 65.0, 23.0, 98.6, 76, 16, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 'hiroshi.tanaka',   'Default', 1, 1, '114', '72', 175.0, 72.0, 23.7, 98.6, 64, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 'hiroshi.tanaka',   'Default', 1, 1, '148', '84', 152.0, 63.0, 26.9, 98.0, 68, 16, 96.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 37 DAY), 149, 'joe.smith',        'Default', 1, 1, '116', '74', 170.0, 72.0, 23.1, 98.6, 70, 14, 99.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 38 DAY), 150, 'joe.smith',        'Default', 1, 1, '138', '86', 158.0, 64.0, 27.1, 98.4, 74, 16, 97.00);
+
+-- Forms registry rows for new vitals
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1, 0, 'vitals', fe.provider_id
+  FROM form_vitals fv
+  JOIN form_encounter fe ON fe.pid = fv.pid AND fe.encounter BETWEEN 30030 AND 30047
+  JOIN users u ON u.id = fe.provider_id
+ WHERE fv.pid BETWEEN 130 AND 150;
+
+-- =============================================================================
+-- S12-29 — APPOINTMENT RETARGET + NEW APPOINTMENTS FOR NEW PATIENTS
+--
+-- Step 1: retarget ALL existing 112 appointments so pc_aid matches each
+-- patient's new providerID. Single JOIN-based UPDATE.
+-- Step 2: add 63 new appointments for PIDs 130-150 (3 per patient over the
+-- 14-day window). Each appointment uses the patient's providerID (pc_aid) and
+-- persona-appropriate Zoom category (pc_catid).
+-- =============================================================================
+
+UPDATE openemr_postcalendar_events e
+JOIN patient_data pd ON pd.pid = CAST(e.pc_pid AS UNSIGNED)
+   SET e.pc_aid = CAST(pd.providerID AS CHAR)
+ WHERE CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+
+-- New appointments for the 21 new patients (3 each, spread across days 1-14)
+INSERT INTO `openemr_postcalendar_events` (
+    `pc_catid`, `pc_multiple`, `pc_aid`, `pc_pid`,
+    `pc_title`, `pc_time`, `pc_hometext`,
+    `pc_eventDate`, `pc_endDate`,
+    `pc_duration`, `pc_recurrtype`, `pc_recurrfreq`,
+    `pc_recurrspec`, `pc_location`,
+    `pc_startTime`, `pc_endTime`,
+    `pc_alldayevent`, `pc_apptstatus`, `pc_eventstatus`,
+    `pc_sharing`, `pc_facility`, `pc_billing_location`,
+    `pc_informant`, `pc_sendalertsms`, `pc_sendalertemail`,
+    `uuid`
+) VALUES
+-- PID 130 Tom Bell (PSY-S, Eriksson 17) — 3 behavioral health visits
+(@zoom_behavioral_health_catid, 0, '17', '130', 'Zoom Behavioral Health', NOW(), 'OCD med management', DATE(DATE_ADD(NOW(), INTERVAL 2 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '17', '130', 'Zoom Behavioral Health', NOW(), 'OCD therapy follow-up', DATE(DATE_ADD(NOW(), INTERVAL 7 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '17', '130', 'Zoom Behavioral Health', NOW(), 'OCD med check', DATE(DATE_ADD(NOW(), INTERVAL 13 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 131 Janelle Cho (PSY-S, Priya Patel 15)
+(@zoom_behavioral_health_catid, 0, '15', '131', 'Zoom Behavioral Health', NOW(), 'PTSD med management', DATE(DATE_ADD(NOW(), INTERVAL 3 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '15', '131', 'Zoom Behavioral Health', NOW(), 'PTSD follow-up', DATE(DATE_ADD(NOW(), INTERVAL 8 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '15', '131', 'Zoom Behavioral Health', NOW(), 'PTSD med check', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 132 Bryan Roberts (SUD AUD, Lucas Johnson 22)
+(@zoom_mat_catid, 0, '22', '132', 'Zoom MAT (Suboxone)', NOW(), 'Naltrexone monthly check-in', DATE(DATE_ADD(NOW(), INTERVAL 4 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_mat_catid, 0, '22', '132', 'Zoom MAT (Suboxone)', NOW(), 'AUD counseling', DATE(DATE_ADD(NOW(), INTERVAL 9 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_mat_catid, 0, '22', '132', 'Zoom MAT (Suboxone)', NOW(), 'Naltrexone refill', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 133 Ashley Cohen (SUD OUD, Lucas Johnson 22)
+(@zoom_mat_catid, 0, '22', '133', 'Zoom MAT (Suboxone)', NOW(), 'Suboxone monthly check-in', DATE(DATE_ADD(NOW(), INTERVAL 5 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_mat_catid, 0, '22', '133', 'Zoom MAT (Suboxone)', NOW(), 'Suboxone refill', DATE(DATE_ADD(NOW(), INTERVAL 10 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_mat_catid, 0, '22', '133', 'Zoom MAT (Suboxone)', NOW(), 'OUD counseling', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 134 Marcus Hill (NEW, Chen 16) — first-visit intake + follow-ups
+(@zoom_new_patient_catid, 0, '16', '134', 'Zoom New Patient', NOW(), 'New patient intake', DATE(DATE_ADD(NOW(), INTERVAL 2 DAY)), '0000-00-00', 2700, 0, 0, @recurrspec, @location, '13:00:00', '13:45:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '16', '134', 'Zoom Chronic Care', NOW(), 'Follow-up visit', DATE(DATE_ADD(NOW(), INTERVAL 9 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '16', '134', 'Zoom Chronic Care', NOW(), 'Lab review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 135 Linda Kapoor (CHR, Chen 16)
+(@zoom_chronic_care_catid, 0, '16', '135', 'Zoom Chronic Care', NOW(), 'T2DM quarterly check-in', DATE(DATE_ADD(NOW(), INTERVAL 3 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '16', '135', 'Zoom Chronic Care', NOW(), 'A1c follow-up', DATE(DATE_ADD(NOW(), INTERVAL 10 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '16', '135', 'Zoom Chronic Care', NOW(), 'Med refill check', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 136 Roberto Cruz (CHR, Garcia 19)
+(@zoom_chronic_care_catid, 0, '19', '136', 'Zoom Chronic Care', NOW(), 'HTN + HLD check-in', DATE(DATE_ADD(NOW(), INTERVAL 4 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '19', '136', 'Zoom Chronic Care', NOW(), 'Quarterly follow-up', DATE(DATE_ADD(NOW(), INTERVAL 10 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '19', '136', 'Zoom Chronic Care', NOW(), 'Lipid panel review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 137 Sasha Yang (HYA, Garcia 19)
+(@zoom_preventive_catid, 0, '19', '137', 'Zoom Preventive', NOW(), 'Annual preventive visit', DATE(DATE_ADD(NOW(), INTERVAL 5 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '19', '137', 'Zoom Preventive', NOW(), 'MH screening follow-up', DATE(DATE_ADD(NOW(), INTERVAL 11 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '19', '137', 'Zoom Preventive', NOW(), 'Contraception consult', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 138 Tyler Murphy (HYA, Amy Martin 21)
+(@zoom_preventive_catid, 0, '21', '138', 'Zoom Preventive', NOW(), 'Sports physical', DATE(DATE_ADD(NOW(), INTERVAL 6 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '21', '138', 'Zoom Preventive', NOW(), 'Cholesterol screen follow-up', DATE(DATE_ADD(NOW(), INTERVAL 12 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '21', '138', 'Zoom Preventive', NOW(), 'Smoking cessation counseling', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 139 Christina Knight (BH-PC, Amy Martin 21)
+(@zoom_behavioral_health_catid, 0, '21', '139', 'Zoom Behavioral Health', NOW(), 'Postpartum depression follow-up', DATE(DATE_ADD(NOW(), INTERVAL 7 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '21', '139', 'Zoom Behavioral Health', NOW(), 'SSRI tolerance check', DATE(DATE_ADD(NOW(), INTERVAL 11 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '21', '139', 'Zoom Behavioral Health', NOW(), 'GAD med review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 140 Hannah Kelly (HYA, Amy Martin 21)
+(@zoom_preventive_catid, 0, '21', '140', 'Zoom Preventive', NOW(), 'Annual well-woman visit', DATE(DATE_ADD(NOW(), INTERVAL 2 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '21', '140', 'Zoom Preventive', NOW(), 'MH screening', DATE(DATE_ADD(NOW(), INTERVAL 8 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '21', '140', 'Zoom Preventive', NOW(), 'Contraception counseling', DATE(DATE_ADD(NOW(), INTERVAL 13 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 141 Frank Burke (CHR, Lisa Patel 25)
+(@zoom_chronic_care_catid, 0, '25', '141', 'Zoom Chronic Care', NOW(), 'HTN + HLD med review', DATE(DATE_ADD(NOW(), INTERVAL 3 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '25', '141', 'Zoom Chronic Care', NOW(), 'Quarterly follow-up', DATE(DATE_ADD(NOW(), INTERVAL 9 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '25', '141', 'Zoom Chronic Care', NOW(), 'BP check + statin review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 142 Margaret Sullivan (GER, Lisa Patel 25)
+(@zoom_chronic_care_catid, 0, '25', '142', 'Zoom Chronic Care', NOW(), 'Geriatric polypharmacy review', DATE(DATE_ADD(NOW(), INTERVAL 4 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '25', '142', 'Zoom Chronic Care', NOW(), 'OA pain management', DATE(DATE_ADD(NOW(), INTERVAL 10 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '25', '142', 'Zoom Chronic Care', NOW(), 'Osteoporosis follow-up', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 143 Devon Banks (HYA, Lisa Patel 25)
+(@zoom_preventive_catid, 0, '25', '143', 'Zoom Preventive', NOW(), 'Annual preventive visit', DATE(DATE_ADD(NOW(), INTERVAL 5 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '25', '143', 'Zoom Preventive', NOW(), 'MH screening', DATE(DATE_ADD(NOW(), INTERVAL 11 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '25', '143', 'Zoom Preventive', NOW(), 'Lifestyle counseling', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 144 Mia Davies (BH-PC, Nelson 14)
+(@zoom_behavioral_health_catid, 0, '14', '144', 'Zoom Behavioral Health', NOW(), 'GAD med management', DATE(DATE_ADD(NOW(), INTERVAL 6 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '14', '144', 'Zoom Behavioral Health', NOW(), 'Anxiety follow-up', DATE(DATE_ADD(NOW(), INTERVAL 12 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_behavioral_health_catid, 0, '14', '144', 'Zoom Behavioral Health', NOW(), 'SSRI tolerance check', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 145 Jordan Hayes (HYA, Hiroshi Tanaka 26)
+(@zoom_preventive_catid, 0, '26', '145', 'Zoom Preventive', NOW(), 'Annual preventive visit', DATE(DATE_ADD(NOW(), INTERVAL 2 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '26', '145', 'Zoom Preventive', NOW(), 'Sports physical', DATE(DATE_ADD(NOW(), INTERVAL 8 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '26', '145', 'Zoom Preventive', NOW(), 'Injury follow-up', DATE(DATE_ADD(NOW(), INTERVAL 13 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 146 Beatrice Reed (GER, Hiroshi Tanaka 26)
+(@zoom_chronic_care_catid, 0, '26', '146', 'Zoom Chronic Care', NOW(), 'Geriatric polypharmacy review', DATE(DATE_ADD(NOW(), INTERVAL 3 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '26', '146', 'Zoom Chronic Care', NOW(), 'Hypothyroid follow-up', DATE(DATE_ADD(NOW(), INTERVAL 9 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '26', '146', 'Zoom Chronic Care', NOW(), 'Memory screen', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 147 Caleb Cole (NEW, Anderson 23)
+(@zoom_new_patient_catid, 0, '23', '147', 'Zoom New Patient', NOW(), 'New patient intake', DATE(DATE_ADD(NOW(), INTERVAL 4 DAY)), '0000-00-00', 2700, 0, 0, @recurrspec, @location, '13:00:00', '13:45:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '23', '147', 'Zoom Chronic Care', NOW(), 'Follow-up visit', DATE(DATE_ADD(NOW(), INTERVAL 10 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '23', '147', 'Zoom Chronic Care', NOW(), 'Lab review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 148 Olivia Davis (NEW, Joe Smith 24)
+(@zoom_new_patient_catid, 0, '24', '148', 'Zoom New Patient', NOW(), 'New patient intake', DATE(DATE_ADD(NOW(), INTERVAL 5 DAY)), '0000-00-00', 2700, 0, 0, @recurrspec, @location, '13:00:00', '13:45:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '24', '148', 'Zoom Chronic Care', NOW(), 'Follow-up visit', DATE(DATE_ADD(NOW(), INTERVAL 11 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '24', '148', 'Zoom Chronic Care', NOW(), 'Lab review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 149 Marcus Curtis (HYA, Joe Smith 24)
+(@zoom_preventive_catid, 0, '24', '149', 'Zoom Preventive', NOW(), 'Annual preventive visit', DATE(DATE_ADD(NOW(), INTERVAL 6 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '24', '149', 'Zoom Preventive', NOW(), 'Sports physical', DATE(DATE_ADD(NOW(), INTERVAL 12 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_preventive_catid, 0, '24', '149', 'Zoom Preventive', NOW(), 'MH screening', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 150 Patricia Diaz (CHR, Joe Smith 24)
+(@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'HTN + HLD bilingual check-in', DATE(DATE_ADD(NOW(), INTERVAL 7 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'T2DM quarterly check-in', DATE(DATE_ADD(NOW(), INTERVAL 11 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@zoom_chronic_care_catid, 0, '24', '150', 'Zoom Chronic Care', NOW(), 'Med refill review', DATE(DATE_ADD(NOW(), INTERVAL 14 DAY)), '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
 
 SET FOREIGN_KEY_CHECKS = 1;
 
