@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +13,29 @@ def _fake_patient_engine(rows):
     class FakeResult:
         def fetchall(self):
             return rows
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    return FakeEngine()
+
+
+def _fake_row_engine(row):
+    """Single-row variant: .connect().execute(...).fetchone() returns the row (or None)."""
+    class FakeResult:
+        def fetchone(self):
+            return row
 
     class FakeConn:
         def execute(self, query, params):
@@ -225,3 +248,119 @@ def test_get_provider_patients_handles_null_dob(monkeypatch):
     )
 
     assert providers.get_provider_patients(42)[0]["dob"] is None
+
+
+# -- get_provider_specialty_categories --------------------------------------
+
+def test_get_provider_specialty_categories_pc(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Internal Medicine")),
+    )
+    assert providers.get_provider_specialty_categories(10) == [
+        "Zoom Chronic Care",
+        "Zoom New Patient",
+        "Zoom Preventive",
+    ]
+
+
+def test_get_provider_specialty_categories_bh_psychiatry(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Psychiatry")),
+    )
+    assert providers.get_provider_specialty_categories(12) == ["Zoom Behavioral Health"]
+
+
+def test_get_provider_specialty_categories_mat(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Addiction Medicine")),
+    )
+    assert providers.get_provider_specialty_categories(22) == ["Zoom MAT (Suboxone)"]
+
+
+def test_get_provider_specialty_categories_unknown_specialty(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Cardiology")),
+    )
+    assert providers.get_provider_specialty_categories(99) == []
+
+
+def test_get_provider_specialty_categories_no_user_row(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(None),
+    )
+    assert providers.get_provider_specialty_categories(9999) == []
+
+
+def test_get_provider_specialty_categories_returns_fresh_list(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Internal Medicine")),
+    )
+    first = providers.get_provider_specialty_categories(10)
+    first.pop()
+    second = providers.get_provider_specialty_categories(10)
+    assert len(second) == 3  # not mutated by the prior pop
+
+
+# -- get_provider_appointments_in_window ------------------------------------
+
+def test_get_provider_appointments_in_window_returns_rows(monkeypatch):
+    rows = [
+        SimpleNamespace(
+            pc_eid=501,
+            pc_pid="100",
+            pc_aid=10,
+            pc_eventDate=date(2026, 5, 22),
+            pc_startTime=timedelta(hours=9),
+            pc_duration=1800,
+            pc_catid=20,
+            pc_apptstatus="-",
+            pc_website="https://zoom.us/j/123",
+        ),
+        SimpleNamespace(
+            pc_eid=502,
+            pc_pid="108",
+            pc_aid=10,
+            pc_eventDate=date(2026, 5, 22),
+            pc_startTime=timedelta(hours=14),
+            pc_duration=1800,
+            pc_catid=21,
+            pc_apptstatus="-",
+            pc_website=None,
+        ),
+    ]
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(rows),
+    )
+
+    result = providers.get_provider_appointments_in_window(
+        10, date(2026, 5, 22), date(2026, 5, 23)
+    )
+
+    assert len(result) == 2
+    assert result[0]["pc_eid"] == 501
+    assert result[0]["pc_startTime"] == time(9, 0, 0)
+    assert result[1]["pc_startTime"] == time(14, 0, 0)
+    assert result[1]["pc_website"] is None
+
+
+def test_get_provider_appointments_in_window_empty(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine([]),
+    )
+    assert providers.get_provider_appointments_in_window(
+        10, date(2026, 5, 22), date(2026, 5, 23)
+    ) == []
+
+
+def test_timedelta_to_time_handles_none():
+    assert providers._timedelta_to_time(None) is None
+    assert providers._timedelta_to_time(timedelta(hours=8, minutes=30)) == time(8, 30, 0)
+    assert providers._timedelta_to_time(timedelta(seconds=45)) == time(0, 0, 45)

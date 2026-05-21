@@ -1,4 +1,6 @@
 import logging
+from datetime import date, time, timedelta
+
 import requests
 from sqlalchemy import text
 from flask import current_app
@@ -7,6 +9,21 @@ from app.models import ZoomAccount, ProviderMapping
 from app.extensions import db, get_openemr_db_engine
 
 logger = logging.getLogger(__name__)
+
+
+# Mapping from OpenEMR users.specialty (the canonical specialty string stored
+# on the provider's user row) to the Zoom appointment category names this
+# provider can offer in the Sprint 13 hydration flow. Unmapped specialties
+# resolve to [] so the orchestrator can skip them explicitly rather than
+# silently producing wrong-specialty appointments.
+SPECIALTY_TO_CATEGORIES = {
+    "Internal Medicine":              ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive"],
+    "Family Medicine":                ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive"],
+    "Psychiatry":                     ["Zoom Behavioral Health"],
+    "Psychiatric Nurse Practitioner": ["Zoom Behavioral Health"],
+    "Clinical Social Work":           ["Zoom Behavioral Health"],
+    "Addiction Medicine":             ["Zoom MAT (Suboxone)"],
+}
 
 
 def get_practitioners(
@@ -107,6 +124,82 @@ def get_provider_patients(provider_user_id: int) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def get_provider_specialty_categories(provider_user_id: int) -> list[str]:
+    """
+    Resolve the Zoom appointment categories appropriate for the provider's
+    OpenEMR specialty (from users.specialty). Returns [] for unmapped or
+    missing specialties so callers can decide what to do (skip hydration,
+    fall back to a default, etc.) rather than silently producing
+    wrong-specialty appointments.
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT specialty FROM users WHERE id = :id"),
+            {"id": int(provider_user_id)}
+        ).fetchone()
+    if not row or not row.specialty:
+        return []
+    # Return a fresh copy so callers can mutate (pop/rotate for round-robin)
+    # without affecting the module-level constant or other callers.
+    return list(SPECIALTY_TO_CATEGORIES.get(row.specialty, []))
+
+
+def get_provider_appointments_in_window(
+    provider_user_id: int,
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """
+    Return all appointments for a provider within an inclusive date window.
+    Used by the Sprint 13 hydration flow to evaluate which of the upcoming
+    weekday slots already have appointments + Zoom meetings.
+
+    pc_startTime is normalized from PyMySQL's timedelta back to a datetime.time
+    so callers can compare against slot times directly without redoing the
+    conversion at every callsite (per CLAUDE.md note on the MariaDB / PyMySQL
+    TIME column quirk).
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT pc_eid, pc_pid, pc_aid, pc_eventDate, pc_startTime,
+                       pc_duration, pc_catid, pc_apptstatus, pc_website
+                FROM openemr_postcalendar_events
+                WHERE pc_aid = :provider_id
+                  AND pc_eventDate BETWEEN :start_date AND :end_date
+                ORDER BY pc_eventDate, pc_startTime
+            """),
+            {
+                "provider_id": int(provider_user_id),
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        ).fetchall()
+    return [
+        {
+            "pc_eid": row.pc_eid,
+            "pc_pid": row.pc_pid,
+            "pc_aid": row.pc_aid,
+            "pc_eventDate": row.pc_eventDate,
+            "pc_startTime": _timedelta_to_time(row.pc_startTime),
+            "pc_duration": row.pc_duration,
+            "pc_catid": row.pc_catid,
+            "pc_apptstatus": row.pc_apptstatus,
+            "pc_website": row.pc_website,
+        }
+        for row in rows
+    ]
+
+
+def _timedelta_to_time(td: timedelta | None) -> time | None:
+    if td is None:
+        return None
+    total = int(td.total_seconds())
+    return time(total // 3600, (total % 3600) // 60, total % 60)
 
 
 def _normalize_practitioner(resource: dict) -> dict:
