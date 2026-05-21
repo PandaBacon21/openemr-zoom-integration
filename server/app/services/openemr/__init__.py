@@ -19,7 +19,8 @@ __all__ = [
     "get_appointment_details",
     "write_zoom_urls_to_appointment", 
     "update_appointment_status",
-    "filter_appointment_event", 
+    "generate_future_appointment",
+    "filter_appointment_event",
     "_create_provider_mapping", 
     "_get_provider_mappings", 
     "_delete_provider_mapping"
