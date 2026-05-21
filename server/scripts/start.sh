@@ -21,6 +21,9 @@ docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/module
 docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
 docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/DialogCloseListener.php
 
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php
+docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php
+
 echo "Waiting for module init to complete..."
 docker wait zoomly-module-init
 
