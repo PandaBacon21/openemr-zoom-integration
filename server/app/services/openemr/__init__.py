@@ -1,5 +1,5 @@
 from .patient import get_patient
-from .provider import get_practitioners, get_provider_username, _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
+from .provider import get_practitioners, get_provider_username, get_provider_patients, _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
 from .note import parse_soap_sections, write_note_to_encounter
 from .encounter import find_encounter_for_appointment, create_encounter
 from .appointments import *
@@ -7,8 +7,9 @@ from .appointments import *
 __all__ = [
     "get_patient", 
     "get_practitioners", 
-    "get_provider_username", 
-    "find_encounter_for_appointment", 
+    "get_provider_username",
+    "get_provider_patients",
+    "find_encounter_for_appointment",
     "create_encounter", 
     "parse_soap_sections",
     "write_note_to_encounter", 

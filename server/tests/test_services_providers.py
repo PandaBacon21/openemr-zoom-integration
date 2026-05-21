@@ -1,8 +1,34 @@
+from datetime import date
+from types import SimpleNamespace
+
 import pytest
 
 from app.extensions import db
 from app.models import ProviderMapping, ZoomAccount
 from app.services.openemr import provider as providers
+
+
+def _fake_patient_engine(rows):
+    """Mimics a SQLAlchemy engine where .connect().execute(...).fetchall() returns rows."""
+    class FakeResult:
+        def fetchall(self):
+            return rows
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    return FakeEngine()
 
 
 def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
@@ -151,3 +177,51 @@ def test_delete_provider_mapping_raises_when_not_found(app):
         _create_account("acct-1", is_active=True)
         with pytest.raises(ValueError, match="No active mapping found with NPI 999"):
             providers._delete_provider_mapping("acct-1", "999")
+
+
+def test_get_provider_patients_returns_seeded_three(monkeypatch):
+    rows = [
+        SimpleNamespace(pid=108, fname="Thomas",  lname="Walsh",    DOB=date(1969, 8, 19),  sex="Male"),
+        SimpleNamespace(pid=100, fname="James",   lname="Harrison", DOB=date(1978, 3, 14),  sex="Male"),
+        SimpleNamespace(pid=112, fname="Omar",    lname="Hassan",   DOB=date(1975, 3, 29),  sex="Male"),
+    ]
+    # Engine sorts by pid in real SQL; mock returns whatever the engine gives us. The
+    # function returns rows verbatim, so we hand them back already in pid-asc order to
+    # mirror what MariaDB would do.
+    sorted_rows = sorted(rows, key=lambda r: r.pid)
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(sorted_rows),
+    )
+
+    result = providers.get_provider_patients(10)
+
+    assert [p["pid"] for p in result] == [100, 108, 112]
+    assert result[0] == {
+        "pid": 100,
+        "fname": "James",
+        "lname": "Harrison",
+        "dob": "1978-03-14",
+        "sex": "Male",
+    }
+
+
+def test_get_provider_patients_empty_for_unknown_provider(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine([]),
+    )
+
+    assert providers.get_provider_patients(9999) == []
+
+
+def test_get_provider_patients_handles_null_dob(monkeypatch):
+    rows = [
+        SimpleNamespace(pid=200, fname="Anon", lname="Patient", DOB=None, sex="Female"),
+    ]
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(rows),
+    )
+
+    assert providers.get_provider_patients(42)[0]["dob"] is None

@@ -63,7 +63,7 @@ def get_practitioners(
 
 
 def get_provider_username(provider_id: int) -> str | None:
-    
+
     engine = get_openemr_db_engine()
     try:
         with engine.begin() as conn:
@@ -75,7 +75,39 @@ def get_provider_username(provider_id: int) -> str | None:
     except Exception as e:
         logger.error(f"openemr.get_provider_username | Failed: {e}")
         return None
-    
+
+
+def get_provider_patients(provider_user_id: int) -> list[dict]:
+    """
+    Fetch all patients assigned to the given OpenEMR provider via patient_data.providerID.
+
+    Used by the Sprint 13 demo hydration flow to round-robin a provider's seeded
+    patients across generated future appointments + today's locked sample encounter.
+    Under the Sprint 12 seed each provider has exactly 3 patients, but callers should
+    not assume any particular count. This could easily increase and scale over time.
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT pid, fname, lname, DOB, sex "
+                "FROM patient_data "
+                "WHERE providerID = :provider_id "
+                "ORDER BY pid"
+            ),
+            {"provider_id": int(provider_user_id)}
+        ).fetchall()
+    return [
+        {
+            "pid": row.pid,
+            "fname": row.fname,
+            "lname": row.lname,
+            "dob": row.DOB.isoformat() if row.DOB else None,
+            "sex": row.sex,
+        }
+        for row in rows
+    ]
+
 
 def _normalize_practitioner(resource: dict) -> dict:
     """
