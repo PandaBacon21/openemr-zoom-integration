@@ -1,9 +1,10 @@
 import hashlib
 import hmac
 from flask import current_app
-from app.services.zoom import (create_zoom_meeting, get_zoom_meeting, update_zoom_meeting, 
+from app.services.zoom import (create_zoom_meeting, get_zoom_meeting, update_zoom_meeting,
                                delete_zoom_meeting)
 from app.services.openemr import (write_zoom_urls_to_appointment, filter_appointment_event)
+from app.services.meeting import create_meeting_for_appointment
 from app.services.audit import write_audit_log
 from app.extensions import db
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount
@@ -105,7 +106,7 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
                 updated_meetings.append(result)
         else:
             # Create path
-            result = _handle_new_meeting(match, payload)
+            result = create_meeting_for_appointment(match, payload)
             if result.get("error"):
                 errors.append({
                     "account_id": account.account_id,
@@ -135,120 +136,6 @@ def _process_appointment_event(payload: dict) -> tuple[dict, int]:
     }, 200
  
 
-def _handle_new_meeting(match, payload: dict) -> dict:
-    """Create a new Zoom meeting and MeetingRecord."""
-    account = match.zoom_account
-    mapping = match.provider_mapping
-    eid = payload.get("eid")
- 
-    try:
-        meeting_data = create_zoom_meeting(match)
-    except Exception as e:
-        current_app.logger.error(
-            f"webhooks.openemr | eid={eid} account={account.account_id} "
-            f"Zoom meeting creation failed: {e}"
-        )
-        write_audit_log(
-            event_type="meeting.create_failed",
-            success=False,
-            zoom_account_id=account.account_id,
-            openemr_appointment_id=eid,
-            openemr_provider_id=mapping.openemr_provider_id,
-            openemr_patient_id=payload.get("pid"),
-            error_message=str(e),
-            detail={"stage": "zoom_create"},
-        )
-        return {"error": str(e)}
- 
-    try:
-        meeting_record = MeetingRecord(
-            zoom_account_id=account.account_id,
-            zoom_meeting_id=meeting_data["meeting_id"],
-            zoom_start_url=meeting_data["start_url"],
-            zoom_join_url=meeting_data["join_url"],
-            openemr_appointment_id=str(eid),
-            openemr_provider_id=str(mapping.openemr_provider_id),
-            openemr_appt_status=payload.get("appt_status"),
-            status="created",
-        )
-        db.session.add(meeting_record)
-        db.session.flush()
- 
-        pid = payload.get("pid")
-        if pid:
-            db.session.add(MeetingPatient(
-                zoom_meeting_id=meeting_data["meeting_id"],
-                openemr_patient_id=str(pid),
-            ))
- 
-        db.session.commit()
- 
-        current_app.logger.info(
-            f"webhooks.openemr | eid={eid} account={account.account_id} "
-            f"MeetingRecord created zoom_meeting_id={meeting_data['meeting_id']}"
-        )
-        write_audit_log(
-            event_type="meeting.created",
-            success=True,
-            zoom_account_id=account.account_id,
-            openemr_appointment_id=eid,
-            openemr_provider_id=mapping.openemr_provider_id,
-            zoom_meeting_id=meeting_data["meeting_id"],
-        )
-
-        # Write Zoom URLs back to OpenEMR appointment record
-        if eid:
-            success = write_zoom_urls_to_appointment(
-                eid=eid,
-                start_url=meeting_data["start_url"],
-                join_url=meeting_data["join_url"],
-            )
-
-            current_app.logger.info(
-                f"webhooks.openemr | eid={eid} account={account.account_id} "
-                f"{'Meeting link written back to OpenEMR' if success else 'Meeting link failed to write back to OpenEMR'} "
-                f"zoom_meeting_id={meeting_data['meeting_id']}"
-            )
-
-            write_audit_log(
-                event_type="openemr.url_writeback_success" if success else "openemr.url_writeback_failed",
-                success=success,
-                zoom_account_id=account.account_id,
-                openemr_appointment_id=eid,
-                openemr_provider_id=mapping.openemr_provider_id,
-                openemr_patient_id=pid,
-                zoom_meeting_id=meeting_data["meeting_id"],
-                error_message=None if success else "Zoom URL writeback failed",
-            )   
- 
-        return {
-            "account_id": account.account_id,
-            "zoom_meeting_id": meeting_data["meeting_id"],
-            "zoom_join_url": meeting_data["join_url"],
-            "zoom_start_url": meeting_data["start_url"],
-        }
- 
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(
-            f"webhooks.openemr | eid={eid} account={account.account_id} "
-            f"DB write failed: {e}"
-        )
-        write_audit_log(
-            event_type="meeting.create_failed",
-            success=False,
-            zoom_account_id=account.account_id,
-            openemr_appointment_id=eid,
-            openemr_provider_id=mapping.openemr_provider_id,
-            openemr_patient_id=payload.get("pid"),
-            zoom_meeting_id=meeting_data.get("meeting_id"),
-            error_message=str(e),
-            detail={"stage": "local_record_create"},
-        )
-
-        return {"error": str(e)}
- 
- 
 def _handle_existing_meeting(
     record: MeetingRecord,
     match,

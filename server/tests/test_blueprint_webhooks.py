@@ -157,7 +157,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         ], None),
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
+        "app.services.meeting.create_zoom_meeting",
         lambda match: {
             "meeting_id": "123456789",
             "start_url": "https://zoom.example/start/123456789",
@@ -231,7 +231,7 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
             "join_url": "https://zoom.example/join/m-success",
         }
 
-    monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting", fake_create_zoom_meeting)
+    monkeypatch.setattr("app.services.meeting.create_zoom_meeting", fake_create_zoom_meeting)
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -261,6 +261,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
     calls = []
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.services.meeting.write_audit_log", lambda **kwargs: calls.append(kwargs))
     monkeypatch.setattr(
         "app.blueprints.webhooks.openemr.openemr_webhook_helpers.filter_appointment_event",
         lambda payload: ([
@@ -272,7 +273,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
         ], None),
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
+        "app.services.meeting.create_zoom_meeting",
         lambda match: (_ for _ in ()).throw(RuntimeError("zoom failure")),
     )
 
@@ -416,7 +417,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         ], None),
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
+        "app.services.meeting.create_zoom_meeting",
         lambda match: {
             "meeting_id": "123456789",
             "start_url": "https://zoom.example/start/123456789",
@@ -424,7 +425,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         },
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_zoom_urls_to_appointment",
+        "app.services.meeting.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: captured.update(
             {"eid": eid, "start_url": start_url, "join_url": join_url}
         )
@@ -432,6 +433,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
     )
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.services.meeting.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
@@ -475,7 +477,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         ], None),
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.create_zoom_meeting",
+        "app.services.meeting.create_zoom_meeting",
         lambda match: {
             "meeting_id": "writeback-fail-1",
             "start_url": "https://zoom.example/start/writeback-fail-1",
@@ -483,11 +485,12 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         },
     )
     monkeypatch.setattr(
-        "app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_zoom_urls_to_appointment",
+        "app.services.meeting.write_zoom_urls_to_appointment",
         lambda eid, start_url, join_url: False,
     )
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook.write_audit_log", lambda **kwargs: calls.append(kwargs))
     monkeypatch.setattr("app.blueprints.webhooks.openemr.openemr_webhook_helpers.write_audit_log", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr("app.services.meeting.write_audit_log", lambda **kwargs: calls.append(kwargs))
 
     body = _body(OPENEMR_APPOINTMENT_PAYLOAD)
     response = client.post(
