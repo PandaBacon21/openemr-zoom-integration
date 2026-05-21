@@ -61,7 +61,7 @@ def test_provider_seed_rows_include_expected_npi_values():
     }
 
     for npi in expected_npis:
-        assert f"'{npi}'" in text, f"Expected NPI {npi} not found in demo_data.sql"
+        assert f"'{npi}'" in text, f"Expected NPI {npi} not found in seed_data SQL"
 
 
 def test_seed_data_includes_users_secure_rows_for_staff_logins():

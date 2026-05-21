@@ -31,7 +31,7 @@ Current implemented areas:
   - OpenEMR appointment status code mapping notes
   - migration and test coverage pointers
 - See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) for the repo-based deployment/setup checklist and credential reference.
-- See [docs/internal/phase-2-sprint-plan.md](docs/internal/phase-2-sprint-plan.md) for the future-facing Phase 2 Sprint 7-11 planning snapshot.
+- See [docs/internal/phase-2-sprint-plan.md](docs/internal/phase-2-sprint-plan.md) for the Phase 2 Sprint 7-13 plan with implementation status per story.
 
 ## Usage
 

@@ -118,7 +118,7 @@ Run this after OpenEMR has finished its first boot and the MariaDB container is 
 
 The script loads `MYSQL_ROOT_PASSWORD`, `OPENEMR_DB_NAME`, and optional `MARIADB_CONTAINER` from `.env`. It defaults to the Compose MariaDB container name `mariadb-emr` and database name `openemr`.
 
-Demo patient emails, provider emails, nurse emails, and medical assistant emails are all defined directly in `seed_data/demo_data.sql`.
+Demo patient, provider, nurse, and medical assistant emails are all defined directly in the Sprint 12 seed files — patients in `seed_data/05_patients.sql`, staff in `seed_data/03_staff.sql`. The seed loader (`seed.sh`) cat-pipes `01_globals.sql` through `07_clinical_data.sql` into a single mariadb session so cross-file `@var` references resolve correctly.
 
 To clear the seeded demo data later:
 
