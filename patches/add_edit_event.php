@@ -1777,13 +1777,17 @@ if (empty($_GET['prov'])) { ?>
     <input class="col-sm mx-sm-2 my-2 my-sm-auto btn btn-secondary" type='button' name='form_duplicate' id='form_duplicate' value='<?php echo xla('Create Duplicate'); ?>' />
 </div>
     <?php if (!empty($row['pc_website'])): ?>
-        <div class="form-row mx-2 mt-2 justify-content-left">
-        <a href="<?php echo attr($row['pc_website']); ?>" target="_blank" title="<?php echo xla('Start Zoom Meeting'); ?>">
-        <img src="<?php echo $GLOBALS['webroot']; ?>/public/images/logos/Product_Meetings_Bloom_Badge-Solo.png" 
-             style="height:64px; width:64px;" />
+    <div class="form-row mx-2 mt-2">
+        <a href="<?php echo attr($row['pc_website']); ?>"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mx-sm-2 my-6 my-sm-auto btn btn-primary"
+            style="background-color:#0B5CFF; border-color:#0B5CFF;"
+            title="<?php echo xla('Start Zoom Meeting'); ?>">
+            <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
         </a>
-        </div>
-    <?php endif; ?>
+    </div>
+<?php endif; ?>
 <?php if ($informant) {
     echo "<label><p class='text'>" . xlt('Last update by') . " " .
     text($informant) . " " . xlt('on') . " " . text($row['pc_time']) . "</p></label>\n";
