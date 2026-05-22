@@ -13,6 +13,7 @@ from flask import request, jsonify
 from app.models import ZoomAccount
 from app.services.audit import write_audit_log
 from app.services.hydrate import hydrate_future_meetings
+from app.services.openemr import seed_past_locked_encounters
 
 from app.blueprints.config import config_bp
 
@@ -47,7 +48,8 @@ def hydrate_demo_data():
         return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
 
     try:
-        summary = hydrate_future_meetings(account)
+        future_summary = hydrate_future_meetings(account)
+        past_summary = seed_past_locked_encounters(account)
     except Exception as exc:
         logger.exception(
             f"config.demo.hydrate | account={zoom_account_id} orchestrator raised"
@@ -61,4 +63,5 @@ def hydrate_demo_data():
         )
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify(summary), 200
+    # Merge — the two passes don't share any keys.
+    return jsonify({**future_summary, **past_summary}), 200

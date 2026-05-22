@@ -48,6 +48,21 @@ interface Props {
 
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
+const labelForSkipReason = (reason: string): string => {
+  switch (reason) {
+    case "unknown_specialty":
+      return "provider's specialty isn't recognized";
+    case "no_patients":
+      return "no patients assigned to this provider";
+    case "category_missing_in_openemr":
+      return "matching appointment category not found in OpenEMR";
+    case "8am_slot_occupied":
+      return "8am slot already has an encounter";
+    default:
+      return reason;
+  }
+};
+
 const AccountProvidersTab: React.FC<Props> = ({
   account,
   mappings,
@@ -306,20 +321,72 @@ const AccountProvidersTab: React.FC<Props> = ({
               </Button>
             </Box>
             {hydrateSummary && (
-              <Alert
-                severity={
-                  hydrateSummary.errors.length > 0 ? "warning" : "success"
-                }
-                sx={{ mt: 1.5, py: 0.5 }}
-              >
-                Created {hydrateSummary.appointments_created} appts,{" "}
-                {hydrateSummary.meetings_created} meetings; backfilled{" "}
-                {hydrateSummary.meetings_backfilled}; skipped{" "}
-                {hydrateSummary.providers_skipped.length} providers
-                {hydrateSummary.errors.length > 0 &&
-                  `, ${hydrateSummary.errors.length} errors`}
-                .
-              </Alert>
+              <Box sx={{ mt: 1.5 }}>
+                <Alert
+                  severity={
+                    hydrateSummary.errors.length > 0 ||
+                    hydrateSummary.past_encounter_errors.length > 0
+                      ? "warning"
+                      : "success"
+                  }
+                  sx={{ py: 0.5 }}
+                >
+                  Future: created {hydrateSummary.appointments_created} appts,{" "}
+                  {hydrateSummary.meetings_created} meetings; backfilled{" "}
+                  {hydrateSummary.meetings_backfilled}; skipped{" "}
+                  {hydrateSummary.providers_skipped.length} providers.
+                  <br />
+                  Past encounters:{" "}
+                  {hydrateSummary.past_encounters_skipped_today
+                    ? "already seeded today (one per day)"
+                    : `${hydrateSummary.past_encounters_created} created` +
+                      (hydrateSummary.past_encounter_skips.length > 0
+                        ? `, ${hydrateSummary.past_encounter_skips.length} skipped`
+                        : "") +
+                      (hydrateSummary.past_encounter_errors.length > 0
+                        ? `, ${hydrateSummary.past_encounter_errors.length} failed`
+                        : "") +
+                      "."}
+                </Alert>
+
+                {(hydrateSummary.past_encounter_skips.length > 0 ||
+                  hydrateSummary.past_encounter_errors.length > 0) && (
+                  <Alert
+                    severity={
+                      hydrateSummary.past_encounter_errors.length > 0
+                        ? "error"
+                        : "info"
+                    }
+                    sx={{ mt: 1, py: 0.5 }}
+                  >
+                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      Past encounter details
+                    </Typography>
+                    <Box component="ul" sx={{ pl: 2, mt: 0.5, mb: 0 }}>
+                      {hydrateSummary.past_encounter_skips.map((s, i) => (
+                        <Typography
+                          key={`skip-${i}`}
+                          component="li"
+                          variant="caption"
+                        >
+                          Provider {s.openemr_provider_id} skipped —{" "}
+                          {labelForSkipReason(s.reason)}
+                        </Typography>
+                      ))}
+                      {hydrateSummary.past_encounter_errors.map((e, i) => (
+                        <Typography
+                          key={`err-${i}`}
+                          component="li"
+                          variant="caption"
+                        >
+                          Provider {e.openemr_provider_id} failed at{" "}
+                          {e.stage} — {e.error}
+                        </Typography>
+                      ))}
+                    </Box>
+                  </Alert>
+                )}
+              </Box>
             )}
             {hydrateError && (
               <Alert severity="error" sx={{ mt: 1.5, py: 0.5 }}>

@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 # resolve to [] so the orchestrator can skip them explicitly rather than
 # silently producing wrong-specialty appointments.
 SPECIALTY_TO_CATEGORIES = {
-    "Internal Medicine":              ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive"],
-    "Family Medicine":                ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive"],
-    "Psychiatry":                     ["Zoom Behavioral Health"],
-    "Psychiatric Nurse Practitioner": ["Zoom Behavioral Health"],
-    "Clinical Social Work":           ["Zoom Behavioral Health"],
-    "Addiction Medicine":             ["Zoom MAT (Suboxone)"],
+    "Internal Medicine":              ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive", "Zoom Established Patient"],
+    "Family Medicine":                ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive", "Zoom Established Patient"],
+    "Psychiatry":                     ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Psychiatric Nurse Practitioner": ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Clinical Social Work":           ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Addiction Medicine":             ["Zoom MAT (Suboxone)", "Zoom New Patient", "Zoom Established Patient"],
 }
 
 
@@ -98,10 +98,10 @@ def get_provider_patients(provider_user_id: int) -> list[dict]:
     """
     Fetch all patients assigned to the given OpenEMR provider via patient_data.providerID.
 
-    Used by the Sprint 13 demo hydration flow to round-robin a provider's seeded
-    patients across generated future appointments + today's locked sample encounter.
-    Under the Sprint 12 seed each provider has exactly 3 patients, but callers should
-    not assume any particular count. This could easily increase and scale over time.
+    Excludes patients tagged as the dedicated demo past-encounter target
+    (patient_data.referrer = 'Zoomly Demo Past Encounter') so future-appointment
+    hydration still cycles through the Sprint 12 chronic-care / persona patients
+    rather than scheduling every future visit on the diabetes demo patient.
     """
     engine = get_openemr_db_engine()
     with engine.connect() as conn:
@@ -110,6 +110,7 @@ def get_provider_patients(provider_user_id: int) -> list[dict]:
                 "SELECT pid, fname, lname, DOB, sex "
                 "FROM patient_data "
                 "WHERE providerID = :provider_id "
+                "  AND (referrer IS NULL OR referrer != 'Zoomly Demo Past Encounter') "
                 "ORDER BY pid"
             ),
             {"provider_id": int(provider_user_id)}

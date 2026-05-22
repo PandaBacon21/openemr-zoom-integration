@@ -251,3 +251,88 @@ VALUES
     (104, 'carlos.mendez',  '$2y$12$x//cQ7uVV1QpGENhd3MQu.o/.EAfV6mVin2n1nj4/uv0YSgFFYSpW', 1, 'carlos.mendez'),
     (105, 'linda.whitaker',    '$2y$12$8JnLYbEzToMoMYIQ1Lsm8ulVHXye46./se7QyURqhkS2MAswPxrAO', 1, 'linda.whitaker');
 
+
+-- =============================================================================
+-- DEMO PAST-ENCOUNTER PATIENTS (Sprint 13 / S13-05)
+--
+-- 17 dedicated patients (PIDs 151-167) — one per mapped provider — sized to
+-- the diabetes profile referenced in PAST_ENCOUNTER_NOTE
+-- (services/openemr/encounter/sample_notes.py). Each is female, married, age
+-- ~52-56 (DOB 1970-1974), regionally placed by the assigned provider's
+-- facility, and tagged with referrer='Zoomly Demo Past Encounter' so
+-- past_encounter._seed_one_provider can pick them deterministically (rather
+-- than falling through to patients[0] which would pick a generic CHR/HYA/etc
+-- chart that doesn't match today's locked telehealth follow-up narrative).
+--
+-- Companion clinical data (problems / meds / 3-months-ago in-person encounter
+-- + vitals + HbA1c lab) lives in 07_clinical_data.sql.
+-- =============================================================================
+
+INSERT INTO `patient_data` (
+    `pid`, `uuid`, `fname`, `lname`, `mname`, `title`,
+    `DOB`, `sex`, `status`,
+    `street`, `city`, `state`, `postal_code`, `country_code`,
+    `phone_cell`, `email`,
+    `providerID`, `pubpid`,
+    `hipaa_mail`, `hipaa_voice`, `hipaa_notice`, `hipaa_message`,
+    `hipaa_allowsms`, `hipaa_allowemail`,
+    `language`, `financial`, `date`, `referrer`
+) VALUES
+-- East (facility 2) — 10 patients across MA/NY/PA/FL/NC/DC/GA matching each provider's facility region
+(151, UNHEX(REPLACE(UUID(), '-', '')), 'Sarah',     'Chen',      'L', 'Mrs.',
+ '1972-04-15', 'Female', 'married', '210 Newbury Street',     'Boston',       'MA', '02116', 'USA',
+ '617-555-0151', 'sarah.chen@example.org',                10, '151', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(152, UNHEX(REPLACE(UUID(), '-', '')), 'Maria',     'Lopez',     'A', 'Mrs.',
+ '1971-08-22', 'Female', 'married', '420 Lexington Avenue',   'New York',     'NY', '10017', 'USA',
+ '212-555-0152', 'maria.lopez@example.org',               11, '152', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(153, UNHEX(REPLACE(UUID(), '-', '')), 'Jennifer',  'Wright',    'E', 'Mrs.',
+ '1973-02-10', 'Female', 'married', '88 Beacon Street',       'Boston',       'MA', '02108', 'USA',
+ '617-555-0153', 'jennifer.wright@example.org',           12, '153', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(154, UNHEX(REPLACE(UUID(), '-', '')), 'Linda',     'Tran',      'M', 'Mrs.',
+ '1970-11-05', 'Female', 'married', '1200 Market Street',     'San Francisco','CA', '94103', 'USA',
+ '415-555-0154', 'linda.tran@example.org',                13, '154', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- Mountain (facility 1) — 4 patients in CO + 1 in UT
+(155, UNHEX(REPLACE(UUID(), '-', '')), 'Amanda',    'Foster',    'J', 'Mrs.',
+ '1972-07-19', 'Female', 'married', '650 Pearl Street',       'Boulder',      'CO', '80302', 'USA',
+ '720-555-0155', 'amanda.foster@example.org',             14, '155', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(156, UNHEX(REPLACE(UUID(), '-', '')), 'Patricia',  'Reed',      'B', 'Mrs.',
+ '1974-05-28', 'Female', 'married', '300 17th Street',        'Denver',       'CO', '80202', 'USA',
+ '303-555-0156', 'patricia.reed@example.org',             15, '156', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(157, UNHEX(REPLACE(UUID(), '-', '')), 'Karen',     'Singh',     'N', 'Mrs.',
+ '1971-09-14', 'Female', 'married', '1500 Walnut Street',     'Philadelphia', 'PA', '19102', 'USA',
+ '215-555-0157', 'karen.singh@example.org',               16, '157', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(158, UNHEX(REPLACE(UUID(), '-', '')), 'Michelle',  'Park',      'H', 'Mrs.',
+ '1973-12-02', 'Female', 'married', '200 5th Avenue',         'New York',     'NY', '10010', 'USA',
+ '212-555-0158', 'michelle.park@example.org',             17, '158', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(159, UNHEX(REPLACE(UUID(), '-', '')), 'Rebecca',   'Santos',    'R', 'Mrs.',
+ '1972-03-08', 'Female', 'married', '350 Brickell Avenue',    'Miami',        'FL', '33131', 'USA',
+ '305-555-0159', 'rebecca.santos@example.org',            18, '159', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(160, UNHEX(REPLACE(UUID(), '-', '')), 'Cynthia',   'Hayes',     'P', 'Mrs.',
+ '1970-06-21', 'Female', 'married', '525 N Tryon Street',     'Charlotte',    'NC', '28202', 'USA',
+ '704-555-0160', 'cynthia.hayes@example.org',             19, '160', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(161, UNHEX(REPLACE(UUID(), '-', '')), 'Donna',     'Patel',     'C', 'Mrs.',
+ '1973-10-30', 'Female', 'married', '1200 K Street NW',       'Washington',   'DC', '20005', 'USA',
+ '202-555-0161', 'donna.patel@example.org',               21, '161', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(162, UNHEX(REPLACE(UUID(), '-', '')), 'Susan',     'Mitchell',  'G', 'Mrs.',
+ '1971-01-17', 'Female', 'married', '300 Park Avenue',        'New York',     'NY', '10022', 'USA',
+ '212-555-0162', 'susan.mitchell@example.org',            22, '162', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- West (facility 3) — 2 patients in CA
+(163, UNHEX(REPLACE(UUID(), '-', '')), 'Lisa',      'Nakamura',  'K', 'Mrs.',
+ '1972-08-09', 'Female', 'married', '1100 Wilshire Boulevard','Los Angeles',  'CA', '90017', 'USA',
+ '213-555-0163', 'lisa.nakamura@example.org',             23, '163', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- Central (facility 4) — 1 patient in MO
+(164, UNHEX(REPLACE(UUID(), '-', '')), 'Carol',     'Brennan',   'F', 'Mrs.',
+ '1974-04-26', 'Female', 'married', '900 Walnut Street',      'Kansas City',  'MO', '64106', 'USA',
+ '816-555-0164', 'carol.brennan@example.org',             24, '164', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- East (continued) — provider 25
+(165, UNHEX(REPLACE(UUID(), '-', '')), 'Diana',     'Roberts',   'T', 'Mrs.',
+ '1971-11-12', 'Female', 'married', '275 Peachtree Street',   'Atlanta',      'GA', '30303', 'USA',
+ '404-555-0165', 'diana.roberts@example.org',             25, '165', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- Mountain (continued) — providers 26, 27
+(166, UNHEX(REPLACE(UUID(), '-', '')), 'Wendy',     'Cho',       'S', 'Mrs.',
+ '1973-06-05', 'Female', 'married', '410 N Tejon Street',     'Colorado Springs','CO','80903','USA',
+ '719-555-0166', 'wendy.cho@example.org',                 26, '166', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+(167, UNHEX(REPLACE(UUID(), '-', '')), 'Pamela',    'Stewart',   'D', 'Mrs.',
+ '1970-02-23', 'Female', 'married', '180 W South Temple',     'Salt Lake City','UT','84101','USA',
+ '801-555-0167', 'pamela.stewart@example.org',            27, '167', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter');
+

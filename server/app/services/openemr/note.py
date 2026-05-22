@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Keys are lowercase for case-insensitive matching.
 SOAP_SECTION_MAP = {
     # Subjective
+    "subjective":                       "subjective",
     "chief complaint":                  "subjective",
     "history of present illness":       "subjective",
     "hpi":                              "subjective",
@@ -39,6 +40,7 @@ SOAP_SECTION_MAP = {
     "diet and nutrition":               "subjective",
  
     # Objective
+    "objective":                        "objective",
     "physical exam":                    "objective",
     "vitals":                           "objective",
     "results":                          "objective",

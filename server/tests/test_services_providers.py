@@ -261,6 +261,7 @@ def test_get_provider_specialty_categories_pc(monkeypatch):
         "Zoom Chronic Care",
         "Zoom New Patient",
         "Zoom Preventive",
+        "Zoom Established Patient",
     ]
 
 
@@ -269,7 +270,11 @@ def test_get_provider_specialty_categories_bh_psychiatry(monkeypatch):
         "app.services.openemr.provider.get_openemr_db_engine",
         lambda: _fake_row_engine(SimpleNamespace(specialty="Psychiatry")),
     )
-    assert providers.get_provider_specialty_categories(12) == ["Zoom Behavioral Health"]
+    assert providers.get_provider_specialty_categories(12) == [
+        "Zoom Behavioral Health",
+        "Zoom New Patient",
+        "Zoom Established Patient",
+    ]
 
 
 def test_get_provider_specialty_categories_mat(monkeypatch):
@@ -277,7 +282,11 @@ def test_get_provider_specialty_categories_mat(monkeypatch):
         "app.services.openemr.provider.get_openemr_db_engine",
         lambda: _fake_row_engine(SimpleNamespace(specialty="Addiction Medicine")),
     )
-    assert providers.get_provider_specialty_categories(22) == ["Zoom MAT (Suboxone)"]
+    assert providers.get_provider_specialty_categories(22) == [
+        "Zoom MAT (Suboxone)",
+        "Zoom New Patient",
+        "Zoom Established Patient",
+    ]
 
 
 def test_get_provider_specialty_categories_unknown_specialty(monkeypatch):
@@ -304,7 +313,7 @@ def test_get_provider_specialty_categories_returns_fresh_list(monkeypatch):
     first = providers.get_provider_specialty_categories(10)
     first.pop()
     second = providers.get_provider_specialty_categories(10)
-    assert len(second) == 3  # not mutated by the prior pop
+    assert len(second) == 4  # not mutated by the prior pop (4 categories for PC)
 
 
 # -- get_provider_appointments_in_window ------------------------------------

@@ -80,7 +80,7 @@ def test_hydrate_returns_404_when_account_inactive(client, app):
 def test_hydrate_returns_summary_on_success(client, app, monkeypatch):
     _create_account(app, "acct-hydrate")
 
-    fake_summary = {
+    fake_future = {
         "providers_processed": 2,
         "providers_skipped": [],
         "appointments_created": 8,
@@ -88,9 +88,19 @@ def test_hydrate_returns_summary_on_success(client, app, monkeypatch):
         "meetings_backfilled": 0,
         "errors": [],
     }
+    fake_past = {
+        "past_encounters_created": 2,
+        "past_encounters_skipped_today": False,
+        "past_encounter_skips": [],
+        "past_encounter_errors": [],
+    }
     monkeypatch.setattr(
         "app.blueprints.config.demo_routes.hydrate_future_meetings",
-        lambda account: fake_summary,
+        lambda account: fake_future,
+    )
+    monkeypatch.setattr(
+        "app.blueprints.config.demo_routes.seed_past_locked_encounters",
+        lambda account: fake_past,
     )
 
     response = client.post(
@@ -99,7 +109,7 @@ def test_hydrate_returns_summary_on_success(client, app, monkeypatch):
         headers=AUTH_HEADERS,
     )
     assert response.status_code == 200
-    assert response.get_json() == fake_summary
+    assert response.get_json() == {**fake_future, **fake_past}
 
 
 def test_hydrate_passes_account_to_orchestrator(client, app, monkeypatch):
@@ -114,6 +124,13 @@ def test_hydrate_passes_account_to_orchestrator(client, app, monkeypatch):
             "meetings_backfilled": 0, "errors": [],
         }
     monkeypatch.setattr("app.blueprints.config.demo_routes.hydrate_future_meetings", fake_hydrate)
+    monkeypatch.setattr(
+        "app.blueprints.config.demo_routes.seed_past_locked_encounters",
+        lambda account: {
+            "past_encounters_created": 0, "past_encounters_skipped_today": False,
+            "past_encounter_skips": [], "past_encounter_errors": [],
+        },
+    )
 
     client.post(
         "/config/demo/hydrate",
