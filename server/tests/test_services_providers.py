@@ -321,6 +321,8 @@ def test_get_provider_appointments_in_window_returns_rows(monkeypatch):
             pc_catid=20,
             pc_apptstatus="-",
             pc_website="https://zoom.us/j/123",
+            pc_title="Zoom BH",
+            pc_hometext="follow up",
         ),
         SimpleNamespace(
             pc_eid=502,
@@ -332,6 +334,8 @@ def test_get_provider_appointments_in_window_returns_rows(monkeypatch):
             pc_catid=21,
             pc_apptstatus="-",
             pc_website=None,
+            pc_title="Zoom Chronic Care",
+            pc_hometext="",
         ),
     ]
     monkeypatch.setattr(

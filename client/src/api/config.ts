@@ -193,6 +193,35 @@ export const deleteProviderMapping = (
     `/config/providers/${openemr_provider_id}?zoom_account_id=${zoom_account_id}`,
   );
 
+// Demo hydration
+export interface HydrateSkip {
+  openemr_provider_id: string;
+  reason: "unknown_specialty" | "no_matching_categories" | "no_patients";
+}
+
+export interface HydrateError {
+  stage:
+    | "generate_appointment"
+    | "create_meeting"
+    | "backfill_meeting";
+  openemr_provider_id: string;
+  openemr_appointment_id?: number | string;
+  slot?: string;
+  error?: string;
+}
+
+export interface HydrateSummary {
+  providers_processed: number;
+  providers_skipped: HydrateSkip[];
+  appointments_created: number;
+  meetings_created: number;
+  meetings_backfilled: number;
+  errors: HydrateError[];
+}
+
+export const hydrateDemoData = (zoom_account_id: string) =>
+  apiClient.post<HydrateSummary>("/config/demo/hydrate", { zoom_account_id });
+
 // Appointment types
 export const getAppointmentFilters = (zoom_account_id: string) =>
   apiClient.get<{ count: number; appointment_types: AppointmentType[] }>(

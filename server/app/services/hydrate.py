@@ -2,7 +2,7 @@
 Sprint 13 demo hydration orchestrator.
 
 Walks every active ProviderMapping for a registered ZoomAccount and ensures
-the next-2-weekdays × 2-slots-per-day grid (= 4 slots per provider) is fully
+the next-2-weekdays x 2-slots-per-day grid (= 4 slots per provider) is fully
 populated with appointments + Zoom meetings. Idempotent — re-running tops up
 any slot missing an appointment, or backfills a Zoom meeting on an existing
 appointment that lacks a MeetingRecord.
@@ -228,7 +228,18 @@ def _handle_empty_slot(
         return
     summary["appointments_created"] += 1
 
-    payload = {"eid": new_eid, "pid": patient["pid"], "appt_status": "-"}
+    # Synthetic payload mirroring the OpenEMR webhook shape so create_zoom_meeting
+    # has all the fields it expects (appointment_date YYYY-MM-DD, appointment_time HH:MM,
+    # title, duration_minutes).
+    payload = {
+        "eid": new_eid,
+        "pid": patient["pid"],
+        "appt_status": "-",
+        "appointment_date": slot_date.strftime("%Y-%m-%d"),
+        "appointment_time": slot_time.strftime("%H:%M"),
+        "title": category_name,
+        "duration_minutes": 30,
+    }
     match = AppointmentMatch(zoom_account=account, provider_mapping=mapping, payload=payload)
     result = create_meeting_for_appointment(match, payload)
     if "error" in result:
@@ -273,7 +284,19 @@ def _handle_existing_slot(
         # Both present — silent no-op (audit volume kept sane per design).
         return
 
-    payload = {"eid": existing_eid, "pid": existing_pid, "appt_status": appt_status}
+    # Synthetic payload mirroring the OpenEMR webhook shape — backfill path
+    # reuses the existing appointment's date/time/title/duration.
+    existing_duration_sec = existing.get("pc_duration") or 1800
+    payload = {
+        "eid": existing_eid,
+        "pid": existing_pid,
+        "appt_status": appt_status,
+        "appointment_date": slot_date.strftime("%Y-%m-%d"),
+        "appointment_time": slot_time.strftime("%H:%M"),
+        "title": existing.get("pc_title") or "Telehealth Visit",
+        "duration_minutes": max(1, int(existing_duration_sec) // 60),
+        "comments": existing.get("pc_hometext") or "",
+    }
     match = AppointmentMatch(zoom_account=account, provider_mapping=mapping, payload=payload)
     result = create_meeting_for_appointment(match, payload)
     if "error" in result:

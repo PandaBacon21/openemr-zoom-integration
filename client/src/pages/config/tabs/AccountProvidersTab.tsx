@@ -29,6 +29,7 @@ import type {
   ProviderMapping,
   OpenEMRProvider,
   ZoomUser,
+  HydrateSummary,
 } from "../../../api/config";
 import {
   getProviderMappings,
@@ -36,6 +37,7 @@ import {
   getZoomUsers,
   createProviderMapping,
   deleteProviderMapping,
+  hydrateDemoData,
 } from "../../../api/config";
 
 interface Props {
@@ -66,6 +68,11 @@ const AccountProvidersTab: React.FC<Props> = ({
   const [editingMapping, setEditingMapping] = useState<ProviderMapping | null>(
     null,
   );
+  const [hydrating, setHydrating] = useState(false);
+  const [hydrateSummary, setHydrateSummary] = useState<HydrateSummary | null>(
+    null,
+  );
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
 
   // Provider cache
   const providerCache = useRef<{
@@ -238,10 +245,91 @@ const AccountProvidersTab: React.FC<Props> = ({
     setSearchInput("");
   };
 
+  const handleHydrate = async () => {
+    setHydrating(true);
+    setHydrateError(null);
+    setHydrateSummary(null);
+    try {
+      const res = await hydrateDemoData(account.zoom_account_id);
+      setHydrateSummary(res.data);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? "Failed to hydrate demo data";
+      setHydrateError(message);
+    } finally {
+      setHydrating(false);
+    }
+  };
+
   return (
     <Box
       sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 1000 }}
     >
+      {/* Hydrate Demo Data — small card, top-right */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Card variant="outlined" sx={{ maxWidth: 460, width: "100%" }}>
+          <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 2,
+              }}
+            >
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Hydrate Demo Data
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block" }}
+                >
+                  Fills the next 4 weekday slots for every mapped provider with
+                  appointments + real Zoom meetings. Idempotent — re-run safely.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleHydrate}
+                disabled={mappings.length === 0 || hydrating}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                {hydrating ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  "Hydrate"
+                )}
+              </Button>
+            </Box>
+            {hydrateSummary && (
+              <Alert
+                severity={
+                  hydrateSummary.errors.length > 0 ? "warning" : "success"
+                }
+                sx={{ mt: 1.5, py: 0.5 }}
+              >
+                Created {hydrateSummary.appointments_created} appts,{" "}
+                {hydrateSummary.meetings_created} meetings; backfilled{" "}
+                {hydrateSummary.meetings_backfilled}; skipped{" "}
+                {hydrateSummary.providers_skipped.length} providers
+                {hydrateSummary.errors.length > 0 &&
+                  `, ${hydrateSummary.errors.length} errors`}
+                .
+              </Alert>
+            )}
+            {hydrateError && (
+              <Alert severity="error" sx={{ mt: 1.5, py: 0.5 }}>
+                {hydrateError}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+
       {/* Search + Provider Selection */}
       <Card>
         <CardContent sx={{ p: 3 }}>

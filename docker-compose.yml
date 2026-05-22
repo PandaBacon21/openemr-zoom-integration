@@ -78,6 +78,8 @@ services:
       # Patch for adding Start Zoom Meeting button
       - ./patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
       - ./patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
+      - ./patches/post_calendar/week/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/week/ajax_template.html:ro
+      - ./patches/post_calendar/month/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html:ro
       # Patch for Telehealth column + Start Zoom Meeting button on the Patient Flow Board
       - ./patches/patient_tracker.inc.php:/var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php:ro
       - ./patches/patient_tracker.php:/var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php:ro

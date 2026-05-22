@@ -175,6 +175,18 @@ def test_hydrate_all_missing_creates_four_appointments_and_meetings(app, monkeyp
         "Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive", "Zoom Chronic Care"
     ]
 
+    # create_meeting payload carries all the fields create_zoom_meeting needs —
+    # without these, create_zoom_meeting raises ValueError("Missing appointment_date...")
+    for call in captured["create_meeting_calls"]:
+        p = call["payload"]
+        assert "appointment_date" in p, "appointment_date required by create_zoom_meeting"
+        assert "appointment_time" in p, "appointment_time required by create_zoom_meeting"
+        assert "title" in p
+        assert "duration_minutes" in p
+        # Date format is YYYY-MM-DD; time format is HH:MM (Zoom service parses both)
+        assert len(p["appointment_date"]) == 10
+        assert p["appointment_time"].count(":") == 1
+
 
 def test_hydrate_all_present_noop(app, monkeypatch):
     """Provider already has 4 appts with MeetingRecords → no work done."""
@@ -193,6 +205,7 @@ def test_hydrate_all_present_noop(app, monkeypatch):
                     "pc_eventDate": d, "pc_startTime": t,
                     "pc_duration": 1800, "pc_catid": 21,
                     "pc_apptstatus": "-", "pc_website": "https://zoom.example/join/x",
+                    "pc_title": "Telehealth", "pc_hometext": "",
                 })
                 # Seed MeetingRecord for each
                 db.session.add(MeetingRecord(
@@ -233,6 +246,8 @@ def test_hydrate_backfill_when_appt_exists_without_meeting(app, monkeypatch):
             "pc_eventDate": slot_dates[0], "pc_startTime": time(9, 0),
             "pc_duration": 1800, "pc_catid": 21,
             "pc_apptstatus": "-", "pc_website": None,
+            "pc_title": "Existing telehealth slot",
+            "pc_hometext": "Follow-up",
         }]
 
         captured = _patch_all_dependencies(
@@ -247,11 +262,15 @@ def test_hydrate_backfill_when_appt_exists_without_meeting(app, monkeypatch):
     assert summary["appointments_created"] == 3   # the other 3 slots got new appts
     assert summary["meetings_created"] == 3
     assert summary["meetings_backfilled"] == 1
-    backfill = captured["create_meeting_calls"][-1] if False else None
-    # backfill carries the existing eid (5555), patient 100, status "-"
+    # backfill carries the existing eid (5555), patient 100, status "-", plus
+    # the existing pc_title and the slot's date/time
     backfill_payloads = [c["payload"] for c in captured["create_meeting_calls"] if c["payload"]["eid"] == 5555]
     assert len(backfill_payloads) == 1
-    assert backfill_payloads[0]["pid"] == 100
+    bp = backfill_payloads[0]
+    assert bp["pid"] == 100
+    assert bp["title"] == "Existing telehealth slot"
+    assert bp["appointment_time"] == "09:00"
+    assert bp["duration_minutes"] == 30  # 1800 sec // 60
 
 
 def test_hydrate_skips_provider_with_unknown_specialty(app, monkeypatch):

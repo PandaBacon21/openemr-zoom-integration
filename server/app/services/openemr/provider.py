@@ -167,7 +167,8 @@ def get_provider_appointments_in_window(
         rows = conn.execute(
             text("""
                 SELECT pc_eid, pc_pid, pc_aid, pc_eventDate, pc_startTime,
-                       pc_duration, pc_catid, pc_apptstatus, pc_website
+                       pc_duration, pc_catid, pc_apptstatus, pc_website,
+                       pc_title, pc_hometext
                 FROM openemr_postcalendar_events
                 WHERE pc_aid = :provider_id
                   AND pc_eventDate BETWEEN :start_date AND :end_date
@@ -190,6 +191,8 @@ def get_provider_appointments_in_window(
             "pc_catid": row.pc_catid,
             "pc_apptstatus": row.pc_apptstatus,
             "pc_website": row.pc_website,
+            "pc_title": row.pc_title,
+            "pc_hometext": row.pc_hometext,
         }
         for row in rows
     ]
