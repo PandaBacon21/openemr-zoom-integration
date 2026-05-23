@@ -955,7 +955,7 @@ def test_zoom_webhook_audits_note_handler_error(client, app, monkeypatch):
     }).encode("utf-8")
 
     response = client.post(
-        "/webhooks/zoom",
+        "/webhooks/zoom/acct-handler-err",
         data=payload,
         content_type="application/json",
         headers={
@@ -969,3 +969,96 @@ def test_zoom_webhook_audits_note_handler_error(client, app, monkeypatch):
     assert handler_err["success"] is False
     assert handler_err["zoom_account_id"] == "acct-handler-err"
     assert "boom" in handler_err["error_message"]
+
+
+def _set_webhook_secret(account_id: str, secret: str):
+    """Override the encrypted webhook_secret on an existing ZoomAccount row."""
+    from app.extensions import db
+    from app.models import ZoomAccount
+
+    account = ZoomAccount.query.filter_by(account_id=account_id).first()
+    account.webhook_secret = secret
+    db.session.commit()
+
+
+def test_zoom_webhook_crc_uses_path_account_secret(client, app):
+    """CRC at /webhooks/zoom/<acct> must sign with that account's webhook_secret,
+    not whichever account happens to come back from a global lookup. This is the
+    multi-account regression that prompted the per-account URL refactor."""
+    with app.app_context():
+        _create_zoom_account("acct-a")
+        _set_webhook_secret("acct-a", "secret-A")
+        _create_zoom_account("acct-b")
+        _set_webhook_secret("acct-b", "secret-B")
+
+    plain = "the-plain-token"
+    payload = json.dumps({
+        "event": "endpoint.url_validation",
+        "payload": {"plainToken": plain},
+    }).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/zoom/acct-b",
+        data=payload,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["plainToken"] == plain
+    expected = hmac.new(
+        b"secret-B", msg=plain.encode("utf-8"), digestmod=hashlib.sha256
+    ).hexdigest()
+    assert body["encryptedToken"] == expected
+
+
+def test_zoom_webhook_unknown_account_in_path_returns_404(client, app):
+    payload = json.dumps({
+        "event": "endpoint.url_validation",
+        "payload": {"plainToken": "x"},
+    }).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/zoom/does-not-exist",
+        data=payload,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 404
+
+
+def test_zoom_webhook_account_mismatch_returns_400_and_audits(client, app, monkeypatch):
+    """A signed event for acct-A posted at acct-B's URL must be rejected even
+    if the signature would verify against acct-A. Defense-in-depth so one
+    account's traffic can't be processed at another's endpoint."""
+    with app.app_context():
+        _create_zoom_account("acct-real")
+        _create_zoom_account("acct-other")
+
+    calls = []
+    monkeypatch.setattr(
+        "app.blueprints.webhooks.zoom.zoom_webhook.write_audit_log",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    payload = json.dumps({
+        "event": "clinical_notes.note_created",
+        "payload": {"account_id": "acct-real"},
+    }).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/zoom/acct-other",
+        data=payload,
+        content_type="application/json",
+        headers={
+            "x-zm-request-timestamp": str(int(time.time())),
+            "x-zm-signature": "v0=ignored",
+        },
+    )
+
+    assert response.status_code == 400
+    mismatch = next(c for c in calls if c["event_type"] == "zoom.webhook_account_mismatch")
+    assert mismatch["success"] is False
+    assert mismatch["zoom_account_id"] == "acct-other"
+    assert mismatch["detail"]["payload_account_id"] == "acct-real"
+    assert mismatch["detail"]["event"] == "clinical_notes.note_created"

@@ -23,7 +23,6 @@ def write_audit_log(
     """
     Write an entry to the audit log.
 
-    Never raises — audit logging must never cause a request to fail.
     If the write fails, the error is logged to the app logger and silently swallowed.
 
     Event types for appointment/meeting pipeline:
@@ -72,6 +71,9 @@ def write_audit_log(
       zoom.completion_skipped   — completion idempotent — already marked complete
       zoom.completion_error     — error marking Zoom meeting complete
       zoom.webhook_signature_failed — Zoom webhook signature verification failed
+      zoom.webhook_account_mismatch — payload.account_id did not match the
+                                       account_id in the webhook URL path
+                                       (detail.event, detail.payload_account_id)
 
     Event types for OpenEMR auth / JWKS pipeline:
       jwks.fetched                  — /.well-known/jwks.json hit (detail.client_ip,

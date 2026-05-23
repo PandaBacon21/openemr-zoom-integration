@@ -653,14 +653,23 @@ if (!($_REQUEST['flb_table'] ?? null)) {
                         </td>
                         <td class="detail text-center" name="kiosk_hide">
                             <?php if (!empty($appointment['pc_website'])) : ?>
-                                <a href="<?php echo attr($appointment['pc_website']); ?>"
-                                   target="_blank"
-                                   rel="noopener noreferrer"
-                                   class="btn btn-sm"
-                                   style="background-color:#0B5CFF; border-color:#0B5CFF; color:#fff;"
-                                   title="<?php echo xla('Start Zoom Meeting'); ?>">
-                                    <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
-                                </a>
+                                <?php if ($status !== '>') : ?>
+                                    <a href="<?php echo attr($appointment['pc_website']); ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-sm"
+                                       style="background-color:#0B5CFF; border-color:#0B5CFF; color:#fff;"
+                                       title="<?php echo xla('Start Zoom Meeting'); ?>">
+                                        <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+                                    </a>
+                                <?php else : ?>
+                                    <span class="btn btn-sm btn-secondary disabled"
+                                          aria-disabled="true"
+                                          style="cursor:not-allowed; pointer-events:none; opacity:0.6;"
+                                          title="<?php echo xla('Appointment is checked out — Zoom meeting can no longer be started'); ?>">
+                                        <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+                                    </span>
+                                <?php endif; ?>
                             <?php else : ?>
                                 <span class="text-muted font-italic">&mdash;</span>
                             <?php endif; ?>

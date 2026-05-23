@@ -693,3 +693,133 @@ def test_waiting_room_audits_encounter_created_on_success(app, monkeypatch):
     assert created["zoom_meeting_id"] == "meet-wr-created"
     assert created["openemr_encounter_number"] == "777003"
     assert created["detail"] == {"trigger": "waiting_room"}
+
+
+# ---------------------------------------------------------------------------
+# meeting.ended handler (S13-13)
+# ---------------------------------------------------------------------------
+
+def _meeting_ended_payload(meeting_id: str = "meet-ended-1") -> dict:
+    """Zoom-shaped meeting.ended payload (verified against developers.zoom.us)."""
+    return {
+        "event": "meeting.ended",
+        "payload": {
+            "account_id": "AAAAAABBBB",
+            "object": {
+                "id": meeting_id,
+                "uuid": "4444AAAiAAAAAiAiAiiAii==",
+                "host_id": "x1yCzABCDEfg23HiJKl4mN",
+                "host_email": "host@example.com",
+                "topic": "Telehealth Visit",
+                "type": 2,
+                "start_time": "2026-05-22T18:00:00Z",
+                "end_time": "2026-05-22T18:30:00Z",
+                "timezone": "America/Denver",
+                "duration": 30,
+            },
+        },
+    }
+
+
+def test_meeting_ended_marks_checked_out_and_updates_record(app, monkeypatch):
+    """Happy path: meeting.ended → MeetingRecord.status='ended' + appointment Checked Out + audit."""
+    calls = []
+    status_calls = []
+    with app.app_context():
+        account = _create_account("acct-ended")
+        record = _create_meeting(account, meeting_id="meet-ended-1")
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.mark_appointment_status",
+            lambda eid, status, source="": status_calls.append({"eid": eid, "status": status, "source": source}) or True,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_meeting_ended
+        body, status = _handle_meeting_ended(_meeting_ended_payload(), account)
+
+        # Record refresh from DB to confirm status update committed
+        db.session.refresh(record)
+        assert record.status == "ended"
+
+    assert status == 200
+    assert body == {"status": "ok"}
+    # mark_appointment_status called once with Checked Out + source
+    assert status_calls == [
+        {"eid": 999, "status": ">", "source": "zoom_meeting_ended"},
+    ]
+    # meeting.ended audit emitted
+    ended_audit = next(c for c in calls if c["event_type"] == "meeting.ended")
+    assert ended_audit["success"] is True
+    assert ended_audit["zoom_account_id"] == "acct-ended"
+    assert ended_audit["zoom_meeting_id"] == "meet-ended-1"
+    assert ended_audit["openemr_appointment_id"] == "999"
+    assert ended_audit["openemr_provider_id"] == "10"
+
+
+def test_meeting_ended_no_record_returns_200(app, monkeypatch):
+    """Unknown meeting_id → graceful no-op with 200 (Zoom won't retry forever)."""
+    with app.app_context():
+        account = _create_account("acct-ended-norec")
+        # Intentionally don't create the MeetingRecord
+        calls = []
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_meeting_ended
+        body, status = _handle_meeting_ended(_meeting_ended_payload(meeting_id="meet-unknown"), account)
+
+    assert status == 200
+    assert body == {"status": "no_record"}
+    assert calls == []  # no audit when record missing
+
+
+def test_meeting_ended_missing_meeting_id_returns_400(app, monkeypatch):
+    """Malformed payload → 400."""
+    with app.app_context():
+        account = _create_account("acct-ended-malformed")
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_meeting_ended
+        body, status = _handle_meeting_ended({"event": "meeting.ended", "payload": {"object": {}}}, account)
+
+    assert status == 400
+    assert body == {"error": "missing meeting id"}
+
+
+def test_meeting_ended_idempotent_on_duplicate_delivery(app, monkeypatch):
+    """Re-firing meeting.ended for the same meeting is safe — mark_appointment_status no-op handled by forward-only."""
+    status_calls = []
+    with app.app_context():
+        account = _create_account("acct-ended-dup")
+        _create_meeting(account, meeting_id="meet-ended-dup")
+
+        # Simulate mark_appointment_status returning False on second call (terminal/no-op)
+        call_count = {"n": 0}
+        def fake_mark(eid, status, source=""):
+            call_count["n"] += 1
+            status_calls.append({"eid": eid, "status": status, "source": source, "call": call_count["n"]})
+            return call_count["n"] == 1  # First call transitions, second is no-op
+
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.mark_appointment_status",
+            fake_mark,
+        )
+        monkeypatch.setattr(
+            "app.blueprints.webhooks.zoom.zoom_webhook_helpers.write_audit_log",
+            lambda **kwargs: None,
+        )
+
+        from app.blueprints.webhooks.zoom.zoom_webhook_helpers import _handle_meeting_ended
+        body1, status1 = _handle_meeting_ended(_meeting_ended_payload("meet-ended-dup"), account)
+        body2, status2 = _handle_meeting_ended(_meeting_ended_payload("meet-ended-dup"), account)
+
+    # Both deliveries return 200 success
+    assert status1 == 200 and status2 == 200
+    # mark_appointment_status was called twice, but second call's no-op return is fine
+    assert len(status_calls) == 2
+    assert all(c["status"] == ">" and c["source"] == "zoom_meeting_ended" for c in status_calls)

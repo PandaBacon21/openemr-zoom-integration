@@ -1778,14 +1778,23 @@ if (empty($_GET['prov'])) { ?>
 </div>
     <?php if (!empty($row['pc_website'])): ?>
     <div class="form-row mx-2 mt-2">
-        <a href="<?php echo attr($row['pc_website']); ?>"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mx-sm-2 my-6 my-sm-auto btn btn-primary"
-            style="background-color:#0B5CFF; border-color:#0B5CFF;"
-            title="<?php echo xla('Start Zoom Meeting'); ?>">
-            <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
-        </a>
+        <?php if (($row['pc_apptstatus'] ?? '') !== '>'): ?>
+            <a href="<?php echo attr($row['pc_website']); ?>"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="mx-sm-2 my-6 my-sm-auto btn btn-primary"
+                style="background-color:#0B5CFF; border-color:#0B5CFF;"
+                title="<?php echo xla('Start Zoom Meeting'); ?>">
+                <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+            </a>
+        <?php else: ?>
+            <span class="mx-sm-2 my-6 my-sm-auto btn btn-secondary disabled"
+                  aria-disabled="true"
+                  style="cursor:not-allowed; pointer-events:none; opacity:0.6;"
+                  title="<?php echo xla('Appointment is checked out — Zoom meeting can no longer be started'); ?>">
+                <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+            </span>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 <?php if ($informant) {

@@ -21,27 +21,6 @@ from app.extensions import db, get_openemr_db_engine, scheduler
 from app.models import MeetingRecord, MeetingPatient, ZoomAccount, ClinicalNoteRecord
 
 
-# ---------------------------------------------------------------------------
-# Helper: look up ZoomAccount by account_id from payload
-# ---------------------------------------------------------------------------
-
-def _get_account(payload: dict) -> ZoomAccount | None:
-    """
-    Zoom webhooks include the account_id at the top level of the payload.
-    Use this to look up the correct ZoomAccount and its webhook_secret.
-    """
-    account_id = payload.get("account_id")
-    
-    # Fallback: some events nest it inside payload object
-    if not account_id:
-        account_id = payload.get("payload", {}).get("account_id")
-    
-    if not account_id:
-        return None
-    
-    return ZoomAccount.query.filter_by(account_id=account_id, is_active=True).first()
-
-
 def _get_meeting_patient_id(meeting_id: str | int) -> str | None:
     patient = MeetingPatient.query.filter_by(zoom_meeting_id=str(meeting_id)).first()
     return patient.openemr_patient_id if patient else None
@@ -768,6 +747,63 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
     current_app.logger.info(
         f"zoom_webhook | meeting.started | meeting_id={meeting_id} "
         f"provider_id={record.openemr_provider_id} status=started"
+    )
+
+    return {"status": "ok"}, 200
+
+
+def _handle_meeting_ended(payload: dict, account: ZoomAccount):
+    """
+    Handle meeting.ended event — the provider has ended the Zoom session.
+    Marks the appointment Checked Out and updates MeetingRecord status.
+
+    Idempotent: mark_appointment_status is forward-only, so duplicate
+    webhook deliveries are a no-op. If the appointment is already in
+    a terminal state (No Show / Cancelled / Left Without Visit) the
+    status transition is refused, which is correct. The meeting
+    ending doesn't override an explicit no-show or cancellation.
+    """
+    obj = payload.get("payload", {}).get("object", {})
+    meeting_id = str(obj.get("id", ""))
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.ended | meeting_id={meeting_id}"
+    )
+
+    if not meeting_id:
+        current_app.logger.warning("zoom_webhook | meeting.ended | missing meeting id")
+        return {"error": "missing meeting id"}, 400
+
+    record = MeetingRecord.query.filter_by(
+        zoom_meeting_id=meeting_id,
+        zoom_account_id=account.account_id,
+    ).first()
+
+    if not record:
+        current_app.logger.warning(
+            f"zoom_webhook | meeting.ended | no MeetingRecord for meeting_id={meeting_id}"
+        )
+        return {"status": "no_record"}, 200
+
+    record.status = "ended"
+    db.session.commit()
+
+    write_audit_log(
+        event_type="meeting.ended",
+        success=True,
+        zoom_account_id=account.account_id,
+        zoom_meeting_id=meeting_id,
+        openemr_appointment_id=record.openemr_appointment_id,
+        openemr_provider_id=record.openemr_provider_id,
+    )
+
+    eid = record.openemr_appointment_id
+    if eid:
+        mark_appointment_status(int(eid), ">", source="zoom_meeting_ended")
+
+    current_app.logger.info(
+        f"zoom_webhook | meeting.ended | meeting_id={meeting_id} "
+        f"provider_id={record.openemr_provider_id} status=ended"
     )
 
     return {"status": "ok"}, 200
