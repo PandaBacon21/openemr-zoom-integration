@@ -10,21 +10,42 @@ from app.services.openemr.appointments.appointment import mark_appointment_statu
 
 class _CaptureStatusEngine:
     """
-    Mimics SQLAlchemy engine for mark_appointment_status — supports SELECT
-    (returns the canned current_status row) and UPDATE (records the call).
+    Mimics SQLAlchemy engine for mark_appointment_status. Handles three
+    SELECTs (appointment row, tracker row) plus the two UPDATEs and two
+    INSERTs that may follow, and records each so tests can assert against
+    them.
+
+    Args:
+        current_status: pc_apptstatus on the simulated appointment row
+        pid:            pc_pid on the simulated appointment row
+        eid_exists:     when False, the appointment SELECT returns None
+        tracker_row:    None means no patient_tracker row exists (helper
+                        will INSERT one); a SimpleNamespace with
+                        id/lastseq/laststatus simulates an existing tracker
     """
-    def __init__(self, current_status: str, pid: int = 100, eid_exists: bool = True):
+    def __init__(
+        self,
+        current_status: str,
+        pid: int = 100,
+        eid_exists: bool = True,
+        tracker_row=None,
+    ):
         self.current_status = current_status
         self.pid = pid
         self.eid_exists = eid_exists
-        self.updates: list[dict] = []
+        self.tracker_row = tracker_row
+        self.updates: list[dict] = []           # appointment UPDATEs (pc_apptstatus)
+        self.tracker_updates: list[dict] = []   # patient_tracker UPDATEs (lastseq)
+        self.tracker_inserts: list[dict] = []   # new patient_tracker rows
+        self.element_inserts: list[dict] = []   # patient_tracker_element rows
 
     def begin(self):
         outer = self
 
         class FakeResult:
-            def __init__(self, row):
+            def __init__(self, row=None, lastrowid=None):
                 self._row = row
+                self.lastrowid = lastrowid
 
             def fetchone(self):
                 return self._row
@@ -33,13 +54,30 @@ class _CaptureStatusEngine:
             def execute(self, query, params=None):
                 q = str(query).strip().lower()
                 if q.startswith("select"):
-                    row = (
-                        SimpleNamespace(pc_apptstatus=outer.current_status, pc_pid=outer.pid)
-                        if outer.eid_exists else None
-                    )
-                    return FakeResult(row)
-                # UPDATE
-                outer.updates.append(dict(params))
+                    if "patient_tracker" in q:
+                        return FakeResult(outer.tracker_row)
+                    if not outer.eid_exists:
+                        return FakeResult(None)
+                    return FakeResult(SimpleNamespace(
+                        pc_apptstatus=outer.current_status,
+                        pc_pid=outer.pid,
+                        pc_eventDate="2026-05-22",
+                        pc_startTime="09:00:00",
+                    ))
+                if q.startswith("update"):
+                    if "patient_tracker" in q:
+                        outer.tracker_updates.append(dict(params))
+                    else:
+                        outer.updates.append(dict(params))
+                    return FakeResult(None)
+                if q.startswith("insert"):
+                    if "patient_tracker_element" in q:
+                        outer.element_inserts.append(dict(params))
+                        return FakeResult(None)
+                    if "patient_tracker" in q:
+                        outer.tracker_inserts.append(dict(params))
+                        return FakeResult(None, lastrowid=42)
+                    return FakeResult(None)
                 return FakeResult(None)
 
             def __enter__(self):
@@ -186,6 +224,66 @@ def test_eid_not_found_returns_false(app, monkeypatch):
         result = mark_appointment_status(999, "@", source="zoom_waiting_room")
         assert result is False
         assert engine.updates == []
+
+
+def test_creates_tracker_row_when_none_exists(app, monkeypatch):
+    """
+    When no patient_tracker row exists for this appointment, the helper
+    must INSERT one + INSERT a first element at seq=1. This is the path
+    for hydrated demo appointments where the user never touched the
+    calendar dialog before the Zoom webhook fired.
+    """
+    engine = _CaptureStatusEngine(current_status="-", tracker_row=None)
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.get_openemr_db_engine",
+        lambda: engine,
+    )
+    with app.app_context():
+        result = mark_appointment_status(999, "@", source="zoom_waiting_room")
+        assert result is True
+        # pc_apptstatus UPDATE
+        assert len(engine.updates) == 1
+        # New tracker row + first element
+        assert len(engine.tracker_inserts) == 1
+        assert len(engine.element_inserts) == 1
+        assert engine.element_inserts[0]["status"] == "@"
+        assert engine.element_inserts[0]["user"] == "zoom_waiting_room"
+        # No tracker UPDATE — we created fresh
+        assert engine.tracker_updates == []
+
+
+def test_appends_tracker_element_when_status_changes(app, monkeypatch):
+    """
+    When patient_tracker already exists (e.g., user manually toggled to
+    Arrived via the calendar UI), the helper must UPDATE lastseq and
+    INSERT a new element row at seq=lastseq+1 so the Flow Board picks
+    up the new status. This is the exact scenario that caused the
+    original bug: manual Arrived + Zoom-driven In Exam Room.
+    """
+    engine = _CaptureStatusEngine(
+        current_status="@",
+        tracker_row=SimpleNamespace(id=7, lastseq=1, laststatus="@"),
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.get_openemr_db_engine",
+        lambda: engine,
+    )
+    with app.app_context():
+        result = mark_appointment_status(999, "<", source="zoom_meeting_started")
+        assert result is True
+        assert len(engine.updates) == 1
+        # No new tracker INSERT — row already existed
+        assert engine.tracker_inserts == []
+        # lastseq bumped to 2
+        assert len(engine.tracker_updates) == 1
+        assert engine.tracker_updates[0] == {"seq": 2, "id": 7}
+        # New element at seq=2 with target status
+        assert len(engine.element_inserts) == 1
+        elem = engine.element_inserts[0]
+        assert elem["status"] == "<"
+        assert elem["seq"] == "2"
+        assert elem["tid"] == 7
+        assert elem["user"] == "zoom_meeting_started"
 
 
 def test_audit_includes_patient_id(app, monkeypatch):

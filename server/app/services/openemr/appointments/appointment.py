@@ -405,6 +405,82 @@ _STATUS_PRIORITY = {
 }
 
 
+def _record_tracker_status(
+    conn,
+    *,
+    eid: int,
+    pid: int,
+    apptdate,
+    appttime,
+    status: str,
+    user: str,
+) -> None:
+    """
+    Mirror OpenEMR's PatientTrackerService::manage_tracker_status by appending
+    a patient_tracker_element row whenever an appointment's status changes.
+
+    The Flow Board prefers patient_tracker_element.status (joined on
+    patient_tracker.lastseq) over pc_apptstatus when rendering current
+    status, so an UPDATE to pc_apptstatus alone is invisible there if a
+    tracker row already exists. Calendar reads pc_apptstatus directly and
+    does not need this; this exists purely to keep the Flow Board in sync.
+
+    Must be called inside the caller's open transaction so the tracker
+    write is atomic with the pc_apptstatus UPDATE.
+    """
+    now = datetime.now()
+    tracker = conn.execute(
+        text(
+            "SELECT pt.id, pt.lastseq, pte.status AS laststatus "
+            "FROM patient_tracker pt "
+            "LEFT JOIN patient_tracker_element pte "
+            "  ON pt.id = pte.pt_tracker_id AND pt.lastseq = pte.seq "
+            "WHERE pt.apptdate = :apptdate AND pt.appttime = :appttime "
+            "  AND pt.eid = :eid AND pt.pid = :pid "
+            "LIMIT 1"
+        ),
+        {"apptdate": apptdate, "appttime": appttime, "eid": int(eid), "pid": int(pid)},
+    ).fetchone()
+
+    if tracker is None:
+        result = conn.execute(
+            text(
+                "INSERT INTO patient_tracker "
+                "(date, apptdate, appttime, eid, pid, original_user, encounter, lastseq, drug_screen_completed) "
+                "VALUES (:now, :apptdate, :appttime, :eid, :pid, :user, 0, '1', 0)"
+            ),
+            {"now": now, "apptdate": apptdate, "appttime": appttime,
+             "eid": int(eid), "pid": int(pid), "user": user},
+        )
+        tracker_id = result.lastrowid
+        conn.execute(
+            text(
+                "INSERT INTO patient_tracker_element "
+                "(pt_tracker_id, start_datetime, user, status, room, seq) "
+                "VALUES (:tid, :now, :user, :status, '', '1')"
+            ),
+            {"tid": tracker_id, "now": now, "user": user, "status": status},
+        )
+        return
+
+    if (tracker.laststatus or "") == status:
+        return
+
+    new_seq = int(tracker.lastseq or 0) + 1
+    conn.execute(
+        text("UPDATE patient_tracker SET lastseq = :seq WHERE id = :id"),
+        {"seq": new_seq, "id": int(tracker.id)},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO patient_tracker_element "
+            "(pt_tracker_id, start_datetime, user, status, room, seq) "
+            "VALUES (:tid, :now, :user, :status, '', :seq)"
+        ),
+        {"tid": int(tracker.id), "now": now, "user": user, "status": status, "seq": str(new_seq)},
+    )
+
+
 def mark_appointment_status(eid: int, target: str, source: str = "") -> bool:
     """
     Progress an appointment forward through the Pending → Arrived →
@@ -419,12 +495,19 @@ def mark_appointment_status(eid: int, target: str, source: str = "") -> bool:
     touching the row. Terminal states (No Show, Cancelled, Left w/o
     Visit) refuse all further transitions.
 
+    Also appends a patient_tracker_element row inside the same transaction
+    via _record_tracker_status — without it, the Flow Board would keep
+    rendering the previous status (it reads patient_tracker_element.status
+    in preference to pc_apptstatus).
+
     Args:
         eid:    OpenEMR appointment ID (pc_eid)
         target: Target status character — '@', '<', '>', etc.
         source: Free-text origin tag ('start_button', 'zoom_meeting_started',
                 'zoom_waiting_room', 'zoom_meeting_ended'). Goes into the
-                audit detail so the trail records which trigger fired.
+                audit detail so the trail records which trigger fired, and
+                into patient_tracker_element.user so the Flow Board element
+                history shows who/what drove the change.
 
     Audit:
         Emits one of `appointment.status_arrived`,
@@ -440,7 +523,10 @@ def mark_appointment_status(eid: int, target: str, source: str = "") -> bool:
     try:
         with engine.begin() as conn:
             row = conn.execute(
-                text("SELECT pc_apptstatus, pc_pid FROM openemr_postcalendar_events WHERE pc_eid = :eid LIMIT 1"),
+                text(
+                    "SELECT pc_apptstatus, pc_pid, pc_eventDate, pc_startTime "
+                    "FROM openemr_postcalendar_events WHERE pc_eid = :eid LIMIT 1"
+                ),
                 {"eid": int(eid)},
             ).fetchone()
             if row is None:
@@ -460,6 +546,16 @@ def mark_appointment_status(eid: int, target: str, source: str = "") -> bool:
                 {"status": target, "eid": int(eid)},
             )
             previous_pid = row.pc_pid
+            if previous_pid and row.pc_eventDate and row.pc_startTime is not None:
+                _record_tracker_status(
+                    conn,
+                    eid=int(eid),
+                    pid=int(previous_pid),
+                    apptdate=row.pc_eventDate,
+                    appttime=row.pc_startTime,
+                    status=target,
+                    user=source or "zoom_webhook",
+                )
     except Exception as e:
         logger.error(f"openemr.mark_appointment_status | eid={eid} failed: {e}")
         return False
