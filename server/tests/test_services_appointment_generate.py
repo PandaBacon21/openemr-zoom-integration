@@ -72,6 +72,12 @@ def test_generate_future_appointment_inserts_row_and_returns_eid(app, monkeypatc
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
     )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
+    )
 
     with app.app_context():
         _make_account(app)
@@ -99,6 +105,12 @@ def test_generate_future_appointment_computes_end_time_from_duration(app, monkey
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
     )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
+    )
 
     with app.app_context():
         _make_account(app)
@@ -124,6 +136,12 @@ def test_generate_future_appointment_defaults_title_to_category_name(app, monkey
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
     )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
+    )
 
     with app.app_context():
         _make_account(app)
@@ -146,6 +164,12 @@ def test_generate_future_appointment_respects_overridden_title(app, monkeypatch)
     monkeypatch.setattr(
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
+    )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
     )
 
     with app.app_context():
@@ -170,6 +194,12 @@ def test_generate_future_appointment_writes_success_audit(app, monkeypatch):
     monkeypatch.setattr(
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
+    )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
     )
 
     with app.app_context():
@@ -204,6 +234,12 @@ def test_generate_future_appointment_returns_none_and_audits_failure(app, monkey
     monkeypatch.setattr(
         "app.services.openemr.appointments.appointment.get_openemr_db_engine",
         lambda: fake,
+    )
+    # upsert_patient_tracker runs after the INSERT and would clobber the
+    # captured_params on the FakeInsertEngine — stub it out for these unit tests.
+    monkeypatch.setattr(
+        "app.services.openemr.appointments.appointment.upsert_patient_tracker",
+        lambda **kwargs: None,
     )
 
     with app.app_context():

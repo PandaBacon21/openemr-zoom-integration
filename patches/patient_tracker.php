@@ -628,7 +628,16 @@ if (!($_REQUEST['flb_table'] ?? null)) {
                             <td class="detail text-center" name="kiosk_hide">
                                 <?php
                                 if ($appt_enc != 0) {
-                                    echo text($appt_enc);
+                                    // Click the encounter number to open the
+                                    // patient chart focused on this encounter
+                                    // (same JS handler the patient-name link uses).
+                                    ?>
+                                    <a href="#"
+                                       title="<?php echo xla('Open this encounter'); ?>"
+                                       onclick="return topatient(<?php echo attr_js($appt_pid); ?>,<?php echo attr_js($appt_enc); ?>)">
+                                        <?php echo text($appt_enc); ?>
+                                    </a>
+                                    <?php
                                 }
                                 ?>
                             </td>

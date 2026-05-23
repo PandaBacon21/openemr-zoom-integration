@@ -12,28 +12,40 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> tupl
     """
     Find an existing encounter for a given appointment.
 
-    Lookup order:
-        1. external_id = 'zoom_eid_{eid}'  — already claimed by Zoomly
-        2. Most recent encounter for pid + provider_id on today's date
-           with no external_id — manually created via UI status change.
-           If found, immediately stamps external_id to claim it.
+    Lookup order (patient_tracker.encounter is now the canonical pointer —
+    OpenEMR's PHP path keeps it in sync on every status change that auto-
+    creates an encounter, and every Zoomly direct-write path calls
+    upsert_patient_tracker too):
 
-    Args:
-        eid:         OpenEMR appointment EID
-        pid:         OpenEMR patient ID
-        provider_id: OpenEMR provider users.id
+        1. patient_tracker.encounter for this eid (non-zero)        → 'tracker'
+        2. form_encounter.external_id = 'zoom_eid_{eid}'            → 'external_id'
+           Legacy fallback for the gap window before tracker
+           backfills land on all existing appointments.
+        3. Most recent encounter for pid + provider_id on today's   → 'manual_fallback'
+           date with no external_id. Stamps external_id on the way
+           out so subsequent lookups hit a faster path.
 
     Returns:
         (encounter_number, source)
           encounter_number: int or None if no encounter found
-          source:           "external_id"      — found via path 1
-                            "manual_fallback"  — found via path 2 (S7-01 territory)
-                            None               — not found
+          source:           "tracker" | "external_id" | "manual_fallback" | None
     """
     engine = get_openemr_db_engine()
     try:
         with engine.begin() as conn:
-            # --- 1. Check by external_id (fastest path) ---
+            # --- 1. Canonical: patient_tracker.encounter ---
+            result = conn.execute(
+                text("SELECT encounter FROM patient_tracker WHERE eid = :eid AND encounter > 0 LIMIT 1"),
+                {"eid": int(eid)}
+            ).fetchone()
+            if result:
+                logger.info(
+                    f"openemr.find_encounter | Found via patient_tracker eid={eid} "
+                    f"→ encounter={result.encounter}"
+                )
+                return result.encounter, "tracker"
+
+            # --- 2. Legacy fallback: external_id = 'zoom_eid_{eid}' ---
             result = conn.execute(
                 text("""
                     SELECT encounter FROM form_encounter
@@ -50,10 +62,7 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> tupl
                 )
                 return result.encounter, "external_id"
 
-            # --- 2. Fallback: manually created encounter (no external_id) ---
-            # Provider manually set status to Arrived in OpenEMR UI,
-            # triggering OpenEMR's auto-create which sets no external_id.
-            # Stamp immediately so all future lookups hit path 1.
+            # --- 3. Manual fallback: UI-created encounter on today's date ---
             result = conn.execute(
                 text("""
                     SELECT encounter FROM form_encounter
@@ -68,17 +77,13 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> tupl
             ).fetchone()
 
             if result:
-                # Claim — stamp external_id so future lookups find it via path 1
                 conn.execute(
                     text("""
                         UPDATE form_encounter
                         SET external_id = :external_id
                         WHERE encounter = :encounter
                     """),
-                    {
-                        "external_id": f"zoom_eid_{eid}",
-                        "encounter": result.encounter
-                    }
+                    {"external_id": f"zoom_eid_{eid}", "encounter": result.encounter}
                 )
                 logger.info(
                     f"openemr.find_encounter | Found manually-created encounter "
@@ -219,9 +224,71 @@ def create_encounter(
             f"openemr.create_encounter | Created encounter={encounter_number} "
             f"pid={pid} eid={eid} provider={provider_id}"
         )
+        _link_encounter_to_tracker(eid=int(eid), pid=int(pid), encounter=int(encounter_number))
         return encounter_number
 
     except Exception as e:
         logger.error(f"openemr.create_encounter | Failed for pid={pid} eid={eid}: {e}")
         return None
+
+
+def _link_encounter_to_tracker(*, eid: int, pid: int, encounter: int) -> None:
+    """
+    Update patient_tracker.encounter for the appointment (or insert a tracker
+    row if none exists). Pulls apptdate/appttime from openemr_postcalendar_events
+    since this helper is called from contexts that don't have them on hand.
+
+    Kept separate from create_encounter's transaction so a tracker write
+    failure doesn't roll back the encounter insert — the encounter is the
+    primary artifact and is recoverable via the legacy external_id lookup
+    paths if the tracker write fails.
+    """
+    # Local import to avoid a top-level cycle with services.openemr.appointments
+    # (appointment.py → upsert_patient_tracker; encounter.py is imported from
+    # services.openemr.__init__ before appointments are pulled in).
+    from app.services.openemr.appointments.appointment import upsert_patient_tracker
+
+    engine = get_openemr_db_engine()
+    try:
+        with engine.connect() as conn:
+            appt = conn.execute(
+                text("""
+                    SELECT pc_eventDate, pc_startTime
+                    FROM openemr_postcalendar_events
+                    WHERE pc_eid = :eid
+                    LIMIT 1
+                """),
+                {"eid": int(eid)},
+            ).fetchone()
+    except Exception as e:
+        logger.error(
+            f"openemr._link_encounter_to_tracker | appt lookup failed eid={eid}: {e}"
+        )
+        return
+
+    if not appt:
+        logger.warning(
+            f"openemr._link_encounter_to_tracker | no appointment row for eid={eid} — tracker not updated"
+        )
+        return
+
+    # pc_startTime arrives as a timedelta from PyMySQL; convert to time.
+    from datetime import time as _time
+    start_td = appt.pc_startTime
+    if start_td is None:
+        appttime = _time(0, 0)
+    elif hasattr(start_td, "total_seconds"):
+        total = int(start_td.total_seconds())
+        appttime = _time(total // 3600, (total % 3600) // 60, total % 60)
+    else:
+        appttime = start_td
+
+    upsert_patient_tracker(
+        eid=int(eid),
+        pid=int(pid),
+        apptdate=appt.pc_eventDate,
+        appttime=appttime,
+        encounter=int(encounter),
+        original_user="zoomly_webhook_encounter",
+    )
 

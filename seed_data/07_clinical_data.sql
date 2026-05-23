@@ -1256,6 +1256,25 @@ ORDER BY pd.pid;
 -- Bump the encounter sequence so future appointment encounters don't collide
 UPDATE sequences SET id = GREATEST(id, (SELECT COALESCE(MAX(encounter), 1) FROM form_encounter));
 
+-- patient_tracker row per historical encounter — but these encounters were
+-- direct DB inserts (no appointment row at all), so we need a synthetic
+-- appointment row that links the tracker back to a sensible eid. Build one
+-- per encounter using the form_encounter.id as a deterministic eid (form
+-- encounters are direct-only artifacts; this synthetic eid is never used
+-- by the calendar but lets the tracker resolve a Patient Encounter Form
+-- linkage on the chart's encounter dropdown.
+INSERT INTO `patient_tracker`
+    (date, apptdate, appttime, eid, pid, original_user, encounter, lastseq, drug_screen_completed)
+SELECT NOW(),
+       DATE(fe.date),
+       '08:00:00',
+       fe.id,           -- synthetic eid keyed to form_encounter.id (no calendar row)
+       fe.pid, 'seed', fe.encounter, '1', 0
+  FROM form_encounter fe
+  JOIN patient_data pd ON pd.pid = fe.pid
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+   AND fe.external_id LIKE 'zdemo_h%';
+
 -- newpatient forms registry row per historical encounter so it surfaces as
 -- the editable Patient Encounter Form on the chart
 INSERT INTO `forms`

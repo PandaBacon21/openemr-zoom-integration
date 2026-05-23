@@ -35,6 +35,7 @@ from app.services.audit import write_audit_log
 from app.services.openemr.appointments.appointment import (
     generate_future_appointment,
     update_appointment_status,
+    upsert_patient_tracker,
 )
 from app.services.openemr.encounter.sample_notes import (
     DEMO_CPT_CODES,
@@ -202,6 +203,18 @@ def _seed_one_provider(
     if encounter_number is None:
         _record_error(summary, account, provider_user_id, "create_encounter", "encounter INSERT returned None")
         return
+
+    # 5b. Keep patient_tracker.encounter pointed at the new encounter so the
+    # Flow Board's Encounter column resolves correctly. Direct DB inserts
+    # bypass OpenEMR's PHP path that normally does this.
+    upsert_patient_tracker(
+        eid=int(eid),
+        pid=int(slot_patient_pid),
+        apptdate=today,
+        appttime=_LOCKED_SLOT_TIME,
+        encounter=int(encounter_number),
+        original_user="zoomly_demo_past_encounter",
+    )
 
     # 6. Attach SOAP + Clinical Notes per writeback mode
     provider_username = get_provider_username(provider_user_id) or f"user{provider_user_id}"

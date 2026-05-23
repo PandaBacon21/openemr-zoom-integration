@@ -95,22 +95,4 @@ SET pc_catcolor = CASE pc_catid
 END
 WHERE pc_catid IN (5, 9, 10, 12, 13, 14, 15);
 
--- =============================================================================
--- NON-ZOOM CATEGORY COLOR REFRESH
---
--- Reset all built-in OpenEMR categories to bright, distinct hues so Zoom
--- appointments stand out against them on the calendar. Zoom appointments
--- occupy the blue family (#0b5cff strong + #b4d0f8 soft) — non-Zoom rows
--- get oranges, greens, purples, magentas, teals, etc.
--- =============================================================================
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#F97316' WHERE pc_catid = 5;   -- Office Visit → orange
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#22C55E' WHERE pc_catid = 9;   -- Established Patient → green
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#EC4899' WHERE pc_catid = 10;  -- New Patient → magenta
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#A855F7' WHERE pc_catid = 12;  -- Health and Behavioral Assessment → violet
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#14B8A6' WHERE pc_catid = 13;  -- Preventive Care Services → teal
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#F43F5E' WHERE pc_catid = 14;  -- Ophthalmological Services → rose
-UPDATE openemr_postcalendar_categories SET pc_catcolor = '#EAB308' WHERE pc_catid = 15;  -- Group Therapy → yellow
--- Scheduling-control rows (No Show, In Office, Out Of Office, Vacation,
--- Holidays, Closed, Lunch, Reserved) stay on their default muted palette —
--- these aren't visit appointments so they should fade into the background.
 

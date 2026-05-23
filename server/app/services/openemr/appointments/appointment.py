@@ -261,6 +261,18 @@ def generate_future_appointment(
         f"provider={provider_user_id} pid={patient_pid} "
         f"date={slot_date} time={slot_time} category={category_name}"
     )
+    # Insert the matching patient_tracker row (encounter=0; will be updated
+    # later by either OpenEMR's PHP path on status change or by our own
+    # create_encounter helper).
+    if eid:
+        upsert_patient_tracker(
+            eid=int(eid),
+            pid=int(patient_pid),
+            apptdate=slot_date,
+            appttime=slot_time,
+            encounter=0,
+            original_user="zoomly_demo_hydrate",
+        )
     write_audit_log(
         event_type="demo.future_appointment_created",
         success=True,
@@ -271,6 +283,66 @@ def generate_future_appointment(
         detail=audit_detail,
     )
     return int(eid) if eid else None
+
+
+def upsert_patient_tracker(
+    *,
+    eid: int,
+    pid: int,
+    apptdate: date,
+    appttime: time,
+    encounter: int = 0,
+    original_user: str = "system",
+) -> None:
+    """
+    Insert-or-update a patient_tracker row for the appointment.
+
+    OpenEMR's PHP path (add_edit_event.php → manage_tracker_status) maintains
+    patient_tracker.encounter as the canonical "this appointment's encounter"
+    pointer that the Flow Board's Encounter column reads from. Direct DB
+    inserts of openemr_postcalendar_events or form_encounter bypass that
+    PHP path, so any Zoomly code that creates an appointment or encounter
+    via raw SQL must call this helper to keep patient_tracker consistent.
+
+    If a tracker row already exists for the (eid, pid) pair, only the
+    `encounter` column is updated (and only when a non-zero value is
+    supplied). If no row exists, one is inserted with the supplied values.
+    Safe to call multiple times for the same appointment.
+    """
+    engine = get_openemr_db_engine()
+    try:
+        with engine.begin() as conn:
+            existing = conn.execute(
+                text("SELECT id, encounter FROM patient_tracker WHERE eid = :eid AND pid = :pid LIMIT 1"),
+                {"eid": int(eid), "pid": int(pid)},
+            ).fetchone()
+            if existing:
+                if int(encounter) > 0 and int(encounter) != int(existing.encounter):
+                    conn.execute(
+                        text("UPDATE patient_tracker SET encounter = :enc WHERE id = :id"),
+                        {"enc": int(encounter), "id": int(existing.id)},
+                    )
+                return
+            conn.execute(
+                text("""
+                    INSERT INTO patient_tracker
+                        (date, apptdate, appttime, eid, pid, original_user, encounter, lastseq, drug_screen_completed)
+                    VALUES
+                        (NOW(), :apptdate, :appttime, :eid, :pid, :user, :enc, '1', 0)
+                """),
+                {
+                    "apptdate": apptdate,
+                    "appttime": appttime,
+                    "eid": int(eid),
+                    "pid": int(pid),
+                    "user": original_user,
+                    "enc": int(encounter),
+                },
+            )
+    except Exception as e:
+        logger.error(
+            f"openemr.upsert_patient_tracker | Failed for eid={eid} pid={pid}: {e}"
+        )
 
 
 def update_appointment_status(eid: int, status: str = "@") -> bool:

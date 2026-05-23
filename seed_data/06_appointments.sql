@@ -705,6 +705,27 @@ JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)
  WHERE e.pc_pid REGEXP '^[0-9]+$'
    AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
 
+-- =============================================================================
+-- PATIENT_TRACKER ROWS
+--
+-- OpenEMR's PHP path (manage_tracker_status) creates the patient_tracker row
+-- when an appointment's status changes via the UI. Direct DB inserts of
+-- openemr_postcalendar_events skip that, so the Patient Flow Board's
+-- Encounter column would read blank for every seeded appointment. Insert a
+-- tracker row per event with encounter=0; encounter gets populated later by
+-- the past-encounter seeder, the Hydrate Demo Data button's create_encounter
+-- path, or by OpenEMR's own UI when status flips to Arrived. Done at the end
+-- of 06 so it covers both the initial INSERT block and the second new-patient
+-- INSERT block above.
+-- =============================================================================
+INSERT INTO `patient_tracker`
+    (date, apptdate, appttime, eid, pid, original_user, encounter, lastseq, drug_screen_completed)
+SELECT NOW(), ev.pc_eventDate, ev.pc_startTime, ev.pc_eid,
+       CAST(ev.pc_pid AS UNSIGNED), 'seed', 0, '1', 0
+  FROM openemr_postcalendar_events ev
+ WHERE ev.pc_pid REGEXP '^[0-9]+$'
+   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================
