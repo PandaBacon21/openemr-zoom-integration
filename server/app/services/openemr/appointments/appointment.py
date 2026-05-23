@@ -347,22 +347,23 @@ def upsert_patient_tracker(
 
 def update_appointment_status(eid: int, status: str = "@") -> bool:
     """
-    Update appointment status on openemr_postcalendar_events.
-    
+    Force pc_apptstatus to the supplied value with no progression check.
+
+    Use this when you genuinely need to override status — for example,
+    the past-encounter seeder flips a fresh appointment straight from
+    Pending to Checked Out, or an admin tool resets a stuck appointment.
+
+    For the normal Pending → Arrived → In Exam Room → Checked Out
+    lifecycle driven by Zoom webhooks, prefer `mark_appointment_status`
+    (forward-only + audited). Mixing the two on the same appointment is
+    fine — forward-only is just a safety net against accidental
+    regression, not a hard constraint.
+
     Status codes:
-      '@' = Arrived
-      '-' = None
-      '*' = Reminder done
-      '+' = Chart pulled
-      'x' = Canceled
-      '?' = No show
-    
-    Args:
-        eid:    OpenEMR appointment ID (pc_eid)
-        status: Single character status code, default '@' (Arrived)
-    
-    Returns:
-        True if row was updated, False if eid not found
+      '-' Pending     '@' Arrived    '<' In Exam Room   '>' Checked Out
+      '?' No Show     '%' Cancelled  '~' Arrived Late   '#' Left w/o Visit
+
+    Returns True if a row was updated, False if eid not found / on failure.
     """
 
     engine = get_openemr_db_engine()
@@ -384,4 +385,105 @@ def update_appointment_status(eid: int, status: str = "@") -> bool:
     except Exception as e:
         logger.error(f"openemr.update_appointment_status | Failed for eid={eid}: {e}")
         return False
+
+
+# Forward-only ordering for the normal Pending → Arrived → In Exam Room
+# → Checked Out lifecycle. Higher number = "further along." Terminal
+# states (?, %) sit at the top so they refuse all further transitions.
+_STATUS_PRIORITY = {
+    "":  0,  # null / fresh row
+    "-": 0,  # Pending
+    "*": 0,  # Reminder done (still pre-arrival)
+    "+": 0,  # Chart pulled (still pre-arrival)
+    "@": 1,  # Arrived
+    "~": 1,  # Arrived Late (same lifecycle slot as Arrived)
+    "<": 2,  # In Exam Room
+    ">": 3,  # Checked Out
+    "?": 4,  # No Show       — terminal
+    "%": 4,  # Cancelled     — terminal
+    "#": 4,  # Left without Visit — terminal
+}
+
+
+def mark_appointment_status(eid: int, target: str, source: str = "") -> bool:
+    """
+    Progress an appointment forward through the Pending → Arrived →
+    In Exam Room → Checked Out lifecycle. Idempotent and safe to call
+    from any trigger (Start Zoom click, meeting.started webhook,
+    waiting-room webhook, etc.) — the same target status from a second
+    trigger is a no-op.
+
+    Forward-only: only updates pc_apptstatus when `target`'s priority
+    strictly exceeds the current value's priority per _STATUS_PRIORITY.
+    A backward call (e.g. Arrived → Pending) returns False without
+    touching the row. Terminal states (No Show, Cancelled, Left w/o
+    Visit) refuse all further transitions.
+
+    Args:
+        eid:    OpenEMR appointment ID (pc_eid)
+        target: Target status character — '@', '<', '>', etc.
+        source: Free-text origin tag ('start_button', 'zoom_meeting_started',
+                'zoom_waiting_room', 'zoom_meeting_ended'). Goes into the
+                audit detail so the trail records which trigger fired.
+
+    Audit:
+        Emits one of `appointment.status_arrived`,
+        `appointment.status_in_exam_room`, or `appointment.status_checked_out`
+        per real transition, with `previous_status` + `source` in detail.
+        No audit for no-ops.
+
+    Returns:
+        True if pc_apptstatus was updated, False on no-op (backward / equal
+        priority / terminal / eid not found / DB error).
+    """
+    engine = get_openemr_db_engine()
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT pc_apptstatus, pc_pid FROM openemr_postcalendar_events WHERE pc_eid = :eid LIMIT 1"),
+                {"eid": int(eid)},
+            ).fetchone()
+            if row is None:
+                logger.warning(f"openemr.mark_appointment_status | eid={eid} not found")
+                return False
+            current = row.pc_apptstatus or ""
+            current_priority = _STATUS_PRIORITY.get(current, 0)
+            target_priority = _STATUS_PRIORITY.get(target, -1)
+            if target_priority <= current_priority:
+                logger.debug(
+                    f"openemr.mark_appointment_status | eid={eid} no-op: "
+                    f"current='{current}'({current_priority}) target='{target}'({target_priority})"
+                )
+                return False
+            conn.execute(
+                text("UPDATE openemr_postcalendar_events SET pc_apptstatus = :status WHERE pc_eid = :eid"),
+                {"status": target, "eid": int(eid)},
+            )
+            previous_pid = row.pc_pid
+    except Exception as e:
+        logger.error(f"openemr.mark_appointment_status | eid={eid} failed: {e}")
+        return False
+
+    _STATUS_AUDIT_EVENT = {
+        "@": "appointment.status_arrived",
+        "<": "appointment.status_in_exam_room",
+        ">": "appointment.status_checked_out",
+    }
+    event_type = _STATUS_AUDIT_EVENT.get(target)
+    if event_type:
+        write_audit_log(
+            event_type=event_type,
+            success=True,
+            openemr_appointment_id=str(eid),
+            openemr_patient_id=str(previous_pid) if previous_pid else None,
+            detail={
+                "previous_status": current,
+                "new_status": target,
+                "source": source,
+            },
+        )
+    logger.info(
+        f"openemr.mark_appointment_status | eid={eid} '{current}' → '{target}' (source={source})"
+    )
+    return True
 

@@ -8,9 +8,11 @@ from flask import current_app
 from app.services.zoom import get_zoom_clinical_note
 from app.services.openemr import (
     create_encounter,
+    ensure_encounter_for_appointment,
     find_encounter_for_appointment,
     get_appointment_details,
     get_provider_username,
+    mark_appointment_status,
     update_appointment_status,
     write_note_to_encounter,
 )
@@ -438,64 +440,58 @@ def _validate_and_process_note(
         return {"status": "error", "reason": "missing patient or provider"}, 500
  
     # --- 5. Find existing encounter or create one ---
-    encounter_number, encounter_source = find_encounter_for_appointment(eid, pid, provider_id)
-
-    if encounter_number:
-        # G-N7: surface the S7-01 fallback path in the dashboard
-        if encounter_source == "manual_fallback":
-            write_audit_log(
-                event_type="encounter.claimed",
-                success=True,
-                zoom_account_id=account.account_id,
-                zoom_meeting_id=meeting_number,
-                zoom_note_id=note_id,
-                openemr_appointment_id=str(eid),
-                openemr_encounter_number=str(encounter_number),
-                openemr_provider_id=openemr_provider_id,
-                openemr_patient_id=openemr_patient_id,
-                detail={"reason": "manual_fallback"},
-            )
-
-        # Stamp external_id if not already set (e.g. manually created encounter)
-        engine = get_openemr_db_engine()
-        with engine.begin() as conn:
-            conn.execute(
-                text("""
-                    UPDATE form_encounter
-                    SET external_id = :external_id
-                    WHERE encounter = :encounter
-                    AND (external_id IS NULL OR external_id = '')
-                """),
-                {"external_id": f"zoom_eid_{eid}", "encounter": encounter_number}
-            )
-
-    if not encounter_number:
-        current_app.logger.info(
-            f"zoom_webhook | no encounter found for eid={eid} — creating"
+    # Use the canonical idempotent helper. Same single-encounter guarantee +
+    # patient_tracker maintenance as every other path (button, meeting.started,
+    # waiting_room, past_encounter seed). Note flow is the safety net — if all
+    # the upstream webhook triggers failed to fire, this still produces an
+    # encounter by note-arrival time.
+    appt = get_appointment_details(eid)
+    if appt:
+        encounter_number, encounter_source = ensure_encounter_for_appointment(
+            eid=eid,
+            pid=pid,
+            provider_id=provider_id,
+            facility_id=appt["facility_id"],
+            pc_catid=appt["pc_catid"],
         )
-        appt = get_appointment_details(eid)
-        if appt:
-            encounter_number = create_encounter(
-                pid=pid,
-                provider_id=provider_id,
-                facility_id=appt["facility_id"],
-                pc_catid=appt["pc_catid"],
-                eid=eid,
-            )
-            if encounter_number:
-                # G-N8: explicit success audit so "encounter created, note failed" is visible
-                write_audit_log(
-                    event_type="encounter.created",
-                    success=True,
-                    zoom_account_id=account.account_id,
-                    zoom_meeting_id=meeting_number,
-                    zoom_note_id=note_id,
-                    openemr_appointment_id=str(eid),
-                    openemr_encounter_number=str(encounter_number),
-                    openemr_provider_id=openemr_provider_id,
-                    openemr_patient_id=openemr_patient_id,
-                    detail={"trigger": "note_processing"},
-                )
+    else:
+        # No openemr_postcalendar_events row found for this eid — fall back
+        # to a find-only lookup so manual_fallback can still rescue a chart
+        # whose appointment has been deleted between the meeting and the
+        # note arriving.
+        encounter_number, encounter_source = find_encounter_for_appointment(
+            eid, pid, provider_id
+        )
+
+    if encounter_number and encounter_source == "manual_fallback":
+        # G-N7: surface the S7-01 fallback path in the dashboard
+        write_audit_log(
+            event_type="encounter.claimed",
+            success=True,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=openemr_provider_id,
+            openemr_patient_id=openemr_patient_id,
+            detail={"reason": "manual_fallback"},
+        )
+
+    if encounter_number and encounter_source == "created":
+        # G-N8: explicit success audit so "encounter created, note failed" is visible
+        write_audit_log(
+            event_type="encounter.created",
+            success=True,
+            zoom_account_id=account.account_id,
+            zoom_meeting_id=meeting_number,
+            zoom_note_id=note_id,
+            openemr_appointment_id=str(eid),
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=openemr_provider_id,
+            openemr_patient_id=openemr_patient_id,
+            detail={"trigger": "note_processing"},
+        )
  
     if not encounter_number:
         current_app.logger.error(
@@ -602,38 +598,48 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
     eid = record.openemr_appointment_id
     patient_id = _get_meeting_patient_id(record.zoom_meeting_id)
 
-    # Update appointment status to Arrived
-    success = update_appointment_status(int(eid), "@")
+    # Forward-only status transition; no-op if appointment is already
+    # past Arrived (e.g. provider joined first).
+    status_changed = mark_appointment_status(int(eid), "@", source="zoom_waiting_room")
 
+    # Keep the patient-arrived specific audit for the rich participant context
+    # — mark_appointment_status emits its own appointment.status_arrived event
+    # when a transition actually happens, but that doesn't capture participant
+    # name. Both events coexist intentionally: status_arrived is the lifecycle
+    # signal, patient_arrived is the participant-detail record.
     write_audit_log(
         event_type="appointment.patient_arrived",
-        success=success,
+        success=True,
         zoom_account_id=account.account_id,
         openemr_appointment_id=eid,
         openemr_provider_id=record.openemr_provider_id,
         openemr_patient_id=patient_id,
         zoom_meeting_id=meeting_id,
-        error_message=None if success else "OpenEMR appointment status update failed",
-        detail={"participant": participant_name, "trigger": event_type}
+        detail={
+            "participant": participant_name,
+            "trigger": event_type,
+            "status_changed": status_changed,
+        },
     )
 
     current_app.logger.info(
-        f"zoom_webhook | waiting_room | eid={eid} status {'updated to Arrived' if success else 'update failed'}"
+        f"zoom_webhook | waiting_room | eid={eid} status_changed={status_changed}"
     )
 
-    # Get appointment details for encounter creation
+    # Ensure the encounter exists (idempotent — returns existing if any path
+    # already created one, creates new otherwise).
     appt = get_appointment_details(int(eid))
     if appt:
-        encounter_number = create_encounter(
+        encounter_number, source = ensure_encounter_for_appointment(
+            eid=int(eid),
             pid=appt["pid"],
             provider_id=appt["provider_id"],
             facility_id=appt["facility_id"],
             pc_catid=appt["pc_catid"],
-            eid=int(eid),
         )
         if encounter_number is None:
             current_app.logger.error(
-                f"zoom_webhook | waiting_room | encounter creation failed for eid={eid}"
+                f"zoom_webhook | waiting_room | encounter ensure failed for eid={eid}"
             )
             write_audit_log(
                 event_type="encounter.create_failed",
@@ -643,11 +649,10 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
                 openemr_provider_id=str(appt["provider_id"]),
                 openemr_patient_id=str(appt["pid"]),
                 zoom_meeting_id=meeting_id,
-                error_message="create_encounter returned None",
+                error_message="ensure_encounter_for_appointment returned None",
                 detail={"trigger": "waiting_room"},
             )
-        else:
-            # G-N8: explicit success audit
+        elif source == "created":
             write_audit_log(
                 event_type="encounter.created",
                 success=True,
@@ -659,6 +664,10 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
                 openemr_encounter_number=str(encounter_number),
                 detail={"trigger": "waiting_room"},
             )
+        # When source is 'tracker'/'external_id'/'manual_fallback', an
+        # encounter already existed — no audit needed, the find logic
+        # already emitted any relevant event (e.g. encounter.claimed for
+        # manual_fallback).
 
     return {"status": "ok", "eid": eid}, 200
 
@@ -706,6 +715,55 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
         openemr_appointment_id=record.openemr_appointment_id,
         openemr_provider_id=record.openemr_provider_id,
     )
+
+    # Provider-join lifecycle — Arrived → encounter → In Exam Room. Each
+    # call is idempotent: if the waiting-room webhook already ran the
+    # patient-arrival half, the Arrived transition is a no-op and the
+    # encounter call returns the existing one; only the In Exam Room
+    # transition is genuinely new on the provider-join trigger.
+    eid = record.openemr_appointment_id
+    if eid:
+        eid_int = int(eid)
+        mark_appointment_status(eid_int, "@", source="zoom_meeting_started")
+
+        appt = get_appointment_details(eid_int)
+        if appt:
+            encounter_number, source = ensure_encounter_for_appointment(
+                eid=eid_int,
+                pid=appt["pid"],
+                provider_id=appt["provider_id"],
+                facility_id=appt["facility_id"],
+                pc_catid=appt["pc_catid"],
+            )
+            if encounter_number is None:
+                current_app.logger.error(
+                    f"zoom_webhook | meeting.started | encounter ensure failed eid={eid}"
+                )
+                write_audit_log(
+                    event_type="encounter.create_failed",
+                    success=False,
+                    zoom_account_id=account.account_id,
+                    zoom_meeting_id=meeting_id,
+                    openemr_appointment_id=eid,
+                    openemr_provider_id=str(appt["provider_id"]),
+                    openemr_patient_id=str(appt["pid"]),
+                    error_message="ensure_encounter_for_appointment returned None",
+                    detail={"trigger": "meeting_started"},
+                )
+            elif source == "created":
+                write_audit_log(
+                    event_type="encounter.created",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    zoom_meeting_id=meeting_id,
+                    openemr_appointment_id=eid,
+                    openemr_provider_id=str(appt["provider_id"]),
+                    openemr_patient_id=str(appt["pid"]),
+                    openemr_encounter_number=str(encounter_number),
+                    detail={"trigger": "meeting_started"},
+                )
+
+        mark_appointment_status(eid_int, "<", source="zoom_meeting_started")
 
     current_app.logger.info(
         f"zoom_webhook | meeting.started | meeting_id={meeting_id} "

@@ -98,6 +98,61 @@ def find_encounter_for_appointment(eid: int, pid: int, provider_id: int) -> tupl
     return None, None
 
 
+def ensure_encounter_for_appointment(
+    *,
+    eid: int,
+    pid: int,
+    provider_id: int,
+    facility_id: int,
+    pc_catid: int,
+    reason: str = "Zoom Telehealth Visit",
+    class_code: str = "VR",
+) -> tuple[int | None, str | None]:
+    """
+    Idempotent find-or-create for the encounter tied to an appointment.
+
+    The canonical single-encounter-per-appointment helper — any code path
+    that needs the encounter for an appointment (provider start via Zoom
+    button or meeting.started webhook, patient arrival via waiting-room
+    webhook, clinical-note writeback safety net) should call this rather
+    than `find_encounter_for_appointment` + `create_encounter` directly.
+
+    Lookup priority comes from `find_encounter_for_appointment`:
+      1. patient_tracker.encounter for this eid → source='tracker'
+      2. form_encounter.external_id='zoom_eid_{eid}' → source='external_id'
+      3. manually-created encounter on today's date with no external_id
+         → source='manual_fallback' (stamps external_id on the way out)
+
+    If none of the above resolves, a new encounter is created via
+    `create_encounter`, which in turn populates patient_tracker.encounter
+    so subsequent ensure_* calls hit the tracker path. Source on creation
+    is 'created'.
+
+    Returns:
+        (encounter_number, source)
+          source: "tracker" | "external_id" | "manual_fallback" | "created" | None
+        Returns (None, None) only on a hard failure inside create_encounter.
+    """
+    encounter, source = find_encounter_for_appointment(
+        eid=int(eid), pid=int(pid), provider_id=int(provider_id)
+    )
+    if encounter is not None:
+        return encounter, source
+
+    new_encounter = create_encounter(
+        pid=int(pid),
+        provider_id=int(provider_id),
+        facility_id=int(facility_id),
+        pc_catid=int(pc_catid),
+        eid=int(eid),
+        reason=reason,
+        class_code=class_code,
+    )
+    if new_encounter is None:
+        return None, None
+    return new_encounter, "created"
+
+
 def create_encounter(
     pid: int,
     provider_id: int,

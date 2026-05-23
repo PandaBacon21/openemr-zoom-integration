@@ -3,7 +3,10 @@
 from datetime import date, time, timedelta
 from types import SimpleNamespace
 
-from app.services.openemr.encounter.encounter import find_encounter_for_appointment
+from app.services.openemr.encounter.encounter import (
+    find_encounter_for_appointment,
+    ensure_encounter_for_appointment,
+)
 from app.services.openemr.appointments.appointment import upsert_patient_tracker
 
 
@@ -197,6 +200,74 @@ def test_upsert_patient_tracker_noop_when_existing_encounter_matches(monkeypatch
     # Only the SELECT runs — no UPDATE/INSERT issued
     assert len(engine.calls) == 1
     assert engine.calls[0]["query"].startswith("select")
+
+
+# -- ensure_encounter_for_appointment ---------------------------------------
+
+def test_ensure_returns_existing_encounter_without_creating(monkeypatch):
+    """Find returns existing → ensure returns the same, source preserved, no create."""
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.find_encounter_for_appointment",
+        lambda eid, pid, provider_id: (555001, "tracker"),
+    )
+    create_calls = []
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.create_encounter",
+        lambda **kwargs: create_calls.append(kwargs) or None,
+    )
+    encounter, source = ensure_encounter_for_appointment(
+        eid=999, pid=100, provider_id=10, facility_id=1, pc_catid=27,
+    )
+    assert encounter == 555001
+    assert source == "tracker"
+    assert create_calls == []
+
+
+def test_ensure_creates_when_find_returns_none(monkeypatch):
+    """Find returns None → ensure calls create, returns ('created')."""
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.find_encounter_for_appointment",
+        lambda eid, pid, provider_id: (None, None),
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.create_encounter",
+        lambda **kwargs: 555002,
+    )
+    encounter, source = ensure_encounter_for_appointment(
+        eid=999, pid=100, provider_id=10, facility_id=1, pc_catid=27,
+    )
+    assert encounter == 555002
+    assert source == "created"
+
+
+def test_ensure_returns_none_when_create_fails(monkeypatch):
+    """Find returns None and create returns None → (None, None)."""
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.find_encounter_for_appointment",
+        lambda eid, pid, provider_id: (None, None),
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.create_encounter",
+        lambda **kwargs: None,
+    )
+    encounter, source = ensure_encounter_for_appointment(
+        eid=999, pid=100, provider_id=10, facility_id=1, pc_catid=27,
+    )
+    assert encounter is None
+    assert source is None
+
+
+def test_ensure_preserves_manual_fallback_source(monkeypatch):
+    """Find via manual_fallback path → ensure surfaces 'manual_fallback' so caller can audit encounter.claimed."""
+    monkeypatch.setattr(
+        "app.services.openemr.encounter.encounter.find_encounter_for_appointment",
+        lambda eid, pid, provider_id: (555003, "manual_fallback"),
+    )
+    encounter, source = ensure_encounter_for_appointment(
+        eid=999, pid=100, provider_id=10, facility_id=1, pc_catid=27,
+    )
+    assert encounter == 555003
+    assert source == "manual_fallback"
 
 
 def test_upsert_patient_tracker_skips_update_when_caller_passes_zero(monkeypatch):
