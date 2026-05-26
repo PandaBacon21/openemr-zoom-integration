@@ -81,32 +81,23 @@ _DEMO_ENCOUNTER_MARKER_PREFIX = "zlock_"
 def seed_past_locked_encounters(account: ZoomAccount, note_text: str | None = None) -> dict:
     """
     For each active mapped provider on the account, seed today's 8am locked
-    sample encounter. Global per-day guard: if any encounter already exists
-    today with the demo marker, the whole pass returns immediately.
+    sample encounter. The "already seeded today" check is per-provider —
+    each provider gets at most one demo locked encounter per day, but one
+    provider's earlier seed (perhaps via a different Zoom account hydrate)
+    does not block other providers.
 
     Returns a summary dict:
         {
             "past_encounters_created": int,
-            "past_encounters_skipped_today": bool,
             "past_encounter_skips": [{"openemr_provider_id": str, "reason": str}, ...],
             "past_encounter_errors": [{"openemr_provider_id": str, "stage": str, "error": str}, ...],
         }
     """
     summary = {
         "past_encounters_created": 0,
-        "past_encounters_skipped_today": False,
         "past_encounter_skips": [],
         "past_encounter_errors": [],
     }
-
-    if _seed_marker_exists_today():
-        write_audit_log(
-            event_type="demo.past_encounters_skipped_today",
-            success=True,
-            zoom_account_id=account.account_id,
-        )
-        summary["past_encounters_skipped_today"] = True
-        return summary
 
     mappings = ProviderMapping.query.filter_by(
         zoom_account_id=account.account_id, is_active=True
@@ -129,6 +120,15 @@ def _seed_one_provider(
     summary: dict,
 ) -> None:
     provider_user_id = int(mapping.openemr_provider_id)
+
+    # 0. Per-provider, per-day guard. Earlier versions used a global check
+    # that broke multi-account hydration (one account's seed marker
+    # short-circuited every later account's seeder). Now scoped to this
+    # provider so re-hydrating safely no-ops for providers already seeded
+    # today, while still seeding any provider that hasn't been touched.
+    if _seed_marker_exists_today_for_provider(provider_user_id):
+        _record_skip(summary, account, provider_user_id, "already_seeded_today")
+        return
 
     # 1. Resolve specialty + first category
     categories = get_provider_specialty_categories(provider_user_id)
@@ -303,8 +303,16 @@ def _seed_one_provider(
 # Helpers — OpenEMR DB
 # ---------------------------------------------------------------------------
 
-def _seed_marker_exists_today() -> bool:
-    """Global per-day guard query."""
+def _seed_marker_exists_today_for_provider(provider_user_id: int) -> bool:
+    """
+    Per-provider per-day guard query.
+
+    Returns True when a locked demo encounter (external_id LIKE 'zlock_%')
+    already exists today for this specific OpenEMR provider. Scoped to the
+    provider — earlier versions used a global check and broke multi-account
+    hydration (one account's first-run seed marker short-circuited every
+    other account's seeder for the rest of the day).
+    """
     today = date.today()
     engine = get_openemr_db_engine()
     with engine.connect() as conn:
@@ -313,9 +321,14 @@ def _seed_marker_exists_today() -> bool:
                 SELECT 1 FROM form_encounter
                 WHERE DATE(date) = :today
                   AND external_id LIKE :marker
+                  AND provider_id = :provider_id
                 LIMIT 1
             """),
-            {"today": today, "marker": f"{_DEMO_ENCOUNTER_MARKER_PREFIX}%"}
+            {
+                "today": today,
+                "marker": f"{_DEMO_ENCOUNTER_MARKER_PREFIX}%",
+                "provider_id": int(provider_user_id),
+            }
         ).fetchone()
     return row is not None
 

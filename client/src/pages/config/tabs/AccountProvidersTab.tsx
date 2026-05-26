@@ -187,6 +187,7 @@ const AccountProvidersTab: React.FC<Props> = ({
         zoom_user_email: selectedZoomUser.email,
         zoom_user_name: selectedZoomUser.display_name,
         zoom_user_type: String(selectedZoomUser.type),
+        zoom_user_timezone: selectedZoomUser.timezone,
       });
 
       // Refresh mappings
@@ -551,6 +552,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                     <TableCell sx={{ fontWeight: 600 }}>Facility</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Time Zone</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                       Actions
                     </TableCell>
@@ -616,6 +618,21 @@ const AccountProvidersTab: React.FC<Props> = ({
                         <Typography variant="caption" color="text.secondary">
                           {mapping.zoom_user_email}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {mapping.zoom_user_timezone ? (
+                          <Typography variant="body2">
+                            {mapping.zoom_user_timezone}
+                          </Typography>
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell align="right">
                         <IconButton

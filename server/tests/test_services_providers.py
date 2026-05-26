@@ -164,6 +164,47 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
     assert len(rows) == 2
 
 
+def test_create_provider_mapping_persists_zoom_user_timezone(app):
+    """The IANA timezone string from the picked Zoom user's profile must
+    land on ProviderMapping.zoom_user_timezone so meeting creation can use
+    it instead of falling back to AccountConfig.timezone."""
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        mapping = providers._create_provider_mapping(
+            zoom_account_id="acct-1",
+            openemr_fhir_id="pract-tz",
+            openemr_provider_npi="9876543210",
+            openemr_provider_id=42,
+            openemr_provider_name="Dr Tz",
+            zoom_user_id="u-tz",
+            zoom_user_email="tz@example.com",
+            zoom_user_name="Dr Tz",
+            zoom_user_type=2,
+            zoom_user_timezone="America/Los_Angeles",
+        )
+        assert mapping.zoom_user_timezone == "America/Los_Angeles"
+
+
+def test_create_provider_mapping_allows_null_zoom_user_timezone(app):
+    """Mapping creation must succeed even when the picked Zoom user has no
+    profile timezone — meeting creation falls back to AccountConfig.timezone
+    in that case."""
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        mapping = providers._create_provider_mapping(
+            zoom_account_id="acct-1",
+            openemr_fhir_id="pract-no-tz",
+            openemr_provider_npi="1111111111",
+            openemr_provider_id=43,
+            openemr_provider_name="Dr No Tz",
+            zoom_user_id="u-no-tz",
+            zoom_user_email="notz@example.com",
+            zoom_user_name="Dr No Tz",
+            zoom_user_type=2,
+        )
+        assert mapping.zoom_user_timezone is None
+
+
 def test_get_provider_mappings_returns_only_active_for_account(app):
     with app.app_context():
         account_1 = _create_account("acct-1", is_active=True)

@@ -59,6 +59,11 @@ def get_zoom_users(
             "display_name": user.get("display_name"),
             "type": user.get("type"),
             "status": user.get("status"),
+            # IANA timezone string from the Zoom user profile (e.g. 'America/Denver').
+            # Cached on ProviderMapping.zoom_user_timezone when this user is
+            # mapped to an OpenEMR provider so meeting creation can schedule
+            # at the provider's local time instead of the account-wide TZ.
+            "timezone": user.get("timezone"),
         }
         for user in data.get("users", [])
     ]
@@ -170,6 +175,11 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         duration_minutes = 30
 
     # --- 5. Build Zoom API payload ---
+    # Provider TZ wins: each Zoom user has a profile timezone, cached on
+    # ProviderMapping.zoom_user_timezone at mapping creation. AccountConfig
+    # remains as a fallback for mappings created before that field existed
+    # or for Zoom users with no profile TZ set.
+    meeting_timezone = mapping.zoom_user_timezone or account.config.timezone
     meeting_payload = {
         "topic": topic,
         "agenda": payload.get("comments") or "",
@@ -177,8 +187,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         "type": 2,
         "start_time": start_time_str,
         "duration": duration_minutes,
-        # Account timezone — set during registration, defaults to America/New_York if not configured at app registration.
-        "timezone": account.config.timezone,
+        "timezone": meeting_timezone,
         "settings": {
             "host_video": False,
             "participant_video": False,
@@ -203,7 +212,8 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
     logger.info(
         f"zoom.create_meeting | Creating meeting for eid={payload.get('eid')} "
         f"provider={mapping.zoom_user_id} start={start_time_str} "
-        f"tz={account.config.timezone} duration={duration_minutes}min"
+        f"tz={meeting_timezone} (provider_tz={mapping.zoom_user_timezone or 'none'}, "
+        f"account_tz={account.config.timezone}) duration={duration_minutes}min"
     )
 
     # --- 7. Call Zoom API ---
@@ -363,17 +373,21 @@ def update_zoom_meeting(
     if not isinstance(duration_minutes, int) or duration_minutes <= 0:
         duration_minutes = 30
 
+    # Provider TZ wins, account TZ is fallback. See create_zoom_meeting for rationale.
+    meeting_timezone = mapping.zoom_user_timezone or zoom_account.config.timezone
     update_payload = {
         "topic": topic,
         "start_time": start_time_str,
         "duration": duration_minutes,
-        "timezone": zoom_account.config.timezone,
+        "timezone": meeting_timezone,
         "agenda": payload.get("comments") or "",
     }
 
     logger.info(
         f"zoom.update_meeting | Updating meeting {meeting_id} "
-        f"start={start_time_str} tz={zoom_account.config.timezone} duration={duration_minutes}min"
+        f"start={start_time_str} tz={meeting_timezone} "
+        f"(provider_tz={mapping.zoom_user_timezone or 'none'}, "
+        f"account_tz={zoom_account.config.timezone}) duration={duration_minutes}min"
     )
 
     make_zoom_api_request(

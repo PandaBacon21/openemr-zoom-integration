@@ -42,6 +42,7 @@ export interface ProviderMapping {
   zoom_user_id: string;
   zoom_user_email: string;
   zoom_user_name: string;
+  zoom_user_timezone: string | null;
   created_at: string;
 }
 
@@ -64,6 +65,7 @@ export interface ZoomUser {
   email: string;
   display_name: string;
   type: number;
+  timezone: string | null;
 }
 
 // Appointment Type Filter
@@ -183,6 +185,7 @@ export const createProviderMapping = (data: {
   zoom_user_email: string;
   zoom_user_name?: string;
   zoom_user_type: string;
+  zoom_user_timezone?: string | null;
 }) => apiClient.post<ProviderMapping>("/config/providers", data);
 
 export const deleteProviderMapping = (

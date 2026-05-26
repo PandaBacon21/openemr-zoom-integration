@@ -59,6 +59,7 @@ def _patch_happy_path(monkeypatch, *,
                       patients=None,
                       existing_8am_appt=None,
                       seed_marker_present=False,
+                      seed_marker_provider_ids=None,
                       category_id=20,
                       generate_eid=5001,
                       encounter_number=900001,
@@ -87,9 +88,15 @@ def _patch_happy_path(monkeypatch, *,
         "esign_all_forms": [],
     }
 
+    # Per-provider seed-marker check. seed_marker_present=True flags every
+    # provider as already seeded; seed_marker_provider_ids={...} flags only
+    # the listed providers. Tests can supply either.
+    seeded_pids = set(seed_marker_provider_ids or ())
     monkeypatch.setattr(
-        "app.services.openemr.encounter.past_encounter._seed_marker_exists_today",
-        lambda: seed_marker_present,
+        "app.services.openemr.encounter.past_encounter._seed_marker_exists_today_for_provider",
+        lambda provider_user_id: (
+            seed_marker_present or int(provider_user_id) in seeded_pids
+        ),
     )
     monkeypatch.setattr(
         "app.services.openemr.encounter.past_encounter.get_provider_specialty_categories",
@@ -185,7 +192,6 @@ def test_seed_creates_encounter_when_8am_is_free(app, monkeypatch):
         summary = past_encounter.seed_past_locked_encounters(account)
 
     assert summary["past_encounters_created"] == 1
-    assert summary["past_encounters_skipped_today"] is False
     assert summary["past_encounter_skips"] == []
     assert summary["past_encounter_errors"] == []
 
@@ -282,8 +288,42 @@ def test_seed_skips_when_8am_is_already_checked_out(app, monkeypatch):
     assert captured["create_encounter"] == []
 
 
-def test_global_per_day_guard_skips_everything(app, monkeypatch):
-    """If any seed-marker encounter already exists today → entire pass skipped."""
+def test_per_provider_per_day_guard_skips_only_matching_provider(app, monkeypatch):
+    """
+    The seed-marker check is per-provider. If provider 10 already has a
+    'zlock_*' encounter today (e.g. seeded earlier when a different Zoom
+    account was hydrated), only that provider is skipped — provider 11
+    on the same hydrate pass still gets seeded. This is the regression
+    behind the original multi-account hydration bug.
+    """
+    with app.app_context():
+        account = _create_account()
+        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_provider_id="11")
+        captured = _patch_happy_path(
+            monkeypatch,
+            seed_marker_provider_ids={10},  # only provider 10 already seeded
+        )
+
+        summary = past_encounter.seed_past_locked_encounters(account)
+
+        # Provider 11 was seeded; provider 10 was the single skip.
+        assert summary["past_encounters_created"] == 1
+        assert summary["past_encounter_skips"] == [
+            {"openemr_provider_id": "10", "reason": "already_seeded_today"}
+        ]
+        # Real work happened for provider 11 only.
+        generated_pids = [c["provider_user_id"] for c in captured["generate_appointment"]]
+        assert generated_pids == [11]
+
+        # Skip audit recorded once, for provider 10.
+        skip_audits = AuditLog.query.filter_by(event_type="demo.past_encounter_skipped").all()
+        assert len(skip_audits) == 1
+        assert skip_audits[0].openemr_provider_id == "10"
+
+
+def test_per_provider_guard_skips_all_when_all_already_seeded(app, monkeypatch):
+    """Re-hydrating the same account same day → every provider is a no-op."""
     with app.app_context():
         account = _create_account()
         _create_mapping(account.account_id, openemr_provider_id="10")
@@ -292,14 +332,18 @@ def test_global_per_day_guard_skips_everything(app, monkeypatch):
 
         summary = past_encounter.seed_past_locked_encounters(account)
 
-        assert summary["past_encounters_skipped_today"] is True
         assert summary["past_encounters_created"] == 0
-        # Guard fired before any per-provider work
+        # Both providers landed in the skip list with the new reason
+        skip_reasons = sorted(
+            (s["openemr_provider_id"], s["reason"]) for s in summary["past_encounter_skips"]
+        )
+        assert skip_reasons == [
+            ("10", "already_seeded_today"),
+            ("11", "already_seeded_today"),
+        ]
+        # No real work happened
         assert captured["generate_appointment"] == []
         assert captured["create_encounter"] == []
-
-        audits = AuditLog.query.filter_by(event_type="demo.past_encounters_skipped_today").all()
-        assert len(audits) == 1
 
 
 def test_seed_skips_provider_with_unknown_specialty(app, monkeypatch):

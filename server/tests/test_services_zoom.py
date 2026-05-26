@@ -376,23 +376,7 @@ def test_delete_zoom_meeting_returns_false_on_404(monkeypatch):
     assert zoom.delete_zoom_meeting(_make_account(), "123") is False
 
 
-def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
-    captured = {}
-    account = _make_account(account_id="acct-1", timezone="America/Denver")
-
-    match = SimpleNamespace(
-        provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
-        payload={
-            "eid": 999,
-            "pid": 1,
-            "title": "Follow-up",
-            "comments": "Bring records",
-            "appointment_date": "20260420",
-            "appointment_time": "10:00",
-            "duration_minutes": 45,
-        },
-    )
-
+def _capture_meeting_call(monkeypatch, captured):
     monkeypatch.setattr(zoom, "get_patient", lambda acct, pid: {"last_name": "Smith"})
 
     def fake_make_zoom_api_request(method, endpoint, zoom_account, **kwargs):
@@ -404,7 +388,31 @@ def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
 
     monkeypatch.setattr(zoom, "make_zoom_api_request", fake_make_zoom_api_request)
 
-    zoom.update_zoom_meeting(account, "123", match)
+
+def _make_match(*, provider_timezone=None, openemr_provider_name="Dr Jane Doe"):
+    return SimpleNamespace(
+        provider_mapping=SimpleNamespace(
+            openemr_provider_name=openemr_provider_name,
+            zoom_user_timezone=provider_timezone,
+        ),
+        payload={
+            "eid": 999,
+            "pid": 1,
+            "title": "Follow-up",
+            "comments": "Bring records",
+            "appointment_date": "20260420",
+            "appointment_time": "10:00",
+            "duration_minutes": 45,
+        },
+    )
+
+
+def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
+    captured = {}
+    account = _make_account(account_id="acct-1", timezone="America/Denver")
+    _capture_meeting_call(monkeypatch, captured)
+
+    zoom.update_zoom_meeting(account, "123", _make_match(provider_timezone="America/Denver"))
 
     assert captured["method"] == "PATCH"
     assert captured["endpoint"] == "/meetings/123"
@@ -416,10 +424,80 @@ def test_update_zoom_meeting_builds_expected_payload(monkeypatch):
     assert captured["json"]["start_time"] == "2026-04-20T10:00:00"
 
 
+def test_update_zoom_meeting_uses_provider_timezone_when_set(monkeypatch):
+    """Provider TZ on the mapping wins over account TZ — drives the per-facility
+    multi-time-zone demo scenario where 9 am means 9 am LOCAL for each provider."""
+    captured = {}
+    account = _make_account(account_id="acct-1", timezone="America/New_York")
+    _capture_meeting_call(monkeypatch, captured)
+
+    zoom.update_zoom_meeting(account, "123", _make_match(provider_timezone="America/Los_Angeles"))
+
+    assert captured["json"]["timezone"] == "America/Los_Angeles"
+
+
+def test_update_zoom_meeting_falls_back_to_account_timezone_when_provider_tz_missing(monkeypatch):
+    """If the mapping has no zoom_user_timezone (Zoom user without a profile
+    TZ, or a legacy mapping), AccountConfig.timezone is the documented fallback."""
+    captured = {}
+    account = _make_account(account_id="acct-1", timezone="America/Chicago")
+    _capture_meeting_call(monkeypatch, captured)
+
+    zoom.update_zoom_meeting(account, "123", _make_match(provider_timezone=None))
+
+    assert captured["json"]["timezone"] == "America/Chicago"
+
+
+def test_create_zoom_meeting_uses_provider_timezone_when_set(monkeypatch):
+    """Mirror coverage on the create path. Both create and update must honour
+    the provider-first TZ resolution; tested independently because they have
+    separate payload-building paths."""
+    captured = {}
+    account = _make_account(account_id="acct-1", timezone="America/New_York")
+    _capture_meeting_call(monkeypatch, captured)
+    monkeypatch.setattr(
+        zoom, "make_zoom_api_request",
+        lambda method, endpoint, zoom_account, **kwargs: captured.update({
+            "method": method, "endpoint": endpoint, "json": kwargs["json"],
+        }) or {"id": 111, "start_url": "s", "join_url": "j", "topic": "t"},
+    )
+
+    match = _make_match(provider_timezone="America/Denver")
+    match.zoom_account = account
+    match.provider_mapping.zoom_user_id = "u-1"
+    match.provider_mapping.default_alternative_host_email = None
+
+    zoom.create_zoom_meeting(match)
+    assert captured["json"]["timezone"] == "America/Denver"
+
+
+def test_create_zoom_meeting_falls_back_to_account_timezone(monkeypatch):
+    captured = {}
+    account = _make_account(account_id="acct-1", timezone="America/Chicago")
+    monkeypatch.setattr(zoom, "get_patient", lambda acct, pid: {"last_name": "Smith"})
+    monkeypatch.setattr(
+        zoom, "make_zoom_api_request",
+        lambda method, endpoint, zoom_account, **kwargs: captured.update({
+            "method": method, "endpoint": endpoint, "json": kwargs["json"],
+        }) or {"id": 111, "start_url": "s", "join_url": "j", "topic": "t"},
+    )
+
+    match = _make_match(provider_timezone=None)
+    match.zoom_account = account
+    match.provider_mapping.zoom_user_id = "u-1"
+    match.provider_mapping.default_alternative_host_email = None
+
+    zoom.create_zoom_meeting(match)
+    assert captured["json"]["timezone"] == "America/Chicago"
+
+
 def test_update_zoom_meeting_raises_on_unparseable_datetime():
     account = _make_account(account_id="acct-1", timezone="America/Denver")
     match = SimpleNamespace(
-        provider_mapping=SimpleNamespace(openemr_provider_name="Dr Jane Doe"),
+        provider_mapping=SimpleNamespace(
+            openemr_provider_name="Dr Jane Doe",
+            zoom_user_timezone=None,
+        ),
         payload={
             "appointment_date": "bad-date",
             "appointment_time": "bad-time",

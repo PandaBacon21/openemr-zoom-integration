@@ -165,6 +165,7 @@ class ProviderMapping(db.Model):
     zoom_user_name = db.Column(db.String(256), nullable=True)
     zoom_user_id = db.Column(db.String(128), nullable=True)
     zoom_user_type = db.Column(db.Integer, nullable=True)
+    zoom_user_timezone = db.Column(db.String(64), nullable=True)
  
     # Default alternative host for meetings created for this provider.
     # Nullable — (not yet built).
@@ -191,6 +192,7 @@ class ProviderMapping(db.Model):
             zoom_user_email: str | None = ...,
             zoom_user_name: str | None = ...,
             zoom_user_type: int | None = ...,
+            zoom_user_timezone: str | None = ...,
             default_alternative_host_email: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...

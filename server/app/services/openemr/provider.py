@@ -286,6 +286,7 @@ def _create_provider_mapping(
     zoom_user_email: str,
     zoom_user_name: str | None,
     zoom_user_type: int | None,
+    zoom_user_timezone: str | None = None,
     openemr_facility_id: int | None = None,
     openemr_facility_name: str | None = None,
 ) -> ProviderMapping:
@@ -334,6 +335,7 @@ def _create_provider_mapping(
         zoom_user_email=zoom_user_email,
         zoom_user_name=zoom_user_name,
         zoom_user_type=zoom_user_type,
+        zoom_user_timezone=zoom_user_timezone,
         is_active=True
     )
 
@@ -342,7 +344,7 @@ def _create_provider_mapping(
 
     logger.info(
         f"Provider mapping created: NPI {openemr_provider_npi} "
-        f"→ Zoom user {zoom_user_email}"
+        f"→ Zoom user {zoom_user_email} (tz={zoom_user_timezone or 'none'})"
     )
     return mapping
 
