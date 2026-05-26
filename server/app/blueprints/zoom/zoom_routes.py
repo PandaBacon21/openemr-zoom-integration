@@ -345,11 +345,26 @@ def complete_zoom_note(encounter_number: int):
             ).fetchone()
     except Exception as e:
         logger.error(f"complete_zoom_note | DB error looking up encounter={encounter_number}: {e}")
+        write_audit_log(
+            event_type="zoom.completion_error",
+            success=False,
+            openemr_encounter_number=str(encounter_number),
+            error_message=str(e),
+            detail={"reason": "db_error"},
+        )
         return jsonify({"status": "error", "reason": "database error"}), 200
 
     if not row:
-        # Not a Zoom-linked encounter — silently succeed, nothing to do
+        # Not a Zoom-linked encounter — silently succeed, nothing to do.
+        # Expected case: every eSign fires this proxy, including on non-Zoom
+        # encounters. Audited so the trail shows the call landed safely.
         logger.info(f"complete_zoom_note | encounter={encounter_number} has no Zoom link, skipping")
+        write_audit_log(
+            event_type="zoom.completion_skipped",
+            success=True,
+            openemr_encounter_number=str(encounter_number),
+            detail={"reason": "not_zoom_encounter"},
+        )
         return jsonify({"status": "skipped", "reason": "not a zoom encounter"}), 200
 
     external_id = row.external_id
@@ -359,6 +374,15 @@ def complete_zoom_note(encounter_number: int):
         eid = int(external_id.removeprefix("zoom_eid_"))
     except ValueError:
         logger.error(f"complete_zoom_note | Could not parse eid from external_id='{external_id}'")
+        write_audit_log(
+            event_type="zoom.completion_error",
+            success=False,
+            openemr_encounter_number=str(encounter_number),
+            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_patient_id=str(row.pid) if row.pid is not None else None,
+            error_message=f"malformed external_id: {external_id}",
+            detail={"reason": "malformed_external_id", "external_id": external_id},
+        )
         return jsonify({"status": "error", "reason": "malformed external_id"}), 200
 
     # --- 3. Look up MeetingRecord ---
@@ -368,10 +392,30 @@ def complete_zoom_note(encounter_number: int):
 
     if not record:
         logger.info(f"complete_zoom_note | No MeetingRecord for eid={eid}, skipping")
+        write_audit_log(
+            event_type="zoom.completion_skipped",
+            success=True,
+            openemr_encounter_number=str(encounter_number),
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_patient_id=str(row.pid) if row.pid is not None else None,
+            detail={"reason": "no_meeting_record"},
+        )
         return jsonify({"status": "skipped", "reason": "no meeting record"}), 200
 
     if not record.clinical_note or not record.clinical_note.zoom_note_id:
         logger.info(f"complete_zoom_note | No clinical note on record for eid={eid}, skipping")
+        write_audit_log(
+            event_type="zoom.completion_skipped",
+            success=True,
+            zoom_account_id=record.zoom_account_id,
+            zoom_meeting_id=record.zoom_meeting_id,
+            openemr_encounter_number=str(encounter_number),
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_patient_id=str(row.pid) if row.pid is not None else None,
+            detail={"reason": "no_note_on_record"},
+        )
         return jsonify({"status": "skipped", "reason": "no note on record"}), 200
     clinical_note = record.clinical_note
     # --- 4. Check idempotency ---
@@ -389,6 +433,7 @@ def complete_zoom_note(encounter_number: int):
             openemr_encounter_number=str(encounter_number),
             openemr_provider_id=row.provider_id,
             openemr_patient_id=row.pid,
+            detail={"reason": "already_completed"},
         )
         return jsonify({"status": "already_completed"}), 200
 
@@ -399,6 +444,19 @@ def complete_zoom_note(encounter_number: int):
 
     if not account:
         logger.error(f"complete_zoom_note | No active ZoomAccount for eid={eid}")
+        write_audit_log(
+            event_type="zoom.completion_error",
+            success=False,
+            zoom_account_id=record.zoom_account_id,
+            zoom_meeting_id=record.zoom_meeting_id,
+            zoom_note_id=clinical_note.zoom_note_id,
+            openemr_encounter_number=str(encounter_number),
+            openemr_appointment_id=str(eid),
+            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_patient_id=str(row.pid) if row.pid is not None else None,
+            error_message="no active ZoomAccount",
+            detail={"reason": "no_active_account"},
+        )
         return jsonify({"status": "error", "reason": "no zoom account"}), 200
 
     # --- 6. Mark note completed in Zoom ---

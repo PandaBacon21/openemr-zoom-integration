@@ -935,6 +935,23 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                 $zoomNoteFinalized = true;
             }
 
+            // Zoomly: only Zoom-linked encounters carry a 'zoom_eid_*' tag in
+            // form_encounter.external_id (stamped by create_encounter() in the
+            // Zoom flow). Without that tag there is no Zoom meeting to retrieve
+            // a note from — common for manually-created SOAP/Clinical Notes
+            // forms or for Chrome-extension demo flows that copy a note in by
+            // hand. Hide the Retrieve Zoom Note button so SEs don't click it
+            // and get a confusing 404 from Flask.
+            $zoomLinkedEncounter = false;
+            $zoomLinkRow = sqlQuery(
+                "SELECT 1 AS hit FROM form_encounter "
+                . "WHERE encounter = ? AND external_id LIKE 'zoom_eid_%' LIMIT 1",
+                [$encounter]
+            );
+            if (!empty($zoomLinkRow)) {
+                $zoomLinkedEncounter = true;
+            }
+
             foreach ($result as $iter) {
                 $formdir = $iter['formdir'];
 
@@ -1030,10 +1047,14 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                         echo "" . xlt('Edit') . "</a>";
 
                         // Zoomly: render the Retrieve Zoom Note button only when
-                        // no Zoom-managed form for this encounter is locked. Once
-                        // any of them is locked, the Zoom note is finalized and
-                        // the sibling form must not be overwritten.
-                        if (($formdir == 'soap' || $formdir == 'clinical_notes') && !$zoomNoteFinalized) {
+                        // (a) the encounter is actually Zoom-linked (otherwise
+                        // there's no meeting/note to fetch — common for
+                        // manually-created forms and Chrome-extension demos),
+                        // and (b) no Zoom-managed form for this encounter is
+                        // already locked (locking finalizes the note in Zoom,
+                        // so a re-fetch would overwrite a chart the provider
+                        // has already attested).
+                        if (($formdir == 'soap' || $formdir == 'clinical_notes') && $zoomLinkedEncounter && !$zoomNoteFinalized) {
                             echo "<button type='button' class='btn btn-secondary btn-sm ms-1 zoom-retrieve-button' " .
                                 "data-encounter='" . (int)$encounter . "' " .
                                 "onclick='retrieveZoomNote(" . (int)$encounter . ", " . attr_js($iter['id']) . ")' " .

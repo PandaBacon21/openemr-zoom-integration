@@ -76,9 +76,17 @@ def write_audit_log(
       encounter.claimed         — manually-created encounter claimed via fallback path (S7-01)
       encounter.created         — new encounter created via create_encounter (detail.trigger set)
       encounter.create_failed   — create_encounter returned None (detail.trigger set)
-      zoom.completion_success   — Zoom meeting marked complete successfully
-      zoom.completion_skipped   — completion idempotent — already marked complete
-      zoom.completion_error     — error marking Zoom meeting complete
+      zoom.completion_success   — Zoom note marked complete successfully
+      zoom.completion_skipped   — completion no-op for a non-error reason; check
+                                  detail.reason: 'already_completed' (idempotent),
+                                  'not_zoom_encounter' (eSign fired on a non-Zoom
+                                  encounter), 'no_meeting_record',
+                                  'no_note_on_record'
+      zoom.completion_error     — error path in complete_zoom_note; check
+                                  detail.reason: 'db_error',
+                                  'malformed_external_id' (with detail.external_id),
+                                  'no_active_account', or absent for direct Zoom
+                                  API errors (error_message carries the API message)
       zoom.webhook_signature_failed — Zoom webhook signature verification failed
       zoom.webhook_account_mismatch — payload.account_id did not match the
                                        account_id in the webhook URL path
