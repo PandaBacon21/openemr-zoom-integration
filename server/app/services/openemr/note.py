@@ -199,15 +199,22 @@ def write_note_to_encounter(
     ) -> bool:
     """
     Write Zoom clinical note into an OpenEMR encounter.
- 
+
     Writes to two forms:
       1. form_soap           — parsed SOAP sections
       2. form_clinical_notes — full note content as narrative
- 
+
     Both operations are idempotent:
       - Deduped by encounter + formdir via the forms registration table —
         at most one SOAP form and one Clinical Notes form per encounter.
- 
+
+    eSign-locked encounter guard: calls encounter_lock_target() before any
+    write. If the encounter itself or one of its Zoom-managed forms (SOAP /
+    Clinical Notes) is eSign-locked, the write is refused — emits a
+    note.write_skipped_locked audit with the lock_target in detail and
+    returns False. Protects against late webhook retries / async re-runs
+    overwriting a chart the provider has already attested.
+
     Args:
         encounter_number:  OpenEMR encounter number
         pid:               OpenEMR patient ID
@@ -217,9 +224,9 @@ def write_note_to_encounter(
         note_title:        Note title from Zoom webhook payload
         note_id:           Zoom note ID (stored on form_clinical_notes.external_id
                            for traceability — refreshed on each write)
- 
+
     Returns:
-        True if successful, False on error
+        True if successful, False on error or skipped lock guard
     """
     content_length = len(note_content) if note_content else 0
     stripped_length = len(note_content.strip()) if note_content else 0

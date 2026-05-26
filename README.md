@@ -11,9 +11,12 @@ Current implemented areas:
 - OpenEMR appointment webhook handling for create, update, and delete flows
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
 - OpenEMR appointment URL writeback (`pc_website`) after meeting create/recreate
-- Zoom waiting-room/meeting-start handling for patient arrival and shared Zoom license context
-- Zoom clinical note retrieval/writeback, manual OpenEMR fetch proxy, and Zoom note completion endpoint plumbing
-- Audit logging for webhook intake, meeting lifecycle, note, completion, and config events
+- Zoom waiting-room/meeting-start/meeting-end handling drives a forward-only appointment status state machine (Pending → Arrived → In Exam Room → Checked Out), keeping both `pc_apptstatus` and `patient_tracker_element` in sync so the calendar and the Flow Board agree
+- Zoom clinical note retrieval/writeback, manual OpenEMR fetch proxy, and Zoom note completion triggered on eSign of a SOAP / Clinical Notes form or the encounter
+- eSign-locked encounter guard refuses writeback (async webhook retries and manual fetch) and hides the OpenEMR Retrieve Zoom Note button on locked or non-Zoom-linked encounters
+- Hydrate Demo Data endpoint + admin UI button — idempotent backfill of the next-2-weekdays × 2-slots-per-day grid with Zoom-typed appointments + real Zoom meetings, respecting per-account appointment-type filters
+- Per-account Zoom webhook URL (`/webhooks/zoom/<account_id>`) so CRC URL validation resolves the correct secret and payload account_id is cross-checked against the path
+- Audit logging for webhook intake, meeting lifecycle, note, completion, eSign-locked refusals, status transitions, hydration, and config events
 - Paginated audit log API for the admin UI
 - Per-account config records for timezone, shared Zoom user behavior, clinical note writeback mode, and demo patient contact overrides
 - Zoom EHR Context auth and appointment lookup endpoints
@@ -139,13 +142,17 @@ Authorization: Bearer <token-from-/api/auth/login>
 
 OpenEMR-signed note endpoints:
 
-- `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; JWT exempt)
-- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; JWT exempt; idempotent Zoom completion hook)
+- `POST /zoom/encounter/<encounter_number>/fetch_zoom_note` (signature required; JWT exempt; returns 409 if the encounter or its SOAP / Clinical Notes form is eSign-locked)
+- `POST /zoom/encounter/<encounter_number>/complete_zoom_note` (signature required; JWT exempt; idempotent Zoom completion hook; every skip/error path audited)
+
+Demo hydration (JWT bearer protected):
+
+- `POST /config/demo/hydrate` — idempotent backfill of the next-2-weekdays × 2-slots-per-day appointment + Zoom meeting grid for every active provider mapping on the account
 
 Inbound webhook endpoints:
 
 - `POST /webhooks/openemr` (`X-Zoomly-Signature` required)
-- `POST /webhooks/zoom` (Zoom webhook signature flow)
+- `POST /webhooks/zoom/<account_id>` (Zoom webhook signature flow — per-account path)
 
 Zoom EHR Context endpoints:
 
@@ -162,6 +169,6 @@ server/scripts/test.sh
 
 This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
 
-Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, eSign-locked encounter writeback refusal (encounter-, SOAP-, and Clinical-Notes-level locks), forward-only appointment status state machine including the `patient_tracker_element` sync that keeps the Flow Board aligned, hydration service helpers and orchestrator, past locked-encounter seeder, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest backend run result in this workspace: `280 passed`.
+Latest backend run result in this workspace: `364 passed`.
