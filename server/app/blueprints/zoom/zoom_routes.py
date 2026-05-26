@@ -7,6 +7,7 @@ from app.extensions import db, get_openemr_db_engine
 from app.services.audit import write_audit_log
 from app.services.zoom import get_zoom_users, get_zoom_clinical_note, mark_zoom_note_completed
 from app.services.openemr import write_note_to_encounter, get_provider_username
+from app.services.openemr.note import encounter_lock_target
 
 from app.blueprints.zoom.zoom_route_helper import verify_openemr_signature, _audit_manual_fetch_failed
 from app.blueprints.zoom import zoom_bp
@@ -110,6 +111,27 @@ def fetch_zoom_note(encounter_number: int):
     pid = row.pid
     provider_id = row.provider_id
     external_id = row.external_id  # e.g. "zoom_eid_42"
+
+    # --- 1a. Refuse if the encounter (or one of its Zoom-managed forms) is
+    # eSign-locked. The OpenEMR UI hides the Retrieve Zoom Note button once a
+    # form is locked, but a direct hit on this endpoint would still overwrite
+    # a signed chart — fail fast before the Zoom API roundtrip.
+    lock_target = encounter_lock_target(encounter_number)
+    if lock_target is not None:
+        logger.warning(
+            f"fetch_zoom_note | refused — encounter={encounter_number} "
+            f"is locked (lock_target={lock_target})"
+        )
+        _audit_manual_fetch_failed(
+            reason="encounter_locked",
+            error_message=f"encounter locked ({lock_target})",
+            encounter_number=encounter_number,
+            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_patient_id=str(pid) if pid is not None else None,
+        )
+        return jsonify({
+            "error": "Encounter is signed and locked — Zoom note cannot be re-fetched."
+        }), 409
 
     # --- 2. Extract eid from external_id ---
     try:

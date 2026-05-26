@@ -10,14 +10,16 @@ Also covers MeetingRecord.clinical_note relationship ordering (most recent
 note wins when multiple ClinicalNoteRecord rows exist for one meeting).
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from app.extensions import db
-from app.models import ClinicalNoteRecord, MeetingRecord
+from app.models import AuditLog, ClinicalNoteRecord, MeetingRecord
 from app.services.openemr.note import (
     _upsert_clinical_note_form,
     _upsert_soap_form,
+    write_note_to_encounter,
 )
 
 
@@ -278,3 +280,142 @@ def test_meeting_record_clinical_note_returns_most_recent(app):
 
         assert resolved.clinical_note is not None
         assert resolved.clinical_note.zoom_note_id == "note-NEW-real"
+
+
+# ---------------------------------------------------------------------------
+# write_note_to_encounter eSign-locked guard
+# ---------------------------------------------------------------------------
+
+
+class _FakeBeginEngine:
+    """Engine stub whose .begin() returns a connection that swallows every
+    SQL call. Used by the unlocked-path test where we patch the upsert
+    helpers out — write_note_to_encounter just needs the context manager
+    to exist."""
+
+    class _Conn:
+        def execute(self, *a, **kw):
+            return FakeResult()
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def begin(self):
+        return self._Conn()
+
+
+def _patch_lock_target(monkeypatch, value):
+    monkeypatch.setattr(
+        "app.services.openemr.note.encounter_lock_target",
+        lambda enc: value,
+    )
+
+
+def _last_audit(event_type: str):
+    return (
+        AuditLog.query
+        .filter_by(event_type=event_type)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+
+def _call_write_note(monkeypatch, **overrides):
+    """Run write_note_to_encounter with sensible defaults so each test only
+    declares the field it cares about."""
+    kwargs = {
+        "encounter_number": 30001,
+        "pid": 100,
+        "provider_id": 14,
+        "provider_username": "amiller",
+        "note_content": "S: cough\nO: T 38.2\nA: viral URI\nP: rest",
+        "note_title": "Visit note",
+        "note_id": "zoom-note-xyz",
+        "note_writeback_mode": "both",
+    }
+    kwargs.update(overrides)
+    return write_note_to_encounter(**kwargs)
+
+
+def test_write_note_skipped_when_encounter_esigned(app, monkeypatch):
+    """Encounter-level eSign cascades to every form. The guard must refuse
+    the write, emit an audit row tagged lock_target='encounter', and never
+    touch the engine."""
+    _patch_lock_target(monkeypatch, "encounter")
+    # If the function tries to reach the engine the test fails loudly.
+    monkeypatch.setattr(
+        "app.services.openemr.note.get_openemr_db_engine",
+        lambda: (_ for _ in ()).throw(AssertionError("engine should not be used")),
+    )
+    with app.app_context():
+        result = _call_write_note(monkeypatch)
+        assert result is False
+        audit = _last_audit("note.write_skipped_locked")
+        assert audit is not None
+        assert audit.success is False
+        assert audit.openemr_encounter_number == "30001"
+        assert audit.zoom_note_id == "zoom-note-xyz"
+        detail = json.loads(audit.detail)
+        assert detail["lock_target"] == "encounter"
+        assert detail["note_writeback_mode"] == "both"
+
+
+def test_write_note_skipped_when_soap_form_locked(app, monkeypatch):
+    """Form-level eSign on the SOAP form only locks that form, but the
+    Zoom note is finalized — Clinical Notes writeback must also be refused."""
+    _patch_lock_target(monkeypatch, "soap")
+    monkeypatch.setattr(
+        "app.services.openemr.note.get_openemr_db_engine",
+        lambda: (_ for _ in ()).throw(AssertionError("engine should not be used")),
+    )
+    with app.app_context():
+        result = _call_write_note(monkeypatch, note_writeback_mode="clinical_note_only")
+        assert result is False
+        audit = _last_audit("note.write_skipped_locked")
+        detail = json.loads(audit.detail)
+        assert detail["lock_target"] == "soap"
+        assert detail["note_writeback_mode"] == "clinical_note_only"
+
+
+def test_write_note_skipped_when_clinical_notes_form_locked(app, monkeypatch):
+    """Mirror of the SOAP case — Clinical Notes lock blocks SOAP writeback too."""
+    _patch_lock_target(monkeypatch, "clinical_notes")
+    monkeypatch.setattr(
+        "app.services.openemr.note.get_openemr_db_engine",
+        lambda: (_ for _ in ()).throw(AssertionError("engine should not be used")),
+    )
+    with app.app_context():
+        result = _call_write_note(monkeypatch, note_writeback_mode="soap_only")
+        assert result is False
+        audit = _last_audit("note.write_skipped_locked")
+        detail = json.loads(audit.detail)
+        assert detail["lock_target"] == "clinical_notes"
+
+
+def test_write_note_proceeds_when_no_locks(app, monkeypatch):
+    """No lock row → both upserts fire and the function returns True. The
+    upserts themselves are patched out — their internals have dedicated
+    tests above; this test only verifies the guard lets them through."""
+    _patch_lock_target(monkeypatch, None)
+    monkeypatch.setattr(
+        "app.services.openemr.note.get_openemr_db_engine",
+        lambda: _FakeBeginEngine(),
+    )
+    soap_calls = []
+    cn_calls = []
+    monkeypatch.setattr(
+        "app.services.openemr.note._upsert_soap_form",
+        lambda **kw: soap_calls.append(kw) or 1,
+    )
+    monkeypatch.setattr(
+        "app.services.openemr.note._upsert_clinical_note_form",
+        lambda **kw: cn_calls.append(kw) or 1,
+    )
+    with app.app_context():
+        result = _call_write_note(monkeypatch)
+        assert result is True
+        assert len(soap_calls) == 1
+        assert len(cn_calls) == 1
+        # No skipped-locked audit was emitted.
+        assert _last_audit("note.write_skipped_locked") is None

@@ -61,9 +61,18 @@ def write_audit_log(
       note.handler_error        — top-level exception in clinical_notes.note_created handler
       note.async_job_error      — unhandled exception inside async note processor
       note.manual_fetch_requested — manual fetch button pressed in OpenEMR UI
-      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set)
+      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set;
+                                  reason='encounter_locked' means the encounter
+                                  or one of its Zoom-managed forms is eSign-locked)
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
+      note.write_skipped_locked — write refused because encounter or one of its
+                                  Zoom-managed forms (SOAP / Clinical Notes) is
+                                  eSign-locked. detail.lock_target identifies
+                                  which: 'encounter' | 'soap' | 'clinical_notes'
+                                  | 'unknown' (DB error during the lock check).
+                                  detail.note_writeback_mode echoes the mode
+                                  that would have been used.
       encounter.claimed         — manually-created encounter claimed via fallback path (S7-01)
       encounter.created         — new encounter created via create_encounter (detail.trigger set)
       encounter.create_failed   — create_encounter returned None (detail.trigger set)
