@@ -1,6 +1,11 @@
 import { Box } from "@mui/material";
 
-const EKGLoader: React.FC = () => {
+interface EKGLoaderProps {
+  /** Caption rendered under the pulsing EKG trace. Defaults to "Registering...". */
+  text?: string;
+}
+
+const EKGLoader: React.FC<EKGLoaderProps> = ({ text = "Registering..." }) => {
   return (
     <Box
       sx={{
@@ -59,7 +64,7 @@ const EKGLoader: React.FC = () => {
           },
         }}
       >
-        Registering...
+        {text}
       </Box>
     </Box>
   );

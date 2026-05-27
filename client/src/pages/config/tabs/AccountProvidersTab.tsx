@@ -24,6 +24,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import PersonIcon from "@mui/icons-material/Person";
+import EKGLoader from "../../../components/EKGLoader";
 import type {
   Registration,
   ProviderMapping,
@@ -280,18 +281,22 @@ const AccountProvidersTab: React.FC<Props> = ({
 
   return (
     <Box
-      sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 1000 }}
+      sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 1200 }}
     >
       {/* Hydrate Demo Data — small card, top-right */}
       <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
         <Card variant="outlined" sx={{ maxWidth: 460, width: "100%" }}>
-          <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+          <CardContent sx={{ p: 2, position: "relative", "&:last-child": { pb: 2 } }}>
+            {hydrating && <EKGLoader text="Hydrating..." />}
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: 2,
+                opacity: hydrating ? 0.4 : 1,
+                transition: "opacity 0.2s",
+                pointerEvents: hydrating ? "none" : "auto",
               }}
             >
               <Box sx={{ flexGrow: 1 }}>
@@ -314,11 +319,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                 disabled={mappings.length === 0 || hydrating}
                 sx={{ whiteSpace: "nowrap" }}
               >
-                {hydrating ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  "Hydrate"
-                )}
+                Hydrate
               </Button>
             </Box>
             {hydrateSummary && (
@@ -380,8 +381,8 @@ const AccountProvidersTab: React.FC<Props> = ({
                           component="li"
                           variant="caption"
                         >
-                          Provider {e.openemr_provider_id} failed at{" "}
-                          {e.stage} — {e.error}
+                          Provider {e.openemr_provider_id} failed at {e.stage} —{" "}
+                          {e.error}
                         </Typography>
                       ))}
                     </Box>
