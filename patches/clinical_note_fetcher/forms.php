@@ -149,6 +149,19 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
         $('.zoom-retrieve-status[data-encounter="' + encounterNumber + '"]').remove();
     }
 
+    // Zoomly: shared HTML for the "Locked" button after an eSign succeeds.
+    // OpenEMR's ESign module returns a `btn-secondary` (grey-box) variant in
+    // response.editButtonHtml, while our patched static render uses a
+    // `btn-text` + fa-lock icon variant. The two paths produced visually
+    // different Locked states depending on whether the page had reloaded
+    // since the eSign — using this helper everywhere keeps the lock-icon
+    // style consistent across both form-level and encounter-level eSigns.
+    function lockedButtonHtml(formdir, formId) {
+        return "<a href='#' class='btn btn-text btn-sm form-edit-button-locked' " +
+               "id='form-edit-button-" + formdir + "-" + formId + "'>" +
+               "<i class='fa fa-lock fa-fw'></i>&nbsp;Locked</a>";
+    }
+
     $(function () {
         var formConfig = <?php echo $esignApi->formConfigToJson(); ?>;
         $(".esign-button-form").esign(
@@ -157,7 +170,13 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                 afterFormSuccess: function (response) {
                     if (response.locked) {
                         var editButtonId = "form-edit-button-" + response.formDir + "-" + response.formId;
-                        $("#" + editButtonId).replaceWith(response.editButtonHtml);
+                        // Zoomly: use our lock-icon variant instead of
+                        // response.editButtonHtml so the in-place replacement
+                        // matches the styling our static render uses after a
+                        // page reload.
+                        $("#" + editButtonId).replaceWith(
+                            lockedButtonHtml(response.formDir, response.formId)
+                        );
 
                         // Zoomly: if the form just locked is one of ours,
                         // finalize the Zoom note and strip retrieve buttons
@@ -186,8 +205,24 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                     // form edit buttons with a "disabled" button, and "disable" left
                     // nav visit form links
                     if (response.locked) {
-                        // Lock the form edit buttons
-                        $(".form-edit-button").replaceWith(response.editButtonHtml);
+                        // Zoomly: replace each form's edit button with the
+                        // lock-icon variant individually so the per-form id
+                        // stays correct (form-edit-button-{formdir}-{formId})
+                        // and the styling matches our static render. The stock
+                        // OpenEMR JS does $.replaceWith(response.editButtonHtml)
+                        // for every match, but that HTML is a single hardcoded
+                        // grey-box button which both loses per-form ids and
+                        // breaks visual consistency with the page-reload state.
+                        $(".form-edit-button").each(function () {
+                            var oldId = this.id || "";
+                            // Expected shape: form-edit-button-{formdir}-{formId}
+                            var match = oldId.match(/^form-edit-button-(.+)-([^-]+)$/);
+                            if (match) {
+                                $(this).replaceWith(lockedButtonHtml(match[1], match[2]));
+                            } else {
+                                $(this).replaceWith(lockedButtonHtml("", ""));
+                            }
+                        });
                         // Disable the new-form capabilities in left nav
                         top.window.parent.left_nav.syncRadios();
                         // Disable the new-form capabilities in top nav of the encounter
