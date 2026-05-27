@@ -119,6 +119,14 @@ def zoom_webhook(account_id: str):
     elif event_type == "meeting.ended":
         return _handle_meeting_ended(payload, account)
     elif event_type in ("meeting.participant_joined_waiting_room", "meeting.participant_jbh_waiting"):
+        # TODO(S13-followup): `meeting.participant_jbh_waiting` is the
+        # event we actually subscribe to in the Zoom App config — it's the
+        # one that reliably fires when a patient joins before the host.
+        # `meeting.participant_joined_waiting_room` is kept here as a
+        # safety net until further demo testing confirms it's never needed
+        # under our meeting settings (join_before_host=False, waiting_room=True,
+        # who_goes_to_waiting_room=users_not_in_account). Remove the
+        # participant_joined_waiting_room branch once that's confirmed.
         return _handle_waiting_room_joined(payload, account)
     else:
         logger.debug(f"webhooks.zoom | Unhandled event type: {event_type}")

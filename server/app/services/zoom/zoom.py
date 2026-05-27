@@ -59,10 +59,6 @@ def get_zoom_users(
             "display_name": user.get("display_name"),
             "type": user.get("type"),
             "status": user.get("status"),
-            # IANA timezone string from the Zoom user profile (e.g. 'America/Denver').
-            # Cached on ProviderMapping.zoom_user_timezone when this user is
-            # mapped to an OpenEMR provider so meeting creation can schedule
-            # at the provider's local time instead of the account-wide TZ.
             "timezone": user.get("timezone"),
         }
         for user in data.get("users", [])
@@ -95,7 +91,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
     mapping = match.provider_mapping
     payload = match.payload
 
-    # --- 1. Validate required fields ---
+    # --- Validate required fields ---
     appointment_date = payload.get("appointment_date")  # YYYYMMDD
     appointment_time = payload.get("appointment_time")  # HH:MM
     if not appointment_date or not appointment_time:
@@ -103,10 +99,8 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
             f"Missing appointment_date or appointment_time in payload for eid={payload.get('eid')}"
         )
 
-    # --- 2. Build start_time string ---
-    # Zoom expects ISO 8601 local time alongside a separate timezone field:
+    # --- Build start_time string ---
     # "start_time": "2026-04-20T10:00:00", "timezone": "America/Denver"
-    # We do NOT convert to UTC — Zoom handles the conversion using the timezone field.
     start_dt = None
     for fmt in ("%Y%m%d %H:%M", "%Y-%m-%d %H:%M"):
         try:
@@ -125,7 +119,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         )
     start_time_str = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-        # --- 3. Build meeting topic ---
+        # --- Build meeting topic ---
     # Format: "Telehealth: {provider_name} | {patient_last_name} | {title}"
     # Falls back gracefully if any component is missing.
     #
@@ -168,13 +162,13 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         topic = topic[:197] + "..."
  
 
-    # --- 4. Build duration ---
+    # --- Build duration ---
     # Use duration from payload if present, otherwise default to 30 minutes.
     duration_minutes = payload.get("duration_minutes", 30)
     if not isinstance(duration_minutes, int) or duration_minutes <= 0:
         duration_minutes = 30
 
-    # --- 5. Build Zoom API payload ---
+    # --- Build Zoom API payload ---
     # Provider TZ wins: each Zoom user has a profile timezone, cached on
     # ProviderMapping.zoom_user_timezone at mapping creation. AccountConfig
     # remains as a fallback for mappings created before that field existed
@@ -191,7 +185,6 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         "settings": {
             "host_video": False,
             "participant_video": False,
-            "join_before_host": False,
             "mute_upon_entry": True,
             "waiting_room": True,
             "waiting_room_options": {
@@ -201,7 +194,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         },
     }
 
-    # --- 6. Add alternative host if set on the mapping ---
+    # --- Add alternative host if set on the mapping ---
     # Currently always None until the config UI is built.
     # When populated, Zoom sends them a host link and they can start the meeting - Such as an MA or Nurse rooming the patient for the provider.
     if mapping.default_alternative_host_email:
@@ -216,7 +209,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
         f"account_tz={account.config.timezone}) duration={duration_minutes}min"
     )
 
-    # --- 7. Call Zoom API ---
+    # --- Call Zoom API ---
     response = make_zoom_api_request(
         method="POST",
         endpoint=f"/users/{mapping.zoom_user_id}/meetings",

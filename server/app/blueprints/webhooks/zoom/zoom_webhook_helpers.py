@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import time
 import requests
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from sqlalchemy import text
 from flask import current_app
 from app.services.zoom import get_zoom_clinical_note
@@ -136,7 +136,7 @@ def _process_note_async(app, account_id: str, note_id: str, meeting_number: str,
         app.logger.info(f"zoom_helpers | async note job complete | note_id={note_id}")
 
 
-def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int = 3, delay_seconds: int = 30) -> dict | None:
+def _fetch_note_with_retry(account: ZoomAccount, note_id: str, max_attempts: int = 3, delay_seconds: int = 15) -> dict | None:
     note_data = None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -246,13 +246,18 @@ def _handle_cn_created(payload: dict, account: ZoomAccount):
         }
     )
 
-    # Schedule async processing — respond immediately to Zoom to avoid timeout
+    # Hand off to the async worker so we can still return 200 well inside
+    # Zoom's 3s webhook deadline. Initial run is immediate (delay=0) — the
+    # earlier 30s delay was a workaround for a Zoom bug that served empty
+    # content on first read; Zoom has since fixed it, so we attempt the
+    # fetch right away and lean on _fetch_note_with_retry's internal 15s
+    # retries as the safety net if Zoom ever regresses.
     app = current_app._get_current_object() # type: ignore[attr-defined]
     scheduler.add_job(
         func=_process_note_async,
         args=[app, account.account_id, note_id, str(meeting_number), note_title],
         trigger="date",
-        run_date=datetime.now(timezone.utc) + timedelta(seconds=30),
+        run_date=datetime.now(timezone.utc),
         id=f"note_{note_id}",
         replace_existing=True,
         misfire_grace_time=60,
@@ -263,11 +268,10 @@ def _handle_cn_created(payload: dict, account: ZoomAccount):
         zoom_account_id=account.account_id,
         zoom_meeting_id=str(meeting_number),
         zoom_note_id=note_id,
-        detail={"delay_seconds": 30, "max_attempts": 3},
+        detail={"initial_delay_seconds": 0, "retry_delay_seconds": 15, "max_attempts": 3},
     )
     current_app.logger.info(
-        f"zoom_helpers | note_id={note_id} scheduled for async processing at "
-        f"{(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()}"
+        f"zoom_helpers | note_id={note_id} scheduled for immediate async processing"
     )
 
     return {"status": "accepted", "note_id": note_id}, 200
@@ -288,7 +292,7 @@ def _validate_and_process_note(
  
     Falls back to MeetingRecord lookup when EHR context is not available.
     """
-    # --- 1. Look up MeetingRecord ---
+    # --- Look up MeetingRecord ---
     record = MeetingRecord.query.filter_by(
         zoom_meeting_id=str(meeting_number),
         zoom_account_id=account.account_id,
@@ -309,7 +313,7 @@ def _validate_and_process_note(
         )
         return {"status": "dropped", "reason": "no matching meeting"}, 200
  
-    # --- 2. Persist ClinicalNoteRecord immediately ---
+    # --- Persist ClinicalNoteRecord immediately ---
     clinical_note = ClinicalNoteRecord.query.filter_by(zoom_note_id=note_id).first()
     if not clinical_note:
         clinical_note = ClinicalNoteRecord(
@@ -338,9 +342,9 @@ def _validate_and_process_note(
     )
     record_patient_id = _get_meeting_patient_id(record.zoom_meeting_id)
  
-    # --- 3. Retrieve note content from Zoom API ---
+    # --- Retrieve note content from Zoom API ---
     # note_data = get_zoom_clinical_note(account, note_id)
-    note_data = _fetch_note_with_retry(account, note_id, max_attempts=3, delay_seconds=30)
+    note_data = _fetch_note_with_retry(account, note_id, max_attempts=3, delay_seconds=15)
  
     if not note_data:
         current_app.logger.warning(
@@ -359,7 +363,7 @@ def _validate_and_process_note(
         )
         return {"status": "error", "reason": "note not found"}, 500
  
-    # --- 4. Extract EHR context if available ---
+    # --- Extract EHR context if available ---
     # When the provider selected an appointment in Zoom, the note contains
     # appointment_id, patient_id, provider_id directly — use these over
     # MeetingRecord fields to avoid encounter duplication issues.
@@ -418,7 +422,7 @@ def _validate_and_process_note(
         )
         return {"status": "error", "reason": "missing patient or provider"}, 500
  
-    # --- 5. Find existing encounter or create one ---
+    # --- Find existing encounter or create one ---
     # Use the canonical idempotent helper. Same single-encounter guarantee +
     # patient_tracker maintenance as every other path (button, meeting.started,
     # waiting_room, past_encounter seed). Note flow is the safety net — if all
@@ -443,7 +447,7 @@ def _validate_and_process_note(
         )
 
     if encounter_number and encounter_source == "manual_fallback":
-        # G-N7: surface the S7-01 fallback path in the dashboard
+        # G-N7: surface the fallback path in the dashboard
         write_audit_log(
             event_type="encounter.claimed",
             success=True,
@@ -493,7 +497,7 @@ def _validate_and_process_note(
         f"zoom_webhook | using encounter={encounter_number} for eid={eid}"
     )
  
-    # --- 6. Write note to encounter ---
+    # --- Write note to encounter ---
     async_content = note_data.get("note_content", "") or ""
     async_stripped_length = len(async_content.strip())
     async_content_blank = async_stripped_length == 0
