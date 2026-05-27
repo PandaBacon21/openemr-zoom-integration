@@ -30,7 +30,7 @@ INSERT INTO `users` (
  2, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567892'),
 (16, UNHEX(REPLACE(UUID(), '-', '')), 'mchen',     '', 1, 1,
  'Michael',  'Chen',      'Dr.',  'Internal Medicine',    'michael.chen@example.org',     'michael.chen@example.org',
- 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567896'),
+ 1, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567896'),
 (17, UNHEX(REPLACE(UUID(), '-', '')), 'meriksson',  '', 1, 1,
  'Marcus',   'Eriksson',  'Dr.',  'Psychiatry',           'marcus.eriksson@example.org',  'marcus.eriksson@example.org',
  2, 1, 'physician', '2084P0800X', 'standard', 'standard', 'MD', '1234567897'),
@@ -46,8 +46,8 @@ INSERT INTO `users` (
 (22, UNHEX(REPLACE(UUID(), '-', '')), 'ljohnson',    '', 1, 1,
  'Lucas',    'Johnson',   'Dr.',  'Addiction Medicine',   'lucas.johnson@example.org',    'lucas.johnson@example.org',
  2, 1, 'physician', '207RA0401X', 'standard', 'standard', 'MD', '1234567900'),
-(25, UNHEX(REPLACE(UUID(), '-', '')), 'lpatel',       '', 1, 1,
- 'Lisa',     'Patel',     'Dr.',  'Internal Medicine',    'lisa.patel@example.org',       'lisa.patel@example.org',
+(25, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams',    '', 1, 1,
+ 'Ben',      'Williams',  'Dr.',  'Internal Medicine',    'ben.williams@example.org',     'ben.williams@example.org',
  2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567903'),
 -- Mountain (id=1)
 (14, UNHEX(REPLACE(UUID(), '-', '')), 'jnelson',  '', 1, 1,
@@ -55,7 +55,7 @@ INSERT INTO `users` (
  1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567894'),
 (15, UNHEX(REPLACE(UUID(), '-', '')), 'ppatel',      '', 1, 1,
  'Priya',    'Patel',     'NP',   'Psychiatric Nurse Practitioner', 'priya.patel@example.org', 'priya.patel@example.org',
- 1, 1, 'physician', '363LP0808X', 'standard', 'standard', 'NP', '1234567895'),
+ 2, 1, 'physician', '363LP0808X', 'standard', 'standard', 'NP', '1234567895'),
 (26, UNHEX(REPLACE(UUID(), '-', '')), 'htanaka',   '', 1, 1,
  'Hiroshi',  'Tanaka',    'Dr.',  'Family Medicine',      'hiroshi.tanaka@example.org',   'hiroshi.tanaka@example.org',
  1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567904'),
@@ -68,7 +68,7 @@ INSERT INTO `users` (
  3, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567893'),
 (23, UNHEX(REPLACE(UUID(), '-', '')), 'danderson',    '', 1, 1,
  'Dave',     'Anderson',  'Dr.',  'Family Medicine',      'dave.anderson@example.org',    'dave.anderson@example.org',
- 3, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567901'),
+ 2, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567901'),
 -- Central (id=5)
 (24, UNHEX(REPLACE(UUID(), '-', '')), 'jsmith',        '', 1, 1,
  'Joe',      'Smith',     'Dr.',  'Family Medicine',      'joe.smith@example.org',        'joe.smith@example.org',
@@ -107,8 +107,8 @@ INSERT INTO `users` (
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
     `main_menu_role`, `patient_menu_role`
 ) VALUES
-(30, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams',    '', 0, 1,
- 'Ben',    'Williams', 'MA', 'Medical Assistant', 'ben.williams@example.org',    'ben.williams@example.org',
+(30, UNHEX(REPLACE(UUID(), '-', '')), 'lpatel',       '', 0, 1,
+ 'Lisa',   'Patel',    'MA', 'Medical Assistant', 'lisa.patel@example.org',      'lisa.patel@example.org',
  1, 0, 'med_asst', '356AM0700X', 'standard', 'standard'),
 (31, UNHEX(REPLACE(UUID(), '-', '')), 'hsong',        '', 0, 1,
  'Hana',   'Song',     'MA', 'Medical Assistant', 'hana.song@example.org',       'hana.song@example.org',
@@ -131,7 +131,7 @@ INSERT INTO users_secure (id, username, password, last_update_password) VALUES
 (13, 'mthompson',  '$2y$12$9Bx9nibZUz2LzKaYCphJCeFrEeSfE1tPjaGLXccaDN7QZaqV9kLdS', NOW()),
 (20, 'blee',       '$2y$12$4GWtwxpsqqwSYwAE58stXuyHu9wE7YYkQh/mvBb/Jw3tFXPZ9155m', NOW()),
 (21, 'amartin',    '$2y$12$LfXdio/YMJ7br6BFTgWd3e9kgMKf173W2dqUzXoBjmIcmPXmrlDnS', NOW()),
-(30, 'bwilliams',  '$2y$12$CBV47dDP/2CvTxaO7bER4.XTm0z6zTJSrfKLcz6gOk5ViFJWGTFHi', NOW()),
+(30, 'lpatel',     '$2y$12$CBV47dDP/2CvTxaO7bER4.XTm0z6zTJSrfKLcz6gOk5ViFJWGTFHi', NOW()),
 (31, 'hsong',      '$2y$12$9jMeSDX.LGvUw61ENWAXyenoSGfXrQ4gMS2rI6klVr0kdF5LP6kxK', NOW()),
 (14, 'jnelson', '$2y$12$52dNJeE6mVy6/ldpvgd0LevYze/lUYUst3KrbfkdJpp3x2DXDNd3S', NOW()),
 (15, 'ppatel',     '$2y$12$76qMLLY/H6Do9yalJatWxesKaVJyBAiAGv0mF3mBfccIQ.fqMejEO', NOW()),
@@ -142,7 +142,7 @@ INSERT INTO users_secure (id, username, password, last_update_password) VALUES
 (22, 'ljohnson',   '$2y$12$dj4OxewFHZY2m4jp/BEEG.jHMb6vTJ65rzdIKkM1FUaw0KX5Vx09y', NOW()),
 (23, 'danderson',   '$2y$12$IvYsCD6Ph5VMegroGZ6wEOQQ.2ABhUm5x9M87uGKtUxZ1wM4J6O12', NOW()),
 (24, 'jsmith',       '$2y$12$uIfo6s2Kvaket.0uKkLefeJLqa9R3HulrDa9XTcanBFyWL8BWCtJu', NOW()),
-(25, 'lpatel',      '$2y$12$9QnCTFw2yXb6/KvOY4muAuDVDYKVmT/hEDkx.aqQPg/fE3sSa376S', NOW()),
+(25, 'bwilliams',   '$2y$12$9QnCTFw2yXb6/KvOY4muAuDVDYKVmT/hEDkx.aqQPg/fE3sSa376S', NOW()),
 (26, 'htanaka',  '$2y$12$J1I9hwTR77kJyO0EF1xPU.bkpOwpGfcxWFKJu1GZZvaUPukUV8n.K', NOW()),
 (27, 'dthompson',  '$2y$12$GXr1quBEM2LyXqDsrotI2Oyj53ihkg6263/SzKl8eui4Wd3SmrhJW', NOW()),
 (32, 'smartinez',  '$2y$12$tREJimaI7taQ2ccv6wELkO9iTwNpr2PzT02ipQrfvIzxIztoJurWm', NOW()),
@@ -162,7 +162,7 @@ INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden
 (14, 'users', 'mthompson',       10, 'Marcus Thompson',  0),
 (15, 'users', 'blee',            10, 'Bill Lee',         0),
 (16, 'users', 'amartin',         10, 'Amy Martin',       0),
-(17, 'users', 'bwilliams',       10, 'Ben Williams',     0),
+(17, 'users', 'lpatel',          10, 'Lisa Patel',       0),
 (18, 'users', 'hsong',           10, 'Hana Song',        0),
 (19, 'users', 'erodriguez',      10, 'Elena Rodriguez',  0),
 -- New providers
@@ -175,7 +175,7 @@ INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden
 (26, 'users', 'ljohnson',   10, 'Lucas Johnson',    0),
 (27, 'users', 'danderson',   10, 'Dave Anderson',    0),
 (28, 'users', 'jsmith',       10, 'Joe Smith',        0),
-(29, 'users', 'lpatel',      10, 'Lisa Patel',       0),
+(29, 'users', 'bwilliams',   10, 'Ben Williams',     0),
 (30, 'users', 'htanaka',  10, 'Hiroshi Tanaka',   0),
 (31, 'users', 'dthompson',  10, 'David Thompson',   0),
 -- New support staff
@@ -210,12 +210,12 @@ INSERT IGNORE INTO groups (name, user) VALUES
 ('Physicians', 'ljohnson'),
 ('Physicians', 'danderson'),
 ('Physicians', 'jsmith'),
-('Physicians', 'lpatel'),
+('Physicians', 'bwilliams'),
 ('Physicians', 'htanaka'),
 ('Physicians', 'dthompson'),
 -- Support staff (Clinicians group)
 ('Clinicians', 'blee'),
-('Clinicians', 'bwilliams'),
+('Clinicians', 'lpatel'),
 ('Clinicians', 'hsong'),
 ('Clinicians', 'smartinez'),
 ('Clinicians', 'kwatanabe'),
@@ -242,14 +242,14 @@ UPDATE users SET federaltaxid='84-1000011', federaldrugid='AR1234567', upin='A10
 UPDATE users SET federaltaxid='84-1000012', federaldrugid='AM1234567', upin='A10003', state_license_number='MA-15301', weno_prov_id='W10003', billing_facility_id=2, valedictory='Best regards', info='Board-certified Psychiatry. Telehealth med management since 2019.' WHERE id=12;
 UPDATE users SET federaltaxid='84-1000013', federaldrugid='AT1234567', upin='A10004', state_license_number='CA-44101', weno_prov_id='W10004', billing_facility_id=3, valedictory='Sincerely',    info='Board-certified Internal Medicine. Former cardiology subspecialty interest.' WHERE id=13;
 UPDATE users SET federaltaxid='84-1000014', federaldrugid='AN1234567', upin='A10014', state_license_number='CO-DR-22041', weno_prov_id='W10014', billing_facility_id=1, valedictory='Warmly',  info='Board-certified Family Medicine. Diverse panel, all ages.' WHERE id=14;
-UPDATE users SET federaltaxid='84-1000015', federaldrugid='MP1234567', upin='A10015', state_license_number='CO-NP-22042', weno_prov_id='W10015', billing_facility_id=1, supervisor_id=14, valedictory='Best regards', info='Board-certified Psychiatric Nurse Practitioner. Med management for adults.' WHERE id=15;
-UPDATE users SET federaltaxid='84-1000016', federaldrugid='AC1234567', upin='A10016', state_license_number='MA-15616', weno_prov_id='W10016', billing_facility_id=2, valedictory='Sincerely',  info='Board-certified Internal Medicine. Chronic disease focus.' WHERE id=16;
+UPDATE users SET federaltaxid='84-1000015', federaldrugid='MP1234567', upin='A10015', state_license_number='MA-NP-22042', weno_prov_id='W10015', billing_facility_id=2, supervisor_id=12, valedictory='Best regards', info='Board-certified Psychiatric Nurse Practitioner. Med management for adults.' WHERE id=15;
+UPDATE users SET federaltaxid='84-1000016', federaldrugid='AC1234567', upin='A10016', state_license_number='CO-DR-22616', weno_prov_id='W10016', billing_facility_id=1, valedictory='Sincerely',  info='Board-certified Internal Medicine. Chronic disease focus.' WHERE id=16;
 UPDATE users SET federaltaxid='84-1000017', federaldrugid='AE1234567', upin='A10017', state_license_number='MA-15717', weno_prov_id='W10017', billing_facility_id=2, valedictory='Best regards', info='Board-certified Psychiatry. Anxiety/mood disorders.' WHERE id=17;
 UPDATE users SET federaltaxid='84-1000018', federaldrugid=NULL,        upin='A10018', state_license_number='MA-LCSW-2031', weno_prov_id=NULL, billing_facility_id=2, supervisor_id=12, valedictory='Warmly', info='LCSW with 12 years experience. CBT and behavioral activation.' WHERE id=18;
 UPDATE users SET federaltaxid='84-1000019', federaldrugid='AG1234567', upin='A10019', state_license_number='MA-15919', weno_prov_id='W10019', billing_facility_id=2, valedictory='Sincerely',  info='Board-certified Internal Medicine. Bilingual English/Spanish.' WHERE id=19;
 UPDATE users SET federaltaxid='84-1000021', federaldrugid='MM1234567', upin='A10021', state_license_number='MA-FNP-3001', weno_prov_id='W10021', billing_facility_id=2, supervisor_id=10, valedictory='Best regards', info='Family NP, promoted from RN. Diabetes, hypertension, women''s health.' WHERE id=21;
 UPDATE users SET federaltaxid='84-1000022', federaldrugid='FJ1234567', upin='A10022', state_license_number='MA-15822', weno_prov_id='W10022', billing_facility_id=2, valedictory='Warmly',     info='Board-certified Addiction Medicine. X-DEA waiver for buprenorphine.' WHERE id=22;
-UPDATE users SET federaltaxid='84-1000023', federaldrugid='AA1234567', upin='A10023', state_license_number='CA-44523', weno_prov_id='W10023', billing_facility_id=3, valedictory='Sincerely',  info='Board-certified Family Medicine. Rural telehealth focus.' WHERE id=23;
+UPDATE users SET federaltaxid='84-1000023', federaldrugid='AA1234567', upin='A10023', state_license_number='MA-15623', weno_prov_id='W10023', billing_facility_id=2, valedictory='Sincerely',  info='Board-certified Family Medicine. Rural telehealth focus.' WHERE id=23;
 UPDATE users SET federaltaxid='84-1000024', federaldrugid='AS1234567', upin='A10024', state_license_number='MO-29001', weno_prov_id='W10024', billing_facility_id=4, valedictory='Best regards', info='Board-certified Family Medicine. Sole provider at Central facility.' WHERE id=24;
 UPDATE users SET federaltaxid='84-1000025', federaldrugid='AP1234567', upin='A10025', state_license_number='MA-15225', weno_prov_id='W10025', billing_facility_id=2, valedictory='Warmly',     info='Board-certified Internal Medicine. Geriatrics and complex care.' WHERE id=25;
 UPDATE users SET federaltaxid='84-1000026', federaldrugid='AT2234567', upin='A10026', state_license_number='CO-DR-22126', weno_prov_id='W10026', billing_facility_id=1, valedictory='Sincerely', info='Board-certified Family Medicine. Adolescent and adult care.' WHERE id=26;
