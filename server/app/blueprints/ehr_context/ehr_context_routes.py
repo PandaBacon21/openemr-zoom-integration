@@ -183,7 +183,8 @@ def get_appointments():
         return jsonify({"error": f"No provider mapping found for zoomUserId={zoom_user_id}"}), 404
 
     if len(mappings) == 1:
-        provider_id = mappings[0].openemr_provider_id
+        chosen_mapping = mappings[0]
+        provider_id = chosen_mapping.openemr_provider_id
     else:
         # Multiple providers share this Zoom user — find the active meeting
         mapped_provider_ids = [m.openemr_provider_id for m in mappings]
@@ -207,23 +208,34 @@ def get_appointments():
                 f"ehr_context.getAppointments | Multiple mappings for zoom_user_id={zoom_user_id} "
                 f"but no started MeetingRecord found, falling back to provider_id={provider_id}"
             )
+        chosen_mapping = next(
+            (m for m in mappings if m.openemr_provider_id == provider_id),
+            mappings[0],
+        )
+
     # --- 5. Query appointments ±2 hours around query_dt ---
-    # Zoom sends dateTime in UTC. OpenEMR stores times in local (account) time.
-    # Convert the UTC window to the account's local timezone before querying.
-    account_tz = ZoneInfo(
+    # Zoom sends dateTime in UTC. OpenEMR stores times in local wall-clock,
+    # so convert the UTC window into the *provider's* local timezone before
+    # querying. Per-provider TZ from the mapped Zoom user profile wins;
+    # account-level AccountConfig.timezone is the fallback (legacy mappings
+    # with no zoom_user_timezone cached, or Zoom users without a profile TZ).
+    provider_tz_str = chosen_mapping.zoom_user_timezone if chosen_mapping else None
+    fallback_tz_str = (
         account.config.timezone if hasattr(account, 'config') and account.config
         else "America/New_York"  # matches AccountConfig.timezone default
     )
+    tz_str = provider_tz_str or fallback_tz_str
+    account_tz = ZoneInfo(tz_str)
     query_dt_local = query_dt.replace(tzinfo=timezone.utc).astimezone(account_tz).replace(tzinfo=None)
     window_start = query_dt_local - timedelta(hours=2)
     window_end   = query_dt_local + timedelta(hours=2)
     logger.info(
-    f"ehr_context.getAppointments | "
-    f"query_dt={query_dt} "
-    f"account_tz={account.config.timezone} "
-    f"query_dt_local={query_dt_local} "
-    f"window={window_start} to {window_end}"
-)
+        f"ehr_context.getAppointments | "
+        f"query_dt={query_dt} "
+        f"tz={tz_str} (provider_tz={provider_tz_str or 'none'}, account_tz={fallback_tz_str}) "
+        f"query_dt_local={query_dt_local} "
+        f"window={window_start} to {window_end}"
+    )
 
     # Build datetime strings for MariaDB comparison
     # pc_eventDate is DATE, pc_startTime is TIME — combine for comparison

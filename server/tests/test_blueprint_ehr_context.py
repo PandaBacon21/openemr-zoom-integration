@@ -176,3 +176,97 @@ def test_get_appointments_returns_mapped_provider_appointments(client, app, monk
         }
     ]
     assert captured["params"]["provider_id"] == 10
+
+
+def test_get_appointments_uses_provider_timezone_when_set(client, app, monkeypatch):
+    """
+    Provider TZ on the mapping wins over AccountConfig.timezone when
+    converting the UTC query window into local wall-clock time for the
+    OpenEMR appointment lookup AND when converting pc_startTime back to
+    UTC for the response. Drives the multi-facility / multi-time-zone
+    scenario where the same wall-clock time means different absolute
+    moments per provider.
+
+    Setup: AccountConfig.timezone="America/Denver" (MT), but provider's
+    Zoom user TZ is "America/Los_Angeles" (PT). The 10:00 wall-clock
+    appointment must be interpreted as 10:00 PT (=17:00 UTC), not 10:00
+    MT (=16:00 UTC) — proves provider TZ is the one in effect.
+    """
+    _create_ehr_account(app)
+    with app.app_context():
+        db.session.add(
+            ProviderMapping(
+                zoom_account_id="acct-1",
+                openemr_fhir_id="pract-1",
+                openemr_provider_npi="1234567890",
+                openemr_provider_id="10",
+                openemr_provider_name="Dr Jane Doe",
+                zoom_user_id="zoom-user-1",
+                zoom_user_email="jane@example.com",
+                zoom_user_type=2,
+                zoom_user_timezone="America/Los_Angeles",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+    token_response = client.get(
+        "/rest/auth/gettoken",
+        headers={
+            "X-Tenant-ID": "tenant1234",
+            "Authorization": _basic_auth("ehr-user", "ehr-pass"),
+        },
+    )
+    bearer = token_response.get_json()["token"]
+
+    class FakeResult:
+        def fetchall(self):
+            return [
+                SimpleNamespace(
+                    pc_eid=400,
+                    pc_pid=109,
+                    pc_aid=10,
+                    pc_eventDate=date(2026, 4, 27),
+                    pc_startTime=time(10, 0, 0),
+                    pc_endTime=time(10, 30, 0),
+                    pc_title="Zoom Telehealth",
+                    pc_duration=1800,
+                    pc_catname="Telehealth Zoom",
+                    fname="Aisha",
+                    lname="Johnson",
+                    DOB=date(1993, 1, 25),
+                    sex="Female",
+                )
+            ]
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class FakeEngine:
+        def connect(self): return FakeConn()
+
+    monkeypatch.setattr(
+        "app.blueprints.ehr_context.ehr_context_routes.get_openemr_db_engine",
+        lambda: FakeEngine(),
+    )
+
+    response = client.post(
+        "/rest/openendpoint/service/getAppointments",
+        headers={
+            "X-Tenant-ID": "tenant1234",
+            "Authorization": f"Bearer {bearer}",
+        },
+        json={"dateTime": "2026-04-27T17:00:00", "zoomUserId": "zoom-user-1"},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    appt = body["response"][0]
+    # 10:00 wall-clock interpreted as America/Los_Angeles → 17:00 UTC,
+    # NOT 16:00 UTC which is what the account-level America/Denver fallback
+    # would have produced.
+    assert appt["startTime"] == "2026-04-27T17:00:00Z"
+    assert appt["endTime"] == "2026-04-27T17:30:00Z"
