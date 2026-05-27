@@ -48,7 +48,11 @@ def write_audit_log(
 
     Event types for clinical note pipeline:
       note.received             — clinical note webhook received from Zoom
-      note.processing_scheduled - note retrieval process scheduled in background process
+      note.processing_scheduled - note retrieval handed off to APScheduler. detail
+                                  fields: initial_delay_seconds (0 = run immediately,
+                                  default for Zoom's current behavior),
+                                  retry_delay_seconds (interval between attempts when
+                                  empty content is served), max_attempts
       note.retrieved            — note content fetched from Zoom API
       note.fetch_error          — Zoom API HTTP error during fetch attempt
       note.fetched_after_retry  — non-empty content arrived on attempt > 1 (Zoom race)

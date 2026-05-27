@@ -8,15 +8,15 @@ It describes what this repo currently automates, what credentials are required, 
 
 The Docker Compose stack in `docker-compose.yml` defines:
 
-| Service            | Purpose                                                                            |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| `mariadb`          | OpenEMR database, using MariaDB 11.4                                               |
-| `openemr`          | OpenEMR 8.0.0 with repo patch files mounted into the container                     |
-| `branding`         | One-shot OpenEMR logo/branding copy job                                            |
-| `zoom-module-init` | One-shot OpenEMR module registration job for the appointment listener              |
-| `postgres`         | PostgreSQL 16 database for the Flask integration service                           |
+| Service            | Purpose                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `mariadb`          | OpenEMR database, using MariaDB 11.4                                                                    |
+| `openemr`          | OpenEMR 8.0.0 with repo patch files mounted into the container                                          |
+| `branding`         | One-shot OpenEMR logo/branding copy job                                                                 |
+| `zoom-module-init` | One-shot OpenEMR module registration job for the appointment listener                                   |
+| `postgres`         | PostgreSQL 16 database for the Flask integration service                                                |
 | `dbgate`           | DbGate database browser (MariaDB + Postgres), proxied through Flask at `/admin/db` with JWT cookie auth |
-| `zoom-bridge`      | Flask integration service plus built React config UI                               |
+| `zoom-bridge`      | Flask integration service plus built React config UI                                                    |
 
 By default, Docker Compose also reads `docker-compose.override.yml` if present. The current override runs the Flask service in development mode and sets `DATABASE_URL` from `.env`.
 
@@ -326,15 +326,18 @@ Enter the url for Zoom to deliver the event notifications to and click the Valid
 Note: ensure the account is fully registered to the integration service and enabled in OpenEMR or validation will fail.
 
 ```text
-https://<flask-public-host>/webhooks/zoom
+https://<flask-public-host>/webhooks/zoom/<zoom_account_id>
 ```
+
+The webhook path is **per-account** — replace `<zoom_account_id>` with the Zoom Account ID for the account this Marketplace app belongs to. CRC URL validation uses the path account_id to resolve the correct `webhook_secret`; non-CRC events cross-check `payload.account_id` against the path as defense-in-depth.
 
 Currently required Zoom events in code:
 
-- `clinical_notes.note_created`
-- `meeting.started`
-- `meeting.participant_joined_waiting_room`
-- `meeting.participant_jbh_waiting`
+- `clinical_notes.note_created` — triggers the immediate note-fetch + writeback to OpenEMR
+- `meeting.started` — flips appointment status to In Exam Room
+- `meeting.ended` — flips appointment status to Checked Out
+- `meeting.participant_jbh_waiting` — patient-arrived signal (fires when participant clicks join URL before host starts the meeting). Required for the Arrived status + pre-host encounter creation.
+- `meeting.participant_joined_waiting_room` _(optional / defensive)_ — only fires after the host has joined, so it doesn't actually drive any new lifecycle state. Kept subscribed as a safety net; can be omitted without affecting the demo.
 
 ## Zoom EHR Context Setup
 
