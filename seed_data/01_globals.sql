@@ -32,10 +32,19 @@ UPDATE globals SET gl_value = '1' WHERE gl_name = 'sql_string_no_show_screen';
 -- Disable provider availability check
 UPDATE globals SET gl_value = '0' WHERE gl_name = 'schedule_limit';
 
--- Require facility selection on login so the calendar/provider lists scope to
--- the user's facility from the start (instead of showing all providers across
--- all facilities until the user picks one from the calendar dropdown).
+-- Facility scoping. Both globals are required for proper per-user facility
+-- lockdown:
+--   * login_into_facility forces a facility selection at login so the
+--     calendar/provider lists scope to the user's facility from the start
+--     (instead of showing all providers across all facilities until the user
+--     picks one from the calendar dropdown).
+--   * restrict_user_facility ("Restrict Users to Facilities" in the admin UI)
+--     enforces the actual per-user scoping against users_facility rows. Without
+--     this, login_into_facility alone leaves providers with an admin-style
+--     all-facility view and no "Schedule Facilities" / "Facility permissions"
+--     fields on the Edit User screen.
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'login_into_facility';
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'restrict_user_facility';
 
 -- E-sign settings — enable whole-encounter and individual-form signing,
 -- and lock everything once signed. The Sprint 13 demo hydration flow seeds
