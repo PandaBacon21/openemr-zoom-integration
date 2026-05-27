@@ -1136,6 +1136,235 @@ SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1,
 -- =============================================================================
 -- S12-29 — APPOINTMENT RETARGET + NEW APPOINTMENTS FOR NEW PATIENTS
 
+-- =============================================================================
+-- DEMO PAST-ENCOUNTER PATIENTS — CLINICAL DATA (Sprint 13 / S13-05)
+--
+-- The 17 demo patients defined in 05_patients.sql (PIDs 151-167) need their
+-- charts populated to match the diabetes scenario in PAST_ENCOUNTER_NOTE
+-- (services/openemr/encounter/sample_notes.py). When the hydrate button
+-- writes today's locked telehealth follow-up encounter, the chart it lands
+-- on already shows the supporting diagnoses, active meds, baseline vitals,
+-- and the previous HbA1c result the note narrates.
+--
+-- Sentinel: the patient_data.referrer field set to 'Zoomly Demo Past
+-- Encounter' identifies these rows; every CROSS JOIN below filters on it
+-- so existing chronic-care patients (PIDs 100-150) are untouched.
+-- =============================================================================
+
+-- --- Problems list — 4 ICDs per demo patient -------------------------------
+-- Column shape matches the Sprint 12 medical_problem block above + adds
+-- `comments` for the reset.sh cleanup sentinel.
+INSERT INTO `lists`
+    (uuid, type, subtype, title, diagnosis, pid, date, begdate, activity, user, outcome, comments)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    'medical_problem', '',
+    prob.title, prob.diagnosis,
+    pd.pid, NOW(), DATE_SUB(CURDATE(), INTERVAL 2 YEAR),
+    1, u.username, 0,
+    'zoomly_demo_chart_problem'
+FROM patient_data pd
+JOIN users u ON u.id = pd.providerID
+CROSS JOIN (
+    SELECT 'Type 2 diabetes mellitus without complications' AS title, 'ICD10:E11.9' AS diagnosis UNION ALL
+    SELECT 'Pure hypertriglyceridemia',                                'ICD10:E78.1' UNION ALL
+    SELECT 'Overweight',                                               'ICD10:E66.3' UNION ALL
+    SELECT 'Other seasonal allergic rhinitis',                         'ICD10:J30.2'
+) prob
+WHERE pd.referrer = 'Zoomly Demo Past Encounter';
+
+-- --- Medication list rows (lists.type='medication') ------------------------
+-- Match Sprint 12 medication-block schema; rxnorm encoded in comments.
+INSERT INTO `lists`
+    (uuid, type, subtype, title, pid, date, begdate, activity, user, comments)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    'medication', '',
+    med.title, pd.pid, NOW(), DATE_SUB(CURDATE(), INTERVAL 4 MONTH),
+    1, u.username,
+    CONCAT(med.comment, ' [zoomly_demo_chart_medication]')
+FROM patient_data pd
+JOIN users u ON u.id = pd.providerID
+CROSS JOIN (
+    SELECT 'Metformin 1000mg tab'   AS title, 'rxnorm:860975 — 1 tab PO twice daily with meals' AS comment UNION ALL
+    SELECT 'Cetirizine 10mg tab',              'rxnorm:1014676 — 1 tab PO daily as needed for allergies'
+) med
+WHERE pd.referrer = 'Zoomly Demo Past Encounter';
+
+-- Companion lists_medication sidecar row per medication
+INSERT INTO `lists_medication`
+    (list_id, usage_category, usage_category_title, request_intent, request_intent_title, is_primary_record)
+SELECT l.id, 'outpatient', 'Outpatient', 'order', 'Order', 1
+  FROM `lists` l
+  JOIN patient_data pd ON pd.pid = l.pid
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+   AND l.type = 'medication';
+
+-- --- Active prescriptions — Metformin 1000mg BID + Cetirizine 10mg PRN -----
+INSERT INTO `prescriptions`
+    (uuid, patient_id, provider_id, start_date, drug, drug_id, rxnorm_drugcode,
+     dosage, quantity, route, refills, active, datetime, user, txDate,
+     usage_category, usage_category_title, request_intent, request_intent_title)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    pd.pid, pd.providerID,
+    DATE_SUB(CURDATE(), INTERVAL 4 MONTH),
+    med.drug, 0, med.rxnorm,
+    med.dosage, med.quantity, med.route, med.refills, 1,
+    NOW(), u.username, DATE_SUB(CURDATE(), INTERVAL 4 MONTH),
+    'outpatient', 'Outpatient', 'order', 'Order'
+FROM patient_data pd
+JOIN users u ON u.id = pd.providerID
+CROSS JOIN (
+    SELECT 'Metformin 1000mg tab'  AS drug, '860975' AS rxnorm, '1 tab PO BID with meals' AS dosage,
+           60 AS quantity, 'oral' AS route, 3 AS refills UNION ALL
+    SELECT 'Cetirizine 10mg tab',            '1014676',         '1 tab PO daily PRN allergies',
+           30,                'oral',         3
+) med
+WHERE pd.referrer = 'Zoomly Demo Past Encounter';
+
+-- --- Historical in-person encounter (3 months ago) -------------------------
+-- Encounter numbers 31001-31017 for the 17 demo patients, assigned in pid order.
+-- Bump the sequences table afterward so OpenEMR's next encounter starts above 31017.
+SET @demo_enc_counter := 31000;
+INSERT INTO `form_encounter`
+    (uuid, date, onset_date, pid, encounter,
+     pc_catid, provider_id, supervisor_id, facility_id, billing_facility,
+     class_code, reason, external_id,
+     pos_code, last_level_billed, last_level_closed,
+     discharge_disposition, sensitivity, in_collection)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    pd.pid,
+    (@demo_enc_counter := @demo_enc_counter + 1),
+    5,
+    pd.providerID, pd.providerID,
+    u.facility_id, u.facility_id,
+    'AMB',
+    'Diabetes follow-up — in-person',
+    CONCAT('zdemo_h', pd.pid),
+    11,
+    5, 5,
+    '01', '', 0
+FROM patient_data pd
+JOIN users u ON u.id = pd.providerID
+WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+ORDER BY pd.pid;
+
+-- Bump the encounter sequence so future appointment encounters don't collide
+UPDATE sequences SET id = GREATEST(id, (SELECT COALESCE(MAX(encounter), 1) FROM form_encounter));
+
+-- patient_tracker row per historical encounter — but these encounters were
+-- direct DB inserts (no appointment row at all), so we need a synthetic
+-- appointment row that links the tracker back to a sensible eid. Build one
+-- per encounter using the form_encounter.id as a deterministic eid (form
+-- encounters are direct-only artifacts; this synthetic eid is never used
+-- by the calendar but lets the tracker resolve a Patient Encounter Form
+-- linkage on the chart's encounter dropdown.
+INSERT INTO `patient_tracker`
+    (date, apptdate, appttime, eid, pid, original_user, encounter, lastseq, drug_screen_completed)
+SELECT NOW(),
+       DATE(fe.date),
+       '08:00:00',
+       fe.id,           -- synthetic eid keyed to form_encounter.id (no calendar row)
+       fe.pid, 'seed', fe.encounter, '1', 0
+  FROM form_encounter fe
+  JOIN patient_data pd ON pd.pid = fe.pid
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+   AND fe.external_id LIKE 'zdemo_h%';
+
+-- newpatient forms registry row per historical encounter so it surfaces as
+-- the editable Patient Encounter Form on the chart
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fe.date, fe.encounter, 'New Patient Encounter', fe.id, fe.pid,
+       u.username, 'Default', 1, 0, 'newpatient', fe.provider_id
+  FROM form_encounter fe
+  JOIN patient_data pd ON pd.pid = fe.pid
+  JOIN users u ON u.id = fe.provider_id
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+   AND fe.external_id LIKE 'zdemo_h%';
+
+-- --- Vitals @ 3-months-ago in-person visit — BMI 28.4 ---------------------
+-- 5'4" (64in), 165 lbs → BMI 28.3; close to the 28.4 the note narrates.
+INSERT INTO `form_vitals`
+    (uuid, date, pid, user, groupname, authorized, activity,
+     bps, bpd, weight, height, BMI, temperature, pulse, respiration, oxygen_saturation)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    pd.pid, u.username, 'Default', 1, 1,
+    '128', '82', 165.0, 64.0, 28.4, 98.6, 76, 16, 98.00
+FROM patient_data pd
+JOIN users u ON u.id = pd.providerID
+WHERE pd.referrer = 'Zoomly Demo Past Encounter';
+
+-- Vitals forms registry row tying form_vitals to the historical encounter
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1, 0, 'vitals', fe.provider_id
+  FROM form_vitals fv
+  JOIN form_encounter fe ON fe.pid = fv.pid AND fe.external_id LIKE 'zdemo_h%'
+  JOIN patient_data pd ON pd.pid = fv.pid
+  JOIN users u ON u.id = fe.provider_id
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter';
+
+-- --- HbA1c lab from 3 months ago: result 8.4% ------------------------------
+-- Order IDs 41001-41017, report IDs 51001-51017 — block above existing 40xxx/50xxx ranges.
+SET @demo_order_counter := 41000;
+SET @demo_report_counter := 51000;
+
+INSERT INTO `procedure_order`
+    (procedure_order_id, uuid, provider_id, patient_id, encounter_id,
+     date_collected, date_ordered, order_status, activity, procedure_order_type, order_intent, lab_id)
+SELECT
+    (@demo_order_counter := @demo_order_counter + 1),
+    UNHEX(REPLACE(UUID(),'-','')),
+    fe.provider_id, fe.pid, fe.id,
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    'completed', 1, 'laboratory_test', 'order', 0
+FROM form_encounter fe
+JOIN patient_data pd ON pd.pid = fe.pid
+WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+  AND fe.external_id LIKE 'zdemo_h%'
+ORDER BY fe.pid;
+
+INSERT INTO `procedure_order_code`
+    (procedure_order_id, procedure_order_seq, procedure_code, procedure_name, procedure_source, procedure_order_title)
+SELECT po.procedure_order_id, 1, '83036', 'Hemoglobin A1c', '1', 'HbA1c'
+  FROM procedure_order po
+  JOIN patient_data pd ON pd.pid = po.patient_id
+ WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+   AND po.procedure_order_id BETWEEN 41001 AND 41017;
+
+INSERT INTO `procedure_report`
+    (procedure_report_id, uuid, procedure_order_id, procedure_order_seq,
+     date_collected, date_report, source, specimen_num, report_status, review_status)
+SELECT
+    (@demo_report_counter := @demo_report_counter + 1),
+    UNHEX(REPLACE(UUID(),'-','')),
+    po.procedure_order_id, 1,
+    DATE_SUB(NOW(), INTERVAL 3 MONTH),
+    DATE_SUB(NOW(), INTERVAL 3 MONTH) + INTERVAL 1 DAY,
+    1, CONCAT('DEMO-A1C-', po.patient_id), 'final', 'reviewed'
+FROM procedure_order po
+JOIN patient_data pd ON pd.pid = po.patient_id
+WHERE pd.referrer = 'Zoomly Demo Past Encounter'
+  AND po.procedure_order_id BETWEEN 41001 AND 41017
+ORDER BY po.patient_id;
+
+INSERT INTO `procedure_result`
+    (uuid, procedure_report_id, result_data_type, result_code, result_text, date, units, result, `range`, abnormal, result_status)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pr.procedure_report_id, 2,
+       '4548-4', 'Hemoglobin A1c/Hemoglobin.total in Blood',
+       DATE_SUB(NOW(), INTERVAL 3 MONTH) + INTERVAL 1 DAY,
+       '%', '8.4', '4.0-5.6', 'H', 'final'
+  FROM procedure_report pr
+ WHERE pr.procedure_report_id BETWEEN 51001 AND 51017;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================================================

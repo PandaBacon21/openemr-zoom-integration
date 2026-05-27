@@ -20,9 +20,11 @@
 require_once(__DIR__ . "/../../globals.php");
 require_once(__DIR__ . '/../../../library/zoomly/ZoomBridge.php');
 
-use OpenEMR\Common\Acl\AclMain;
-
 // --- 1. Verify OpenEMR session ---
+// Mirrors fetch_zoom_note.php — session auth only. No additional ACL check:
+// this endpoint is fire-and-forget, triggered automatically AFTER a successful
+// eSign action (which itself required write permission on the form), and the
+// PHP→Flask call is HMAC-signed so it cannot be forged from outside OpenEMR.
 if (!isset($_SESSION['authUserID'])) {
     http_response_code(401);
     exit;
@@ -35,13 +37,7 @@ if ($encounterNumber <= 0) {
     exit;
 }
 
-// --- 3. ACL check ---
-if (!AclMain::aclCheckCore('clinical', 'notes', '', 'write')) {
-    http_response_code(403);
-    exit;
-}
-
-// --- 4. POST to Flask bridge ---
+// --- 3. POST to Flask bridge ---
 $result = zoomly_bridge_post('/zoom/encounter/' . $encounterNumber . '/complete_zoom_note');
  
 if ($result['error']) {

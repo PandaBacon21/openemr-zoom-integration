@@ -49,7 +49,7 @@ Relationships:
 | Column                                | Type                      | Required | Notes                                                                                                            |
 | ------------------------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
 | `account_id`                          | `String(128, FK)`         | yes      | Primary key and FK to `zoom_accounts.account_id`                                                                 |
-| `timezone`                            | `String(64)`              | yes      | IANA timezone used for Zoom meeting scheduling and EHR appointment window conversion; default `America/New_York` |
+| `timezone`                            | `String(64)`              | yes      | Account-level IANA timezone, used as the *fallback* for Zoom meeting scheduling when a mapped provider has no `ProviderMapping.zoom_user_timezone` set. Also used for EHR appointment window conversion. Default `America/New_York` |
 | `allow_shared_zoom_user`              | `Boolean`                 | yes      | Allows shared Zoom user behavior in config workflows; default `false`                                            |
 | `demo_patient_email_override_enabled` | `Boolean`                 | yes      | Enables demo patient email override                                                                              |
 | `demo_patient_email_override`         | `String(256)`             | no       | Optional demo override for patient email communications                                                          |
@@ -75,6 +75,7 @@ Relationships:
 | `zoom_user_name`                 | `String(256)`             | no       | Zoom display name                                                        |
 | `zoom_user_id`                   | `String(128)`             | no       | Zoom user id                                                             |
 | `zoom_user_type`                 | `Integer`                 | no       | Zoom license/type                                                        |
+| `zoom_user_timezone`             | `String(64)`              | no       | IANA timezone from the mapped Zoom user's profile (e.g. `America/Denver`). Used when scheduling Zoom meetings for this provider — `AccountConfig.timezone` is the fallback when this is NULL (Zoom user with no profile TZ, or mapping created before this field shipped) |
 | `default_alternative_host_email` | `String(256)`             | no       | Default alternative host                                                 |
 | `is_active`                      | `Boolean`                 | yes      | Active mapping flag                                                      |
 | `created_at`                     | `DateTime(timezone=True)` | no       | Created timestamp (UTC)                                                  |
@@ -122,19 +123,19 @@ Relationships:
 
 ### `clinical_note_records` (`ClinicalNoteRecord`)
 
-| Column                  | Type                      | Required | Notes                                   |
-| ----------------------- | ------------------------- | -------- | --------------------------------------- |
-| `id`                    | `Integer`                 | yes      | Primary key                             |
+| Column                  | Type                      | Required | Notes                                                         |
+| ----------------------- | ------------------------- | -------- | ------------------------------------------------------------- |
+| `id`                    | `Integer`                 | yes      | Primary key                                                   |
 | `zoom_meeting_id`       | `String(128, FK)`         | yes      | FK to `meeting_records.zoom_meeting_id` (`ON DELETE CASCADE`) |
-| `zoom_note_id`          | `String(128)`             | yes      | Zoom note identifier (unique)           |
-| `zoom_note_title`       | `String(256)`             | no       | Note title                              |
-| `note_content`          | `Text`                    | no       | Note body                               |
-| `received_at`           | `DateTime(timezone=True)` | no       | Receipt timestamp                       |
-| `written_to_openemr_at` | `DateTime(timezone=True)` | no       | OpenEMR write timestamp                 |
-| `completed_in_zoom_at`  | `DateTime(timezone=True)` | no       | Zoom completion timestamp               |
-| `is_written_to_openemr` | `Boolean`                 | yes      | Write success marker                    |
-| `is_completed_in_zoom`  | `Boolean`                 | yes      | Completion success marker               |
-| `error_message`         | `Text`                    | no       | Error details                           |
+| `zoom_note_id`          | `String(128)`             | yes      | Zoom note identifier (unique)                                 |
+| `zoom_note_title`       | `String(256)`             | no       | Note title                                                    |
+| `note_content`          | `Text`                    | no       | Note body                                                     |
+| `received_at`           | `DateTime(timezone=True)` | no       | Receipt timestamp                                             |
+| `written_to_openemr_at` | `DateTime(timezone=True)` | no       | OpenEMR write timestamp                                       |
+| `completed_in_zoom_at`  | `DateTime(timezone=True)` | no       | Zoom completion timestamp                                     |
+| `is_written_to_openemr` | `Boolean`                 | yes      | Write success marker                                          |
+| `is_completed_in_zoom`  | `Boolean`                 | yes      | Completion success marker                                     |
+| `error_message`         | `Text`                    | no       | Error details                                                 |
 
 ### `audit_log` (`AuditLog`)
 
@@ -389,9 +390,10 @@ Zoom sends signed webhook payloads to `POST /webhooks/zoom`.
 Current supported Zoom events:
 
 - `endpoint.url_validation` returns Zoom's CRC `plainToken` / `encryptedToken` response
-- `clinical_notes.note_created` records note receipt, schedules async retrieval after 30 seconds, retries empty note content up to 3 times, and writes to OpenEMR using `AccountConfig.note_writeback_mode`
-- `meeting.started` marks the `MeetingRecord` as `started`, stamps `meeting_started_at`, and helps EHR Context resolve shared Zoom user mappings
-- `meeting.participant_joined_waiting_room` and `meeting.participant_jbh_waiting` update the OpenEMR appointment status to arrived (`@`) and attempt encounter creation
+- `clinical_notes.note_created` records note receipt and schedules an immediate async fetch (delay=0). If Zoom serves empty content on the first read, the fetcher retries up to 3 times with 15s between attempts (handles a historical Zoom bug that has since been resolved but the retry stays in place as a safety net). Writes to OpenEMR using `AccountConfig.note_writeback_mode`.
+- `meeting.started` marks the `MeetingRecord` as `started`, stamps `meeting_started_at`, and helps EHR Context resolve shared Zoom user mappings. Also flips the OpenEMR appointment to In Exam Room (`<`).
+- `meeting.ended` flips the OpenEMR appointment to Checked Out (`>`).
+- `meeting.participant_jbh_waiting` is the patient-arrived signal — fires when a participant clicks the join URL before the host starts the meeting. Updates the OpenEMR appointment status to Arrived (`@`) and attempts encounter creation. `meeting.participant_joined_waiting_room` is also handled by the dispatcher as a defensive fallback. Slated for cleanup after more demo testing.
 
 Manual note endpoints under `/zoom/encounter/<encounter_number>/...` are OpenEMR-signed, JWT-exempt routes:
 

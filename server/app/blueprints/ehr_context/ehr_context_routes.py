@@ -326,7 +326,7 @@ def get_appointments():
         f"for provider_id={provider_id} zoom_user_id={zoom_user_id} "
         f"window={window_start.isoformat()} to {window_end.isoformat()}"
     )
-    # logger.info(f"getAppointments | appointments={appointments}")
+
     response = {
         "status": 200, 
         "response": appointments

@@ -192,6 +192,7 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
               setTimezone(e.target.value);
               setError(null);
             }}
+            helperText="Fallback only. Zoom meetings are scheduled in each mapped provider's Zoom user profile timezone; this account-level setting is used only when a provider has no timezone on their Zoom profile."
             fullWidth
           >
             {US_TIMEZONES.map((tz) => (

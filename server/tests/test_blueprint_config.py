@@ -611,6 +611,7 @@ def test_create_provider_mapping_success(client, monkeypatch):
         openemr_facility_name="Zoomly Medical Center",
         zoom_user_email="jane@example.com",
         zoom_user_name="Dr Jane Doe",
+        zoom_user_timezone="America/Los_Angeles",
         created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
     captured = {}
@@ -631,6 +632,7 @@ def test_create_provider_mapping_success(client, monkeypatch):
             "zoom_user_id": "u-1",
             "zoom_user_email": "jane@example.com",
             "zoom_user_type": 2,
+            "zoom_user_timezone": "America/Los_Angeles",
         },
     )
 
@@ -643,12 +645,14 @@ def test_create_provider_mapping_success(client, monkeypatch):
         "openemr_facility_name": "Zoomly Medical Center",
         "zoom_user_email": "jane@example.com",
         "zoom_user_name": "Dr Jane Doe",
+        "zoom_user_timezone": "America/Los_Angeles",
         "created_at": "2026-01-02T00:00:00+00:00",
     }
-    # Facility fields are threaded through to the service-layer call so
-    # they actually land on the new ProviderMapping row.
+    # Facility + provider TZ are threaded through to the service-layer call
+    # so they actually land on the new ProviderMapping row.
     assert captured["openemr_facility_id"] == 1
     assert captured["openemr_facility_name"] == "Zoomly Medical Center"
+    assert captured["zoom_user_timezone"] == "America/Los_Angeles"
 
 
 def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
@@ -716,6 +720,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
             zoom_user_id="u-1",
             zoom_user_email="jane@example.com",
             zoom_user_name="Dr Jane Doe",
+            zoom_user_timezone="America/Denver",
             created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
         )
     ]
@@ -742,6 +747,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
                 "zoom_user_id": "u-1",
                 "zoom_user_email": "jane@example.com",
                 "zoom_user_name": "Dr Jane Doe",
+                "zoom_user_timezone": "America/Denver",
                 "created_at": "2026-01-03T00:00:00+00:00",
             }
         ],

@@ -23,7 +23,6 @@ def write_audit_log(
     """
     Write an entry to the audit log.
 
-    Never raises — audit logging must never cause a request to fail.
     If the write fails, the error is logged to the app logger and silently swallowed.
 
     Event types for appointment/meeting pipeline:
@@ -49,7 +48,11 @@ def write_audit_log(
 
     Event types for clinical note pipeline:
       note.received             — clinical note webhook received from Zoom
-      note.processing_scheduled - note retrieval process scheduled in background process
+      note.processing_scheduled - note retrieval handed off to APScheduler. detail
+                                  fields: initial_delay_seconds (0 = run immediately,
+                                  default for Zoom's current behavior),
+                                  retry_delay_seconds (interval between attempts when
+                                  empty content is served), max_attempts
       note.retrieved            — note content fetched from Zoom API
       note.fetch_error          — Zoom API HTTP error during fetch attempt
       note.fetched_after_retry  — non-empty content arrived on attempt > 1 (Zoom race)
@@ -62,16 +65,36 @@ def write_audit_log(
       note.handler_error        — top-level exception in clinical_notes.note_created handler
       note.async_job_error      — unhandled exception inside async note processor
       note.manual_fetch_requested — manual fetch button pressed in OpenEMR UI
-      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set)
+      note.manual_fetch_failed  — manual fetch pre-API failure (detail.reason set;
+                                  reason='encounter_locked' means the encounter
+                                  or one of its Zoom-managed forms is eSign-locked)
       note.written              — note written back to OpenEMR successfully
       note.write_failed         — error writing note to OpenEMR
+      note.write_skipped_locked — write refused because encounter or one of its
+                                  Zoom-managed forms (SOAP / Clinical Notes) is
+                                  eSign-locked. detail.lock_target identifies
+                                  which: 'encounter' | 'soap' | 'clinical_notes'
+                                  | 'unknown' (DB error during the lock check).
+                                  detail.note_writeback_mode echoes the mode
+                                  that would have been used.
       encounter.claimed         — manually-created encounter claimed via fallback path (S7-01)
       encounter.created         — new encounter created via create_encounter (detail.trigger set)
       encounter.create_failed   — create_encounter returned None (detail.trigger set)
-      zoom.completion_success   — Zoom meeting marked complete successfully
-      zoom.completion_skipped   — completion idempotent — already marked complete
-      zoom.completion_error     — error marking Zoom meeting complete
+      zoom.completion_success   — Zoom note marked complete successfully
+      zoom.completion_skipped   — completion no-op for a non-error reason; check
+                                  detail.reason: 'already_completed' (idempotent),
+                                  'not_zoom_encounter' (eSign fired on a non-Zoom
+                                  encounter), 'no_meeting_record',
+                                  'no_note_on_record'
+      zoom.completion_error     — error path in complete_zoom_note; check
+                                  detail.reason: 'db_error',
+                                  'malformed_external_id' (with detail.external_id),
+                                  'no_active_account', or absent for direct Zoom
+                                  API errors (error_message carries the API message)
       zoom.webhook_signature_failed — Zoom webhook signature verification failed
+      zoom.webhook_account_mismatch — payload.account_id did not match the
+                                       account_id in the webhook URL path
+                                       (detail.event, detail.payload_account_id)
 
     Event types for OpenEMR auth / JWKS pipeline:
       jwks.fetched                  — /.well-known/jwks.json hit (detail.client_ip,

@@ -3,9 +3,62 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
 from app.extensions import get_openemr_db_engine
+from app.services.audit import write_audit_log
 
 
 logger = logging.getLogger(__name__)
+
+
+def encounter_lock_target(encounter_number: int) -> str | None:
+    """
+    Check whether the encounter, or either of its Zoom-managed forms
+    (SOAP / Clinical Notes), is eSign-locked.
+
+    Returns the lock target identifier when locked — one of 'encounter',
+    'soap', 'clinical_notes' — so callers can audit *which* lock fired.
+    Returns None when the encounter is unlocked and writeback is safe.
+
+    A locked encounter or form means the provider has already attested
+    the chart. We must not silently overwrite their signed work — late
+    Zoom webhook retries, manual fetch button clicks, and async-job
+    re-runs all funnel through this guard.
+    """
+    engine = get_openemr_db_engine()
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT "
+                    "  CASE "
+                    "    WHEN es.`table` = 'form_encounter' THEN 'encounter' "
+                    "    WHEN f.formdir = 'soap' THEN 'soap' "
+                    "    WHEN f.formdir = 'clinical_notes' THEN 'clinical_notes' "
+                    "    ELSE NULL "
+                    "  END AS lock_target "
+                    "FROM esign_signatures es "
+                    "LEFT JOIN forms f "
+                    "  ON es.`table` = 'forms' "
+                    " AND es.tid = f.id "
+                    " AND f.deleted = 0 "
+                    "WHERE es.is_lock = 1 "
+                    "  AND ( "
+                    "    (es.`table` = 'form_encounter' AND es.tid = :encounter) "
+                    "    OR (f.encounter = :encounter AND f.formdir IN ('soap','clinical_notes')) "
+                    "  ) "
+                    "LIMIT 1"
+                ),
+                {"encounter": int(encounter_number)},
+            ).fetchone()
+            return row.lock_target if row else None
+    except Exception as e:
+        logger.error(
+            f"openemr.encounter_lock_target | encounter={encounter_number} "
+            f"lookup failed: {e}"
+        )
+        # Fail closed-ish: a DB error here shouldn't silently write to a
+        # potentially-locked encounter. Return a sentinel so the caller
+        # treats it as locked and audits accordingly.
+        return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -16,6 +69,7 @@ logger = logging.getLogger(__name__)
 # Keys are lowercase for case-insensitive matching.
 SOAP_SECTION_MAP = {
     # Subjective
+    "subjective":                       "subjective",
     "chief complaint":                  "subjective",
     "history of present illness":       "subjective",
     "hpi":                              "subjective",
@@ -39,6 +93,7 @@ SOAP_SECTION_MAP = {
     "diet and nutrition":               "subjective",
  
     # Objective
+    "objective":                        "objective",
     "physical exam":                    "objective",
     "vitals":                           "objective",
     "results":                          "objective",
@@ -144,15 +199,22 @@ def write_note_to_encounter(
     ) -> bool:
     """
     Write Zoom clinical note into an OpenEMR encounter.
- 
+
     Writes to two forms:
       1. form_soap           — parsed SOAP sections
       2. form_clinical_notes — full note content as narrative
- 
+
     Both operations are idempotent:
       - Deduped by encounter + formdir via the forms registration table —
         at most one SOAP form and one Clinical Notes form per encounter.
- 
+
+    eSign-locked encounter guard: calls encounter_lock_target() before any
+    write. If the encounter itself or one of its Zoom-managed forms (SOAP /
+    Clinical Notes) is eSign-locked, the write is refused — emits a
+    note.write_skipped_locked audit with the lock_target in detail and
+    returns False. Protects against late webhook retries / async re-runs
+    overwriting a chart the provider has already attested.
+
     Args:
         encounter_number:  OpenEMR encounter number
         pid:               OpenEMR patient ID
@@ -162,9 +224,9 @@ def write_note_to_encounter(
         note_title:        Note title from Zoom webhook payload
         note_id:           Zoom note ID (stored on form_clinical_notes.external_id
                            for traceability — refreshed on each write)
- 
+
     Returns:
-        True if successful, False on error
+        True if successful, False on error or skipped lock guard
     """
     content_length = len(note_content) if note_content else 0
     stripped_length = len(note_content.strip()) if note_content else 0
@@ -175,6 +237,25 @@ def write_note_to_encounter(
         f"content_length={content_length} stripped_length={stripped_length} "
         f"content_blank={content_blank}"
     )
+
+    lock_target = encounter_lock_target(encounter_number)
+    if lock_target is not None:
+        logger.warning(
+            f"openemr.write_note_to_encounter | skipped — encounter={encounter_number} "
+            f"is locked (lock_target={lock_target}) note_id={note_id}"
+        )
+        write_audit_log(
+            event_type="note.write_skipped_locked",
+            success=False,
+            openemr_encounter_number=str(encounter_number),
+            openemr_patient_id=str(pid) if pid else None,
+            zoom_note_id=note_id,
+            detail={
+                "lock_target": lock_target,
+                "note_writeback_mode": note_writeback_mode,
+            },
+        )
+        return False
 
     engine = get_openemr_db_engine()
     now   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")

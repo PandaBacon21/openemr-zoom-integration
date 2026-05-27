@@ -348,7 +348,8 @@ def create_provider_mapping():
             zoom_user_id=data["zoom_user_id"],
             zoom_user_email=data["zoom_user_email"],
             zoom_user_name=data.get("zoom_user_name"),
-            zoom_user_type=data.get("zoom_user_type")
+            zoom_user_type=data.get("zoom_user_type"),
+            zoom_user_timezone=data.get("zoom_user_timezone"),
         )
         return jsonify({
             "id": mapping.id,
@@ -358,6 +359,7 @@ def create_provider_mapping():
             "openemr_facility_name": mapping.openemr_facility_name,
             "zoom_user_email": mapping.zoom_user_email,
             "zoom_user_name": mapping.zoom_user_name,
+            "zoom_user_timezone": mapping.zoom_user_timezone,
             "created_at": mapping.created_at.isoformat()
         }), 201
     except ValueError as e:
@@ -388,6 +390,7 @@ def list_provider_mappings():
                     "zoom_user_id": m.zoom_user_id,
                     "zoom_user_email": m.zoom_user_email,
                     "zoom_user_name": m.zoom_user_name,
+                    "zoom_user_timezone": m.zoom_user_timezone,
                     "created_at": m.created_at.isoformat()
                 }
                 for m in mappings

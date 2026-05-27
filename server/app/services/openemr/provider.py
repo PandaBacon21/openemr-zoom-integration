@@ -1,4 +1,6 @@
 import logging
+from datetime import date, time, timedelta
+
 import requests
 from sqlalchemy import text
 from flask import current_app
@@ -7,6 +9,21 @@ from app.models import ZoomAccount, ProviderMapping
 from app.extensions import db, get_openemr_db_engine
 
 logger = logging.getLogger(__name__)
+
+
+# Mapping from OpenEMR users.specialty (the canonical specialty string stored
+# on the provider's user row) to the Zoom appointment category names this
+# provider can offer in the Sprint 13 hydration flow. Unmapped specialties
+# resolve to [] so the orchestrator can skip them explicitly rather than
+# silently producing wrong-specialty appointments.
+SPECIALTY_TO_CATEGORIES = {
+    "Internal Medicine":              ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive", "Zoom Established Patient"],
+    "Family Medicine":                ["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive", "Zoom Established Patient"],
+    "Psychiatry":                     ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Psychiatric Nurse Practitioner": ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Clinical Social Work":           ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
+    "Addiction Medicine":             ["Zoom MAT (Suboxone)", "Zoom New Patient", "Zoom Established Patient"],
+}
 
 
 def get_practitioners(
@@ -63,7 +80,7 @@ def get_practitioners(
 
 
 def get_provider_username(provider_id: int) -> str | None:
-    
+
     engine = get_openemr_db_engine()
     try:
         with engine.begin() as conn:
@@ -75,7 +92,119 @@ def get_provider_username(provider_id: int) -> str | None:
     except Exception as e:
         logger.error(f"openemr.get_provider_username | Failed: {e}")
         return None
-    
+
+
+def get_provider_patients(provider_user_id: int) -> list[dict]:
+    """
+    Fetch all patients assigned to the given OpenEMR provider via patient_data.providerID.
+
+    Excludes patients tagged as the dedicated demo past-encounter target
+    (patient_data.referrer = 'Zoomly Demo Past Encounter') so future-appointment
+    hydration still cycles through the Sprint 12 chronic-care / persona patients
+    rather than scheduling every future visit on the diabetes demo patient.
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT pid, fname, lname, DOB, sex "
+                "FROM patient_data "
+                "WHERE providerID = :provider_id "
+                "  AND (referrer IS NULL OR referrer != 'Zoomly Demo Past Encounter') "
+                "ORDER BY pid"
+            ),
+            {"provider_id": int(provider_user_id)}
+        ).fetchall()
+    return [
+        {
+            "pid": row.pid,
+            "fname": row.fname,
+            "lname": row.lname,
+            "dob": row.DOB.isoformat() if row.DOB else None,
+            "sex": row.sex,
+        }
+        for row in rows
+    ]
+
+
+def get_provider_specialty_categories(provider_user_id: int) -> list[str]:
+    """
+    Resolve the Zoom appointment categories appropriate for the provider's
+    OpenEMR specialty (from users.specialty). Returns [] for unmapped or
+    missing specialties so callers can decide what to do (skip hydration,
+    fall back to a default, etc.) rather than silently producing
+    wrong-specialty appointments.
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT specialty FROM users WHERE id = :id"),
+            {"id": int(provider_user_id)}
+        ).fetchone()
+    if not row or not row.specialty:
+        return []
+    # Return a fresh copy so callers can mutate (pop/rotate for round-robin)
+    # without affecting the module-level constant or other callers.
+    return list(SPECIALTY_TO_CATEGORIES.get(row.specialty, []))
+
+
+def get_provider_appointments_in_window(
+    provider_user_id: int,
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """
+    Return all appointments for a provider within an inclusive date window.
+    Used by the Sprint 13 hydration flow to evaluate which of the upcoming
+    weekday slots already have appointments + Zoom meetings.
+
+    pc_startTime is normalized from PyMySQL's timedelta back to a datetime.time
+    so callers can compare against slot times directly without redoing the
+    conversion at every callsite (per CLAUDE.md note on the MariaDB / PyMySQL
+    TIME column quirk).
+    """
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT pc_eid, pc_pid, pc_aid, pc_eventDate, pc_startTime,
+                       pc_duration, pc_catid, pc_apptstatus, pc_website,
+                       pc_title, pc_hometext
+                FROM openemr_postcalendar_events
+                WHERE pc_aid = :provider_id
+                  AND pc_eventDate BETWEEN :start_date AND :end_date
+                ORDER BY pc_eventDate, pc_startTime
+            """),
+            {
+                "provider_id": int(provider_user_id),
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        ).fetchall()
+    return [
+        {
+            "pc_eid": row.pc_eid,
+            "pc_pid": row.pc_pid,
+            "pc_aid": row.pc_aid,
+            "pc_eventDate": row.pc_eventDate,
+            "pc_startTime": _timedelta_to_time(row.pc_startTime),
+            "pc_duration": row.pc_duration,
+            "pc_catid": row.pc_catid,
+            "pc_apptstatus": row.pc_apptstatus,
+            "pc_website": row.pc_website,
+            "pc_title": row.pc_title,
+            "pc_hometext": row.pc_hometext,
+        }
+        for row in rows
+    ]
+
+
+def _timedelta_to_time(td: timedelta | None) -> time | None:
+    if td is None:
+        return None
+    total = int(td.total_seconds())
+    return time(total // 3600, (total % 3600) // 60, total % 60)
+
 
 def _normalize_practitioner(resource: dict) -> dict:
     """
@@ -157,6 +286,7 @@ def _create_provider_mapping(
     zoom_user_email: str,
     zoom_user_name: str | None,
     zoom_user_type: int | None,
+    zoom_user_timezone: str | None = None,
     openemr_facility_id: int | None = None,
     openemr_facility_name: str | None = None,
 ) -> ProviderMapping:
@@ -205,6 +335,7 @@ def _create_provider_mapping(
         zoom_user_email=zoom_user_email,
         zoom_user_name=zoom_user_name,
         zoom_user_type=zoom_user_type,
+        zoom_user_timezone=zoom_user_timezone,
         is_active=True
     )
 
@@ -213,7 +344,7 @@ def _create_provider_mapping(
 
     logger.info(
         f"Provider mapping created: NPI {openemr_provider_npi} "
-        f"→ Zoom user {zoom_user_email}"
+        f"→ Zoom user {zoom_user_email} (tz={zoom_user_timezone or 'none'})"
     )
     return mapping
 

@@ -29,6 +29,7 @@ import type {
   ProviderMapping,
   OpenEMRProvider,
   ZoomUser,
+  HydrateSummary,
 } from "../../../api/config";
 import {
   getProviderMappings,
@@ -36,6 +37,7 @@ import {
   getZoomUsers,
   createProviderMapping,
   deleteProviderMapping,
+  hydrateDemoData,
 } from "../../../api/config";
 
 interface Props {
@@ -45,6 +47,21 @@ interface Props {
 }
 
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+const labelForSkipReason = (reason: string): string => {
+  switch (reason) {
+    case "unknown_specialty":
+      return "provider's specialty isn't recognized";
+    case "no_patients":
+      return "no patients assigned to this provider";
+    case "category_missing_in_openemr":
+      return "matching appointment category not found in OpenEMR";
+    case "8am_slot_occupied":
+      return "8am slot already has an encounter";
+    default:
+      return reason;
+  }
+};
 
 const AccountProvidersTab: React.FC<Props> = ({
   account,
@@ -66,6 +83,11 @@ const AccountProvidersTab: React.FC<Props> = ({
   const [editingMapping, setEditingMapping] = useState<ProviderMapping | null>(
     null,
   );
+  const [hydrating, setHydrating] = useState(false);
+  const [hydrateSummary, setHydrateSummary] = useState<HydrateSummary | null>(
+    null,
+  );
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
 
   // Provider cache
   const providerCache = useRef<{
@@ -165,6 +187,7 @@ const AccountProvidersTab: React.FC<Props> = ({
         zoom_user_email: selectedZoomUser.email,
         zoom_user_name: selectedZoomUser.display_name,
         zoom_user_type: String(selectedZoomUser.type),
+        zoom_user_timezone: selectedZoomUser.timezone,
       });
 
       // Refresh mappings
@@ -238,10 +261,143 @@ const AccountProvidersTab: React.FC<Props> = ({
     setSearchInput("");
   };
 
+  const handleHydrate = async () => {
+    setHydrating(true);
+    setHydrateError(null);
+    setHydrateSummary(null);
+    try {
+      const res = await hydrateDemoData(account.zoom_account_id);
+      setHydrateSummary(res.data);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? "Failed to hydrate demo data";
+      setHydrateError(message);
+    } finally {
+      setHydrating(false);
+    }
+  };
+
   return (
     <Box
       sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 1000 }}
     >
+      {/* Hydrate Demo Data — small card, top-right */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Card variant="outlined" sx={{ maxWidth: 460, width: "100%" }}>
+          <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 2,
+              }}
+            >
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Hydrate Demo Data
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block" }}
+                >
+                  Fills the next 4 weekday slots for every mapped provider with
+                  appointments + real Zoom meetings. Idempotent — re-run safely.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleHydrate}
+                disabled={mappings.length === 0 || hydrating}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                {hydrating ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  "Hydrate"
+                )}
+              </Button>
+            </Box>
+            {hydrateSummary && (
+              <Box sx={{ mt: 1.5 }}>
+                <Alert
+                  severity={
+                    hydrateSummary.errors.length > 0 ||
+                    hydrateSummary.past_encounter_errors.length > 0
+                      ? "warning"
+                      : "success"
+                  }
+                  sx={{ py: 0.5 }}
+                >
+                  Future: created {hydrateSummary.appointments_created} appts,{" "}
+                  {hydrateSummary.meetings_created} meetings; backfilled{" "}
+                  {hydrateSummary.meetings_backfilled}; skipped{" "}
+                  {hydrateSummary.providers_skipped.length} providers.
+                  <br />
+                  Past encounters:{" "}
+                  {hydrateSummary.past_encounters_skipped_today
+                    ? "already seeded today (one per day)"
+                    : `${hydrateSummary.past_encounters_created} created` +
+                      (hydrateSummary.past_encounter_skips.length > 0
+                        ? `, ${hydrateSummary.past_encounter_skips.length} skipped`
+                        : "") +
+                      (hydrateSummary.past_encounter_errors.length > 0
+                        ? `, ${hydrateSummary.past_encounter_errors.length} failed`
+                        : "") +
+                      "."}
+                </Alert>
+
+                {(hydrateSummary.past_encounter_skips.length > 0 ||
+                  hydrateSummary.past_encounter_errors.length > 0) && (
+                  <Alert
+                    severity={
+                      hydrateSummary.past_encounter_errors.length > 0
+                        ? "error"
+                        : "info"
+                    }
+                    sx={{ mt: 1, py: 0.5 }}
+                  >
+                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      Past encounter details
+                    </Typography>
+                    <Box component="ul" sx={{ pl: 2, mt: 0.5, mb: 0 }}>
+                      {hydrateSummary.past_encounter_skips.map((s, i) => (
+                        <Typography
+                          key={`skip-${i}`}
+                          component="li"
+                          variant="caption"
+                        >
+                          Provider {s.openemr_provider_id} skipped —{" "}
+                          {labelForSkipReason(s.reason)}
+                        </Typography>
+                      ))}
+                      {hydrateSummary.past_encounter_errors.map((e, i) => (
+                        <Typography
+                          key={`err-${i}`}
+                          component="li"
+                          variant="caption"
+                        >
+                          Provider {e.openemr_provider_id} failed at{" "}
+                          {e.stage} — {e.error}
+                        </Typography>
+                      ))}
+                    </Box>
+                  </Alert>
+                )}
+              </Box>
+            )}
+            {hydrateError && (
+              <Alert severity="error" sx={{ mt: 1.5, py: 0.5 }}>
+                {hydrateError}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+
       {/* Search + Provider Selection */}
       <Card>
         <CardContent sx={{ p: 3 }}>
@@ -396,6 +552,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                     <TableCell sx={{ fontWeight: 600 }}>Facility</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Time Zone</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                       Actions
                     </TableCell>
@@ -461,6 +618,21 @@ const AccountProvidersTab: React.FC<Props> = ({
                         <Typography variant="caption" color="text.secondary">
                           {mapping.zoom_user_email}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {mapping.zoom_user_timezone ? (
+                          <Typography variant="body2">
+                            {mapping.zoom_user_timezone}
+                          </Typography>
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell align="right">
                         <IconButton

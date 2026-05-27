@@ -15,4 +15,5 @@ def index():
     return {"blueprint": "config_routes", "status": "active"}
 
 
-from app.blueprints.config import config_routes 
+from app.blueprints.config import config_routes  # noqa: F401
+from app.blueprints.config import demo_routes  # noqa: F401

@@ -37,3 +37,13 @@ UPDATE globals SET gl_value = '0' WHERE gl_name = 'schedule_limit';
 -- all facilities until the user picks one from the calendar dropdown).
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'login_into_facility';
 
+-- E-sign settings — enable whole-encounter and individual-form signing,
+-- and lock everything once signed. The Sprint 13 demo hydration flow seeds
+-- locked past encounters by inserting one esign_signatures row on
+-- form_encounter, which (with lock_esign_all=1) also locks every attached
+-- form and hides the "Retrieve Zoom Note" button on those encounters.
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'esign_all';
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'esign_individual';
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'lock_esign_all';
+UPDATE globals SET gl_value = '1' WHERE gl_name = 'lock_esign_individual';
+

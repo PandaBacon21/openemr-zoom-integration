@@ -1,8 +1,57 @@
+from datetime import date, time, timedelta
+from types import SimpleNamespace
+
 import pytest
 
 from app.extensions import db
 from app.models import ProviderMapping, ZoomAccount
 from app.services.openemr import provider as providers
+
+
+def _fake_patient_engine(rows):
+    """Mimics a SQLAlchemy engine where .connect().execute(...).fetchall() returns rows."""
+    class FakeResult:
+        def fetchall(self):
+            return rows
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    return FakeEngine()
+
+
+def _fake_row_engine(row):
+    """Single-row variant: .connect().execute(...).fetchone() returns the row (or None)."""
+    class FakeResult:
+        def fetchone(self):
+            return row
+
+    class FakeConn:
+        def execute(self, query, params):
+            return FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConn()
+
+    return FakeEngine()
 
 
 def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
@@ -115,6 +164,47 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
     assert len(rows) == 2
 
 
+def test_create_provider_mapping_persists_zoom_user_timezone(app):
+    """The IANA timezone string from the picked Zoom user's profile must
+    land on ProviderMapping.zoom_user_timezone so meeting creation can use
+    it instead of falling back to AccountConfig.timezone."""
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        mapping = providers._create_provider_mapping(
+            zoom_account_id="acct-1",
+            openemr_fhir_id="pract-tz",
+            openemr_provider_npi="9876543210",
+            openemr_provider_id=42,
+            openemr_provider_name="Dr Tz",
+            zoom_user_id="u-tz",
+            zoom_user_email="tz@example.com",
+            zoom_user_name="Dr Tz",
+            zoom_user_type=2,
+            zoom_user_timezone="America/Los_Angeles",
+        )
+        assert mapping.zoom_user_timezone == "America/Los_Angeles"
+
+
+def test_create_provider_mapping_allows_null_zoom_user_timezone(app):
+    """Mapping creation must succeed even when the picked Zoom user has no
+    profile timezone — meeting creation falls back to AccountConfig.timezone
+    in that case."""
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        mapping = providers._create_provider_mapping(
+            zoom_account_id="acct-1",
+            openemr_fhir_id="pract-no-tz",
+            openemr_provider_npi="1111111111",
+            openemr_provider_id=43,
+            openemr_provider_name="Dr No Tz",
+            zoom_user_id="u-no-tz",
+            zoom_user_email="notz@example.com",
+            zoom_user_name="Dr No Tz",
+            zoom_user_type=2,
+        )
+        assert mapping.zoom_user_timezone is None
+
+
 def test_get_provider_mappings_returns_only_active_for_account(app):
     with app.app_context():
         account_1 = _create_account("acct-1", is_active=True)
@@ -151,3 +241,180 @@ def test_delete_provider_mapping_raises_when_not_found(app):
         _create_account("acct-1", is_active=True)
         with pytest.raises(ValueError, match="No active mapping found with NPI 999"):
             providers._delete_provider_mapping("acct-1", "999")
+
+
+def test_get_provider_patients_returns_seeded_three(monkeypatch):
+    rows = [
+        SimpleNamespace(pid=108, fname="Thomas",  lname="Walsh",    DOB=date(1969, 8, 19),  sex="Male"),
+        SimpleNamespace(pid=100, fname="James",   lname="Harrison", DOB=date(1978, 3, 14),  sex="Male"),
+        SimpleNamespace(pid=112, fname="Omar",    lname="Hassan",   DOB=date(1975, 3, 29),  sex="Male"),
+    ]
+    # Engine sorts by pid in real SQL; mock returns whatever the engine gives us. The
+    # function returns rows verbatim, so we hand them back already in pid-asc order to
+    # mirror what MariaDB would do.
+    sorted_rows = sorted(rows, key=lambda r: r.pid)
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(sorted_rows),
+    )
+
+    result = providers.get_provider_patients(10)
+
+    assert [p["pid"] for p in result] == [100, 108, 112]
+    assert result[0] == {
+        "pid": 100,
+        "fname": "James",
+        "lname": "Harrison",
+        "dob": "1978-03-14",
+        "sex": "Male",
+    }
+
+
+def test_get_provider_patients_empty_for_unknown_provider(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine([]),
+    )
+
+    assert providers.get_provider_patients(9999) == []
+
+
+def test_get_provider_patients_handles_null_dob(monkeypatch):
+    rows = [
+        SimpleNamespace(pid=200, fname="Anon", lname="Patient", DOB=None, sex="Female"),
+    ]
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(rows),
+    )
+
+    assert providers.get_provider_patients(42)[0]["dob"] is None
+
+
+# -- get_provider_specialty_categories --------------------------------------
+
+def test_get_provider_specialty_categories_pc(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Internal Medicine")),
+    )
+    assert providers.get_provider_specialty_categories(10) == [
+        "Zoom Chronic Care",
+        "Zoom New Patient",
+        "Zoom Preventive",
+        "Zoom Established Patient",
+    ]
+
+
+def test_get_provider_specialty_categories_bh_psychiatry(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Psychiatry")),
+    )
+    assert providers.get_provider_specialty_categories(12) == [
+        "Zoom Behavioral Health",
+        "Zoom New Patient",
+        "Zoom Established Patient",
+    ]
+
+
+def test_get_provider_specialty_categories_mat(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Addiction Medicine")),
+    )
+    assert providers.get_provider_specialty_categories(22) == [
+        "Zoom MAT (Suboxone)",
+        "Zoom New Patient",
+        "Zoom Established Patient",
+    ]
+
+
+def test_get_provider_specialty_categories_unknown_specialty(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Cardiology")),
+    )
+    assert providers.get_provider_specialty_categories(99) == []
+
+
+def test_get_provider_specialty_categories_no_user_row(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(None),
+    )
+    assert providers.get_provider_specialty_categories(9999) == []
+
+
+def test_get_provider_specialty_categories_returns_fresh_list(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Internal Medicine")),
+    )
+    first = providers.get_provider_specialty_categories(10)
+    first.pop()
+    second = providers.get_provider_specialty_categories(10)
+    assert len(second) == 4  # not mutated by the prior pop (4 categories for PC)
+
+
+# -- get_provider_appointments_in_window ------------------------------------
+
+def test_get_provider_appointments_in_window_returns_rows(monkeypatch):
+    rows = [
+        SimpleNamespace(
+            pc_eid=501,
+            pc_pid="100",
+            pc_aid=10,
+            pc_eventDate=date(2026, 5, 22),
+            pc_startTime=timedelta(hours=9),
+            pc_duration=1800,
+            pc_catid=20,
+            pc_apptstatus="-",
+            pc_website="https://zoom.us/j/123",
+            pc_title="Zoom BH",
+            pc_hometext="follow up",
+        ),
+        SimpleNamespace(
+            pc_eid=502,
+            pc_pid="108",
+            pc_aid=10,
+            pc_eventDate=date(2026, 5, 22),
+            pc_startTime=timedelta(hours=14),
+            pc_duration=1800,
+            pc_catid=21,
+            pc_apptstatus="-",
+            pc_website=None,
+            pc_title="Zoom Chronic Care",
+            pc_hometext="",
+        ),
+    ]
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine(rows),
+    )
+
+    result = providers.get_provider_appointments_in_window(
+        10, date(2026, 5, 22), date(2026, 5, 23)
+    )
+
+    assert len(result) == 2
+    assert result[0]["pc_eid"] == 501
+    assert result[0]["pc_startTime"] == time(9, 0, 0)
+    assert result[1]["pc_startTime"] == time(14, 0, 0)
+    assert result[1]["pc_website"] is None
+
+
+def test_get_provider_appointments_in_window_empty(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_patient_engine([]),
+    )
+    assert providers.get_provider_appointments_in_window(
+        10, date(2026, 5, 22), date(2026, 5, 23)
+    ) == []
+
+
+def test_timedelta_to_time_handles_none():
+    assert providers._timedelta_to_time(None) is None
+    assert providers._timedelta_to_time(timedelta(hours=8, minutes=30)) == time(8, 30, 0)
+    assert providers._timedelta_to_time(timedelta(seconds=45)) == time(0, 0, 45)

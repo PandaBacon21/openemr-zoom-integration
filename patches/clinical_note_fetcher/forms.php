@@ -124,6 +124,44 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
 <?php } ?>
 
 <script>
+    // Zoomly: Fire-and-forget notify Flask that the Zoom clinical note for this
+    // encounter is finalized and should be marked completed in Zoom. Triggered
+    // whenever a Zoom-managed form (SOAP / Clinical Notes) or the entire
+    // encounter is eSigned + locked. window.location.origin avoids the 301
+    // redirect that broke an earlier relative-URL implementation.
+    function notifyZoomNoteComplete(encounterNumber) {
+        if (!encounterNumber) return;
+        fetch(
+            window.location.origin + '/interface/patient_file/encounter/complete_zoom_note.php?encounter=' + encounterNumber,
+            { method: 'POST' }
+        ).catch(function (err) {
+            console.error('notifyZoomNoteComplete error:', err);
+        });
+    }
+
+    // Remove every Zoom Retrieve button for this encounter. Once any
+    // Zoom-managed form is locked, the note in Zoom is finalized — a
+    // re-fetch on the sibling form would overwrite a chart that should
+    // no longer be touched.
+    function removeZoomRetrieveButtons(encounterNumber) {
+        if (!encounterNumber) return;
+        $('.zoom-retrieve-button[data-encounter="' + encounterNumber + '"]').remove();
+        $('.zoom-retrieve-status[data-encounter="' + encounterNumber + '"]').remove();
+    }
+
+    // Zoomly: shared HTML for the "Locked" button after an eSign succeeds.
+    // OpenEMR's ESign module returns a `btn-secondary` (grey-box) variant in
+    // response.editButtonHtml, while our patched static render uses a
+    // `btn-text` + fa-lock icon variant. The two paths produced visually
+    // different Locked states depending on whether the page had reloaded
+    // since the eSign — using this helper everywhere keeps the lock-icon
+    // style consistent across both form-level and encounter-level eSigns.
+    function lockedButtonHtml(formdir, formId) {
+        return "<a href='#' class='btn btn-text btn-sm form-edit-button-locked' " +
+               "id='form-edit-button-" + formdir + "-" + formId + "'>" +
+               "<i class='fa fa-lock fa-fw'></i>&nbsp;Locked</a>";
+    }
+
     $(function () {
         var formConfig = <?php echo $esignApi->formConfigToJson(); ?>;
         $(".esign-button-form").esign(
@@ -132,7 +170,22 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                 afterFormSuccess: function (response) {
                     if (response.locked) {
                         var editButtonId = "form-edit-button-" + response.formDir + "-" + response.formId;
-                        $("#" + editButtonId).replaceWith(response.editButtonHtml);
+                        // Zoomly: use our lock-icon variant instead of
+                        // response.editButtonHtml so the in-place replacement
+                        // matches the styling our static render uses after a
+                        // page reload.
+                        $("#" + editButtonId).replaceWith(
+                            lockedButtonHtml(response.formDir, response.formId)
+                        );
+
+                        // Zoomly: if the form just locked is one of ours,
+                        // finalize the Zoom note and strip retrieve buttons
+                        // from the sibling form too.
+                        if (response.formDir === 'soap' || response.formDir === 'clinical_notes') {
+                            var encNum = <?php echo js_escape($encounter); ?>;
+                            notifyZoomNoteComplete(encNum);
+                            removeZoomRetrieveButtons(encNum);
+                        }
                     }
 
                     var logId = "esign-signature-log-" + response.formDir + "-" + response.formId;
@@ -152,12 +205,35 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                     // form edit buttons with a "disabled" button, and "disable" left
                     // nav visit form links
                     if (response.locked) {
-                        // Lock the form edit buttons
-                        $(".form-edit-button").replaceWith(response.editButtonHtml);
+                        // Zoomly: replace each form's edit button with the
+                        // lock-icon variant individually so the per-form id
+                        // stays correct (form-edit-button-{formdir}-{formId})
+                        // and the styling matches our static render. The stock
+                        // OpenEMR JS does $.replaceWith(response.editButtonHtml)
+                        // for every match, but that HTML is a single hardcoded
+                        // grey-box button which both loses per-form ids and
+                        // breaks visual consistency with the page-reload state.
+                        $(".form-edit-button").each(function () {
+                            var oldId = this.id || "";
+                            // Expected shape: form-edit-button-{formdir}-{formId}
+                            var match = oldId.match(/^form-edit-button-(.+)-([^-]+)$/);
+                            if (match) {
+                                $(this).replaceWith(lockedButtonHtml(match[1], match[2]));
+                            } else {
+                                $(this).replaceWith(lockedButtonHtml("", ""));
+                            }
+                        });
                         // Disable the new-form capabilities in left nav
                         top.window.parent.left_nav.syncRadios();
                         // Disable the new-form capabilities in top nav of the encounter
                         $(".encounter-form-category-li").remove();
+
+                        // Zoomly: encounter-level eSign cascades through every
+                        // form, so finalize the Zoom note and remove all
+                        // retrieve buttons for this encounter.
+                        var encNum = <?php echo js_escape($encounter); ?>;
+                        notifyZoomNoteComplete(encNum);
+                        removeZoomRetrieveButtons(encNum);
                     }
 
                     var logId = "esign-signature-log-encounter-" + response.encounterId;
@@ -873,6 +949,44 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
         ) {
             echo "<div class='w-100' id='partable'>";
             $divnos = 1;
+
+            // Zoomly: detect whether this encounter — or either of its
+            // Zoom-managed forms (SOAP / Clinical Notes) — is eSign-locked.
+            // If so, the Zoom note has been finalized in Zoom and the
+            // Retrieve Zoom Note button must be hidden on every Zoom-managed
+            // form. Re-fetching would overwrite a chart the provider has
+            // already attested, and the note is uneditable in Zoom anyway.
+            $zoomNoteFinalized = false;
+            $lockRow = sqlQuery(
+                "SELECT 1 AS hit FROM esign_signatures es "
+                . "LEFT JOIN forms f ON es.`table` = 'forms' AND es.tid = f.id AND f.deleted = 0 "
+                . "WHERE es.is_lock = 1 AND ( "
+                . "  (es.`table` = 'form_encounter' AND es.tid = ?) "
+                . "  OR (f.encounter = ? AND f.formdir IN ('soap','clinical_notes')) "
+                . ") LIMIT 1",
+                [$encounter, $encounter]
+            );
+            if (!empty($lockRow)) {
+                $zoomNoteFinalized = true;
+            }
+
+            // Zoomly: only Zoom-linked encounters carry a 'zoom_eid_*' tag in
+            // form_encounter.external_id (stamped by create_encounter() in the
+            // Zoom flow). Without that tag there is no Zoom meeting to retrieve
+            // a note from — common for manually-created SOAP/Clinical Notes
+            // forms or for Chrome-extension demo flows that copy a note in by
+            // hand. Hide the Retrieve Zoom Note button so SEs don't click it
+            // and get a confusing 404 from Flask.
+            $zoomLinkedEncounter = false;
+            $zoomLinkRow = sqlQuery(
+                "SELECT 1 AS hit FROM form_encounter "
+                . "WHERE encounter = ? AND external_id LIKE 'zoom_eid_%' LIMIT 1",
+                [$encounter]
+            );
+            if (!empty($zoomLinkRow)) {
+                $zoomLinkedEncounter = true;
+            }
+
             foreach ($result as $iter) {
                 $formdir = $iter['formdir'];
 
@@ -954,12 +1068,6 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                 // If the form is locked, it is no longer editable
                 if ($esign->isLocked()) {
                     echo "<a href='#' class='btn btn-text btn-sm form-edit-button-locked' id='form-edit-button-" . attr($formdir) . "-" . attr($iter['id']) . "'><i class='fa fa-lock fa-fw'></i>&nbsp;" . xlt('Locked') . "</a>";
-                    
-                    // Uncomment when ready to reimplement the Completed workflow
-
-                    // if ($formdir == 'soap' || $formdir == 'clinical_notes') {
-                    //     echo "<span class='zoom-note-complete-trigger' data-encounter='" . (int)$encounter . "'></span>";
-                    // }
                 } else {
                     if (
                         (!$aco_spec || AclMain::aclCheckCore($aco_spec[0], $aco_spec[1], '', 'write') and $is_group == 0 and $authPostCalendarCategoryWrite)
@@ -973,12 +1081,23 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
                             attr_js($form_name) . ", " . attr_js($iter['form_id']) . ")\">";
                         echo "" . xlt('Edit') . "</a>";
 
-                        if ($formdir == 'soap' || $formdir == 'clinical_notes') {
-                            echo "<button type='button' class='btn btn-secondary btn-sm ms-1' " .
+                        // Zoomly: render the Retrieve Zoom Note button only when
+                        // (a) the encounter is actually Zoom-linked (otherwise
+                        // there's no meeting/note to fetch — common for
+                        // manually-created forms and Chrome-extension demos),
+                        // and (b) no Zoom-managed form for this encounter is
+                        // already locked (locking finalizes the note in Zoom,
+                        // so a re-fetch would overwrite a chart the provider
+                        // has already attested).
+                        if (($formdir == 'soap' || $formdir == 'clinical_notes') && $zoomLinkedEncounter && !$zoomNoteFinalized) {
+                            echo "<button type='button' class='btn btn-secondary btn-sm ms-1 zoom-retrieve-button' " .
+                                "data-encounter='" . (int)$encounter . "' " .
                                 "onclick='retrieveZoomNote(" . (int)$encounter . ", " . attr_js($iter['id']) . ")' " .
                                 "title='" . xla('Re-fetch this note from Zoom') . "'>" .
                                 "<i class='fa fa-refresh'></i> " . xlt('Retrieve Zoom Note') . "</button>";
                             echo "<span id='zoom-note-status-" . attr($iter['id']) . "' " .
+                                "class='zoom-retrieve-status' " .
+                                "data-encounter='" . (int)$encounter . "' " .
                                 "style='margin-left:8px;font-size:0.85em;'></span>";
                         }
                     }
@@ -1086,17 +1205,6 @@ if (!empty($GLOBALS['google_signin_enabled']) && !empty($GLOBALS['google_signin_
             });
         }
 
-        // function completeZoomNote(encounterNumber) {
-        //     fetch(window.location.origin + '/interface/patient_file/encounter/complete_zoom_note.php?encounter=' + encounterNumber, {
-        //         method: 'POST'
-        //     }).catch(function(err) {
-        //         console.error('completeZoomNote error:', err);
-        //     });
-        // }
-        // Uncomment when ready to reimplement the Completed workflow
-        // document.querySelectorAll('.zoom-note-complete-trigger').forEach(function(el) {
-        //     completeZoomNote(parseInt(el.dataset.encounter));
-        // });
     </script>
 </body>
 </html>

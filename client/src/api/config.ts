@@ -42,6 +42,7 @@ export interface ProviderMapping {
   zoom_user_id: string;
   zoom_user_email: string;
   zoom_user_name: string;
+  zoom_user_timezone: string | null;
   created_at: string;
 }
 
@@ -64,6 +65,7 @@ export interface ZoomUser {
   email: string;
   display_name: string;
   type: number;
+  timezone: string | null;
 }
 
 // Appointment Type Filter
@@ -183,6 +185,7 @@ export const createProviderMapping = (data: {
   zoom_user_email: string;
   zoom_user_name?: string;
   zoom_user_type: string;
+  zoom_user_timezone?: string | null;
 }) => apiClient.post<ProviderMapping>("/config/providers", data);
 
 export const deleteProviderMapping = (
@@ -192,6 +195,54 @@ export const deleteProviderMapping = (
   apiClient.delete(
     `/config/providers/${openemr_provider_id}?zoom_account_id=${zoom_account_id}`,
   );
+
+// Demo hydration
+export interface HydrateSkip {
+  openemr_provider_id: string;
+  reason: "unknown_specialty" | "no_matching_categories" | "no_patients";
+}
+
+export interface HydrateError {
+  stage:
+    | "generate_appointment"
+    | "create_meeting"
+    | "backfill_meeting";
+  openemr_provider_id: string;
+  openemr_appointment_id?: number | string;
+  slot?: string;
+  error?: string;
+}
+
+export interface PastEncounterSkip {
+  openemr_provider_id: string;
+  reason:
+    | "unknown_specialty"
+    | "no_patients"
+    | "category_missing_in_openemr"
+    | "8am_slot_occupied";
+}
+
+export interface PastEncounterError {
+  openemr_provider_id: string;
+  stage: "create_appointment" | "create_encounter" | "write_note";
+  error: string;
+}
+
+export interface HydrateSummary {
+  providers_processed: number;
+  providers_skipped: HydrateSkip[];
+  appointments_created: number;
+  meetings_created: number;
+  meetings_backfilled: number;
+  errors: HydrateError[];
+  past_encounters_created: number;
+  past_encounters_skipped_today: boolean;
+  past_encounter_skips: PastEncounterSkip[];
+  past_encounter_errors: PastEncounterError[];
+}
+
+export const hydrateDemoData = (zoom_account_id: string) =>
+  apiClient.post<HydrateSummary>("/config/demo/hydrate", { zoom_account_id });
 
 // Appointment types
 export const getAppointmentFilters = (zoom_account_id: string) =>

@@ -628,7 +628,16 @@ if (!($_REQUEST['flb_table'] ?? null)) {
                             <td class="detail text-center" name="kiosk_hide">
                                 <?php
                                 if ($appt_enc != 0) {
-                                    echo text($appt_enc);
+                                    // Click the encounter number to open the
+                                    // patient chart focused on this encounter
+                                    // (same JS handler the patient-name link uses).
+                                    ?>
+                                    <a href="#"
+                                       title="<?php echo xla('Open this encounter'); ?>"
+                                       onclick="return topatient(<?php echo attr_js($appt_pid); ?>,<?php echo attr_js($appt_enc); ?>)">
+                                        <?php echo text($appt_enc); ?>
+                                    </a>
+                                    <?php
                                 }
                                 ?>
                             </td>
@@ -644,14 +653,23 @@ if (!($_REQUEST['flb_table'] ?? null)) {
                         </td>
                         <td class="detail text-center" name="kiosk_hide">
                             <?php if (!empty($appointment['pc_website'])) : ?>
-                                <a href="<?php echo attr($appointment['pc_website']); ?>"
-                                   target="_blank"
-                                   rel="noopener noreferrer"
-                                   class="btn btn-sm"
-                                   style="background-color:#0B5CFF; border-color:#0B5CFF; color:#fff;"
-                                   title="<?php echo xla('Start Zoom Meeting'); ?>">
-                                    <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
-                                </a>
+                                <?php if ($status !== '>') : ?>
+                                    <a href="<?php echo attr($appointment['pc_website']); ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-sm"
+                                       style="background-color:#0B5CFF; border-color:#0B5CFF; color:#fff;"
+                                       title="<?php echo xla('Start Zoom Meeting'); ?>">
+                                        <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+                                    </a>
+                                <?php else : ?>
+                                    <span class="btn btn-sm btn-secondary disabled"
+                                          aria-disabled="true"
+                                          style="cursor:not-allowed; pointer-events:none; opacity:0.6;"
+                                          title="<?php echo xla('Appointment is checked out — Zoom meeting can no longer be started'); ?>">
+                                        <i class="fa fa-video mr-1"></i><?php echo xlt('Start Zoom'); ?>
+                                    </span>
+                                <?php endif; ?>
                             <?php else : ?>
                                 <span class="text-muted font-italic">&mdash;</span>
                             <?php endif; ?>
