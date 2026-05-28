@@ -614,7 +614,7 @@ UPDATE openemr_postcalendar_events e
 JOIN patient_data pd ON pd.pid = CAST(e.pc_pid AS UNSIGNED)
    SET e.pc_aid = CAST(pd.providerID AS CHAR)
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
 
 -- New appointments for the 21 new patients (3 each, spread across days 1-14)
 INSERT INTO `openemr_postcalendar_events` (
@@ -726,7 +726,7 @@ JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)
    SET e.pc_facility = u.facility_id,
        e.pc_billing_location = u.facility_id
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
 
 -- =============================================================================
 -- PATIENT_TRACKER ROWS
@@ -747,7 +747,7 @@ SELECT NOW(), ev.pc_eventDate, ev.pc_startTime, ev.pc_eid,
        CAST(ev.pc_pid AS UNSIGNED), 'seed', 0, '1', 0
   FROM openemr_postcalendar_events ev
  WHERE ev.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 150;
+   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
