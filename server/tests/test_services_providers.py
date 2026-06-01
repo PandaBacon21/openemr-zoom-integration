@@ -330,6 +330,23 @@ def test_get_provider_specialty_categories_mat(monkeypatch):
     ]
 
 
+def test_get_provider_specialty_categories_charge_nursing(monkeypatch):
+    """Charge Nurse maps to a broad PCP-like category mix — chronic care,
+    behavioral coordination, preventive touchpoints, and established follow-ups.
+    Without this mapping the hydrate orchestrator skips charge-nurse providers
+    with reason='unknown_specialty'."""
+    monkeypatch.setattr(
+        "app.services.openemr.provider.get_openemr_db_engine",
+        lambda: _fake_row_engine(SimpleNamespace(specialty="Charge Nursing")),
+    )
+    assert providers.get_provider_specialty_categories(37) == [
+        "Zoom Chronic Care",
+        "Zoom Behavioral Health",
+        "Zoom Preventive",
+        "Zoom Established Patient",
+    ]
+
+
 def test_get_provider_specialty_categories_unknown_specialty(monkeypatch):
     monkeypatch.setattr(
         "app.services.openemr.provider.get_openemr_db_engine",
