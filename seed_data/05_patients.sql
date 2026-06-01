@@ -279,9 +279,11 @@ INSERT INTO `patient_data` (
     `language`, `financial`, `date`, `referrer`
 ) VALUES
 -- East (facility 2) — 10 patients across MA/NY/PA/FL/NC/DC/GA matching each provider's facility region
-(151, UNHEX(REPLACE(UUID(), '-', '')), 'Sarah',     'Chen',      'L', 'Mrs.',
+-- Renamed from "Sarah Chen" → "Linda Chen" to avoid name collision with the
+-- staff user Sarah Chen (Charge Nurse, id=37, added in S13 follow-up).
+(151, UNHEX(REPLACE(UUID(), '-', '')), 'Linda',     'Chen',      'L', 'Mrs.',
  '1972-04-15', 'Female', 'married', '210 Newbury Street',     'Boston',       'MA', '02116', 'USA',
- '617-555-0151', 'sarah.chen@example.org',                10, '151', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+ '617-555-0151', 'linda.chen@example.org',                10, '151', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
 (152, UNHEX(REPLACE(UUID(), '-', '')), 'Maria',     'Lopez',     'A', 'Mrs.',
  '1971-08-22', 'Female', 'married', '420 Lexington Avenue',   'New York',     'NY', '10017', 'USA',
  '212-555-0152', 'maria.lopez@example.org',               11, '152', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
@@ -334,5 +336,25 @@ INSERT INTO `patient_data` (
  '719-555-0166', 'wendy.cho@example.org',                 26, '166', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
 (167, UNHEX(REPLACE(UUID(), '-', '')), 'Pamela',    'Stewart',   'D', 'Mrs.',
  '1970-02-23', 'Female', 'married', '180 W South Temple',     'Salt Lake City','UT','84101','USA',
- '801-555-0167', 'pamela.stewart@example.org',            27, '167', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter');
+ '801-555-0167', 'pamela.stewart@example.org',            27, '167', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter'),
+-- ---------------------------------------------------------------------------
+-- Sarah Chen's panel (Boston, MA / facility 2 / provider 37, Charge Nurse)
+-- 168-170: 3 regular patients (CHR / BH / HYA persona mix)
+-- 171: dedicated diabetes demo target — referrer flag puts the diabetes-themed
+--      chart bulk-inserts (in 07_clinical_data.sql) onto this patient, and
+--      past_encounter.py picks her up at hydrate time to seed today's locked
+--      Zoom telehealth encounter.
+-- ---------------------------------------------------------------------------
+(168, UNHEX(REPLACE(UUID(), '-', '')), 'Janet',     'Hill',      'M', 'Mrs.',
+ '1971-09-30', 'Female', 'married', '155 Tremont Street',     'Boston',       'MA', '02111', 'USA',
+ '617-555-0168', 'janet.hill@example.org',                37, '168', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(169, UNHEX(REPLACE(UUID(), '-', '')), 'Tasha',     'Brooks',    'R', 'Ms.',
+ '1988-04-12', 'Female', 'single',  '92 Charles Street',      'Boston',       'MA', '02114', 'USA',
+ '617-555-0169', 'tasha.brooks@example.org',              37, '169', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(170, UNHEX(REPLACE(UUID(), '-', '')), 'Erik',      'Nguyen',    'T', 'Mr.',
+ '1997-11-08', 'Male',   'single',  '301 Boylston Street',    'Boston',       'MA', '02116', 'USA',
+ '617-555-0170', 'erik.nguyen@example.org',               37, '170', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(171, UNHEX(REPLACE(UUID(), '-', '')), 'Margaret',  'Walsh',     'K', 'Mrs.',
+ '1969-07-19', 'Female', 'married', '88 Atlantic Avenue',     'Boston',       'MA', '02110', 'USA',
+ '617-555-0171', 'margaret.walsh@example.org',            37, '171', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter');
 

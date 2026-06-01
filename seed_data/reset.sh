@@ -20,20 +20,20 @@ echo "Clearing demo data from $DB_CONTAINER..."
 docker exec -i "$DB_CONTAINER" mariadb -u root -p"$DB_ROOT_PASS" "$DB_NAME" <<EOF
 SET FOREIGN_KEY_CHECKS = 0;
 
-DELETE FROM openemr_postcalendar_events WHERE CAST(pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
-DELETE FROM patient_data WHERE pid BETWEEN 100 AND 167;
+DELETE FROM openemr_postcalendar_events WHERE CAST(pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
+DELETE FROM patient_data WHERE pid BETWEEN 100 AND 171;
 DELETE FROM openemr_postcalendar_categories
   WHERE pc_catname IN ('zoom-telehealth','new-patient-zoom','new-patient-in-person','phone-consult','in-person');
-DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
-DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
-DELETE FROM gacl_groups_aro_map WHERE aro_id BETWEEN 12 AND 36;
-DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 36;
+DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
+DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
+DELETE FROM gacl_groups_aro_map WHERE aro_id BETWEEN 12 AND 37;
+DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 37;
 DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong',
                                   'jonathan.nelson','priya.patel','michael.chen','marcus.eriksson','yuki.tanaka','ethan.garcia',
                                   'lucas.johnson','dave.anderson','joe.smith','lisa.patel','hiroshi.tanaka','david.thompson',
-                                  'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis');
+                                  'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis','schen');
 DELETE FROM facility WHERE id IN (1, 2, 3, 4, 5);
-DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 167;
+DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 171;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
 
@@ -41,25 +41,25 @@ DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
 DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 220 OR id BETWEEN 300 AND 303;
 DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 220;
 DELETE FROM pharmacies WHERE id BETWEEN 1 AND 4;
-DELETE FROM users_facility WHERE tablename = 'users' AND table_id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36);
+DELETE FROM users_facility WHERE tablename = 'users' AND table_id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
 
 -- Sprint 12 clinical data (must run before patient_data delete; FK_CHECKS=0
 -- means order is for clarity rather than constraint enforcement, but the
 -- lists_medication / procedure_* chains still go child-first so the
 -- intermediate state is sane if anyone runs the block partially.)
-DELETE FROM lists_medication WHERE list_id IN (SELECT id FROM lists WHERE pid BETWEEN 100 AND 167);
-DELETE FROM lists           WHERE pid        BETWEEN 100 AND 167;
-DELETE FROM prescriptions   WHERE patient_id BETWEEN 100 AND 167;
-DELETE FROM form_vitals     WHERE pid        BETWEEN 100 AND 167;
-DELETE FROM history_data    WHERE pid        BETWEEN 100 AND 167;
-DELETE FROM immunizations   WHERE patient_id BETWEEN 100 AND 167;
-DELETE FROM insurance_data  WHERE pid        BETWEEN 100 AND 167;
+DELETE FROM lists_medication WHERE list_id IN (SELECT id FROM lists WHERE pid BETWEEN 100 AND 171);
+DELETE FROM lists           WHERE pid        BETWEEN 100 AND 171;
+DELETE FROM prescriptions   WHERE patient_id BETWEEN 100 AND 171;
+DELETE FROM form_vitals     WHERE pid        BETWEEN 100 AND 171;
+DELETE FROM history_data    WHERE pid        BETWEEN 100 AND 171;
+DELETE FROM immunizations   WHERE patient_id BETWEEN 100 AND 171;
+DELETE FROM insurance_data  WHERE pid        BETWEEN 100 AND 171;
 
 -- procedure_* chain (labs from S12-11)
-DELETE FROM procedure_result      WHERE procedure_report_id IN (SELECT procedure_report_id FROM procedure_report WHERE procedure_order_id IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 167));
-DELETE FROM procedure_report      WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 167);
-DELETE FROM procedure_order_code  WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 167);
-DELETE FROM procedure_order       WHERE patient_id BETWEEN 100 AND 167;
+DELETE FROM procedure_result      WHERE procedure_report_id IN (SELECT procedure_report_id FROM procedure_report WHERE procedure_order_id IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 171));
+DELETE FROM procedure_report      WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 171);
+DELETE FROM procedure_order_code  WHERE procedure_order_id  IN (SELECT procedure_order_id FROM procedure_order WHERE patient_id BETWEEN 100 AND 171);
+DELETE FROM procedure_order       WHERE patient_id BETWEEN 100 AND 171;
 
 -- Sprint 13 demo hydration past-encounter side-effects (Pass 2 of /demo/hydrate):
 -- esign_signatures rows (both encounter-level and per-form), the supplementary
@@ -67,19 +67,19 @@ DELETE FROM procedure_order       WHERE patient_id BETWEEN 100 AND 167;
 -- the per-patient generic Z00.00 problem rows + their issue_encounter linkages,
 -- and the CPT 99213 billing rows. Done before the form_encounter delete so the
 -- FK chain is sane.
-DELETE FROM esign_signatures WHERE \`table\` = 'form_encounter' AND tid IN (SELECT encounter FROM form_encounter WHERE pid BETWEEN 100 AND 167);
-DELETE FROM esign_signatures WHERE \`table\` = 'forms' AND tid IN (SELECT id FROM forms WHERE pid BETWEEN 100 AND 167);
-DELETE FROM form_care_plan WHERE pid BETWEEN 100 AND 167;
-DELETE FROM form_clinical_instructions WHERE pid BETWEEN 100 AND 167;
-DELETE FROM billing WHERE pid BETWEEN 100 AND 167;
-DELETE FROM issue_encounter WHERE pid BETWEEN 100 AND 167;
-DELETE FROM lists WHERE pid BETWEEN 100 AND 167 AND comments LIKE 'zoomly_demo_problem%';
+DELETE FROM esign_signatures WHERE \`table\` = 'form_encounter' AND tid IN (SELECT encounter FROM form_encounter WHERE pid BETWEEN 100 AND 171);
+DELETE FROM esign_signatures WHERE \`table\` = 'forms' AND tid IN (SELECT id FROM forms WHERE pid BETWEEN 100 AND 171);
+DELETE FROM form_care_plan WHERE pid BETWEEN 100 AND 171;
+DELETE FROM form_clinical_instructions WHERE pid BETWEEN 100 AND 171;
+DELETE FROM billing WHERE pid BETWEEN 100 AND 171;
+DELETE FROM issue_encounter WHERE pid BETWEEN 100 AND 171;
+DELETE FROM lists WHERE pid BETWEEN 100 AND 171 AND comments LIKE 'zoomly_demo_problem%';
 
-DELETE FROM forms WHERE pid BETWEEN 100 AND 167;
-DELETE FROM patient_tracker WHERE pid BETWEEN 100 AND 167;
-DELETE FROM form_encounter WHERE pid BETWEEN 100 AND 167;
-DELETE FROM form_soap WHERE pid BETWEEN 100 AND 167;
-DELETE FROM form_clinical_notes WHERE pid BETWEEN 100 AND 167;
+DELETE FROM forms WHERE pid BETWEEN 100 AND 171;
+DELETE FROM patient_tracker WHERE pid BETWEEN 100 AND 171;
+DELETE FROM form_encounter WHERE pid BETWEEN 100 AND 171;
+DELETE FROM form_soap WHERE pid BETWEEN 100 AND 171;
+DELETE FROM form_clinical_notes WHERE pid BETWEEN 100 AND 171;
 
 UPDATE sequences SET id = COALESCE((SELECT MAX(encounter) FROM form_encounter), 1);
 
@@ -93,13 +93,13 @@ UPDATE users SET facility_id = 3 WHERE id = 1;
 SET FOREIGN_KEY_CHECKS = 1;
 
 SELECT 'Reset complete.' AS status;
-SELECT COUNT(*) AS remaining_appointments FROM openemr_postcalendar_events WHERE CAST(pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
-SELECT COUNT(*) AS remaining_patients FROM patient_data WHERE pid BETWEEN 100 AND 167;
+SELECT COUNT(*) AS remaining_appointments FROM openemr_postcalendar_events WHERE CAST(pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
+SELECT COUNT(*) AS remaining_patients FROM patient_data WHERE pid BETWEEN 100 AND 171;
 SELECT COUNT(*) AS remaining_providers FROM users WHERE id IN (10,11,12,13,20,21,30,31);
-SELECT COUNT(*) AS remaining_encounters FROM form_encounter WHERE pid BETWEEN 100 AND 167;
-SELECT COUNT(*) AS remaining_lists FROM lists WHERE pid BETWEEN 100 AND 167;
-SELECT COUNT(*) AS remaining_prescriptions FROM prescriptions WHERE patient_id BETWEEN 100 AND 167;
-SELECT COUNT(*) AS remaining_vitals FROM form_vitals WHERE pid BETWEEN 100 AND 167;
+SELECT COUNT(*) AS remaining_encounters FROM form_encounter WHERE pid BETWEEN 100 AND 171;
+SELECT COUNT(*) AS remaining_lists FROM lists WHERE pid BETWEEN 100 AND 171;
+SELECT COUNT(*) AS remaining_prescriptions FROM prescriptions WHERE patient_id BETWEEN 100 AND 171;
+SELECT COUNT(*) AS remaining_vitals FROM form_vitals WHERE pid BETWEEN 100 AND 171;
 EOF
 
 

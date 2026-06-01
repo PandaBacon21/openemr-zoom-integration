@@ -898,7 +898,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2025-10-15', '140', 'Sanofi Pasteur', 'FL2025-Q4-A',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 167 AND pid NOT IN (124, 134, 147, 148);
+ WHERE pid BETWEEN 100 AND 171 AND pid NOT IN (124, 134, 147, 148);
 
 -- COVID booster (everyone except NEW + HYA-young)
 INSERT INTO `immunizations`
@@ -916,7 +916,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2022-05-15', '115', 'Sanofi Pasteur', 'TD2022B',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 167 AND pid NOT IN (124, 134, 147, 148);
+ WHERE pid BETWEEN 100 AND 171 AND pid NOT IN (124, 134, 147, 148);
 
 -- Shingrix — recombinant zoster vaccine for adults 50+
 INSERT INTO `immunizations`
@@ -1001,7 +1001,7 @@ SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
        pd.fname, pd.lname, pd.DOB, 'self',
        pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
   FROM patient_data pd
- WHERE pd.pid BETWEEN 100 AND 167;
+ WHERE pd.pid BETWEEN 100 AND 171;
 
 -- =============================================================================
 -- REGIONAL INSURANCE REASSIGNMENT — override the per-PID CASE assignments

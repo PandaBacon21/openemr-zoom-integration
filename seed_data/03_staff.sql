@@ -49,6 +49,9 @@ INSERT INTO `users` (
 (25, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams',    '', 1, 1,
  'Ben',      'Williams',  'Dr.',  'Internal Medicine',    'ben.williams@example.org',     'ben.williams@example.org',
  2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567903'),
+(37, UNHEX(REPLACE(UUID(), '-', '')), 'schen',      '', 1, 1,
+ 'Sarah',    'Chen',      'RN',   'Charge Nursing',       'sarah.chen@example.org',       'sarah.chen@example.org',
+ 2, 1, 'physician', '163WC1500X', 'standard', 'standard', 'RN', '1234567907'),
 -- Mountain (id=1)
 (14, UNHEX(REPLACE(UUID(), '-', '')), 'jnelson',  '', 1, 1,
  'Jonathan', 'Nelson',    'Dr.',  'Family Medicine',      'jonathan.nelson@example.org',  'jonathan.nelson@example.org',
@@ -149,7 +152,11 @@ INSERT INTO users_secure (id, username, password, last_update_password) VALUES
 (33, 'kwatanabe',    '$2y$12$RfgtuTNYjutkCCwWtFAnXeVe1LageEPaji8mwWtWQi9X2pYIkArqS', NOW()),
 (34, 'mrodriguez', '$2y$12$/.51R5g.cGDfGFfYl/tyB.KTSSUvra1CM1TUIECdK7LjQ76X.Bei6', NOW()),
 (35, 'ewilson',     '$2y$12$TqKEUDf5oWyUduqqemryzeXlMWtHzK4LQw5u6pDAQkN6KJ1w5JD/e', NOW()),
-(36, 'clewis',    '$2y$12$CaoT3Gz0uzk97gvSZte7feT7wRW5NP3CebOck1ot9Imc/EKKDbK1S', NOW());
+(36, 'clewis',    '$2y$12$CaoT3Gz0uzk97gvSZte7feT7wRW5NP3CebOck1ot9Imc/EKKDbK1S', NOW()),
+-- schen reuses the dthompson hash: every demo password is ZoomDem0!, and
+-- the hashes are interchangeable per-user-id. Cheaper than generating a new
+-- bcrypt and the demo never inspects raw hashes.
+(37, 'schen',     '$2y$12$GXr1quBEM2LyXqDsrotI2Oyj53ihkg6263/SzKl8eui4Wd3SmrhJW', NOW());
 
 -- =============================================================================
 -- ACL
@@ -183,14 +190,15 @@ INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden
 (33, 'users', 'kwatanabe',    10, 'Ken Watanabe',     0),
 (34, 'users', 'mrodriguez', 10, 'Maria Rodriguez',  0),
 (35, 'users', 'ewilson',     10, 'Emma Wilson',      0),
-(36, 'users', 'clewis',    10, 'Cheryl Lewis',     0);
+(36, 'users', 'clewis',    10, 'Cheryl Lewis',     0),
+(37, 'users', 'schen',     10, 'Sarah Chen',       0);
 
 -- group_id 13 = Physicians, 12 = Clinicians
 INSERT IGNORE INTO gacl_groups_aro_map (group_id, aro_id) VALUES
 -- Original providers + Amy promoted to Physicians
 (13,12),(13,13),(13,14),(13,16),(13,19),
 -- New providers → Physicians
-(13,20),(13,21),(13,22),(13,23),(13,24),(13,25),(13,26),(13,27),(13,28),(13,29),(13,30),(13,31),
+(13,20),(13,21),(13,22),(13,23),(13,24),(13,25),(13,26),(13,27),(13,28),(13,29),(13,30),(13,31),(13,37),
 -- Support staff → Clinicians
 (12,15),(12,17),(12,18),(12,32),(12,33),(12,34),(12,35),(12,36);
 
@@ -213,6 +221,7 @@ INSERT IGNORE INTO groups (name, user) VALUES
 ('Physicians', 'bwilliams'),
 ('Physicians', 'htanaka'),
 ('Physicians', 'dthompson'),
+('Physicians', 'schen'),
 -- Support staff (Clinicians group)
 ('Clinicians', 'blee'),
 ('Clinicians', 'lpatel'),
@@ -254,6 +263,7 @@ UPDATE users SET federaltaxid='84-1000024', federaldrugid='AS1234567', upin='A10
 UPDATE users SET federaltaxid='84-1000025', federaldrugid='AP1234567', upin='A10025', state_license_number='MA-15225', weno_prov_id='W10025', billing_facility_id=2, valedictory='Warmly',     info='Board-certified Internal Medicine. Geriatrics and complex care.' WHERE id=25;
 UPDATE users SET federaltaxid='84-1000026', federaldrugid='AT2234567', upin='A10026', state_license_number='CO-DR-22126', weno_prov_id='W10026', billing_facility_id=1, valedictory='Sincerely', info='Board-certified Family Medicine. Adolescent and adult care.' WHERE id=26;
 UPDATE users SET federaltaxid='84-1000027', federaldrugid='AT3234567', upin='A10027', state_license_number='CO-DR-22227', weno_prov_id='W10027', billing_facility_id=1, valedictory='Best regards', info='Board-certified Internal Medicine. Cardiometabolic disease.' WHERE id=27;
+UPDATE users SET federaltaxid='84-1000037',                            upin='A10037', state_license_number='MA-RN-44237', weno_prov_id='W10037', billing_facility_id=2, supervisor_id=10, valedictory='Warmly',    info='Charge Nurse — Boston facility lead. RN with med management + care coordination focus.' WHERE id=37;
 
 -- Support staff (nurses + MAs) — no DEA; have supervisors; lighter detail set
 UPDATE users SET federaltaxid='84-1000020', upin='A10020', state_license_number='CO-RN-44120', billing_facility_id=1, supervisor_id=14, valedictory='Warmly', info='RN with chronic care management experience.' WHERE id=20;

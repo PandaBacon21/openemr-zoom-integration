@@ -232,7 +232,7 @@ def test_seed_prefers_demo_patient_over_provider_patients(app, monkeypatch):
         # Override the default (None) with an explicit demo patient
         monkeypatch.setattr(
             "app.services.openemr.encounter.past_encounter._find_demo_patient_for_provider",
-            lambda pid: {"pid": 151, "fname": "Sarah", "lname": "Chen", "dob": "1972-04-15", "sex": "Female"},
+            lambda pid: {"pid": 151, "fname": "Linda", "lname": "Chen", "dob": "1972-04-15", "sex": "Female"},
         )
 
         past_encounter.seed_past_locked_encounters(account)

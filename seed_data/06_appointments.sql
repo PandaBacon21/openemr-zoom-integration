@@ -614,7 +614,7 @@ UPDATE openemr_postcalendar_events e
 JOIN patient_data pd ON pd.pid = CAST(e.pc_pid AS UNSIGNED)
    SET e.pc_aid = CAST(pd.providerID AS CHAR)
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
 
 -- New appointments for the 21 new patients (3 each, spread across days 1-14)
 INSERT INTO `openemr_postcalendar_events` (
@@ -712,7 +712,21 @@ INSERT INTO `openemr_postcalendar_events` (
 -- PID 150 Patricia Diaz (CHR, Joe Smith 24)
 (@established_catid, 0, '24', '150', 'Established Patient', NOW(), 'HTN + HLD bilingual check-in', @day7, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@established_catid, 0, '24', '150', 'Established Patient', NOW(), 'T2DM quarterly check-in', @day11, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
-(@established_catid, 0, '24', '150', 'Established Patient', NOW(), 'Med refill review', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
+(@established_catid, 0, '24', '150', 'Established Patient', NOW(), 'Med refill review', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- Sarah Chen's panel (Boston, provider 37) — PIDs 168-170 regulars, 171 diabetes
+-- demo target (no future appts; past_encounter.py creates today's 8am locked one)
+-- PID 168 Janet Hill (CHR, Sarah Chen 37) — HTN + HLD management
+(@established_catid, 0, '37', '168', 'Established Patient', NOW(), 'HTN + HLD check-in', @day3, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@established_catid, 0, '37', '168', 'Established Patient', NOW(), 'Med refill review', @day8, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@established_catid, 0, '37', '168', 'Established Patient', NOW(), 'Lipid panel review', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 169 Tasha Brooks (BH, Sarah Chen 37) — GAD/MDD care coordination
+(@behavioral_catid, 0, '37', '169', 'Behavioral Assessment', NOW(), 'GAD + MDD med coordination', @day4, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@behavioral_catid, 0, '37', '169', 'Behavioral Assessment', NOW(), 'Sertraline tolerance follow-up', @day9, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@behavioral_catid, 0, '37', '169', 'Behavioral Assessment', NOW(), 'Care coordination check-in', @day13, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+-- PID 170 Erik Nguyen (HYA, Sarah Chen 37) — annual wellness touchpoint
+(@preventive_catid, 0, '37', '170', 'Preventive Care', NOW(), 'Annual wellness visit', @day5, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '08:30:00', '09:00:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@preventive_catid, 0, '37', '170', 'Preventive Care', NOW(), 'Flu vaccine + screening', @day10, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
+(@preventive_catid, 0, '37', '170', 'Preventive Care', NOW(), 'Lipid screen', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:30:00', '16:00:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
 
 -- =============================================================================
 -- f) pc_facility + pc_billing_location retarget — every row above was inserted
@@ -726,7 +740,7 @@ JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)
    SET e.pc_facility = u.facility_id,
        e.pc_billing_location = u.facility_id
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
 
 -- =============================================================================
 -- PATIENT_TRACKER ROWS
@@ -747,7 +761,7 @@ SELECT NOW(), ev.pc_eventDate, ev.pc_startTime, ev.pc_eid,
        CAST(ev.pc_pid AS UNSIGNED), 'seed', 0, '1', 0
   FROM openemr_postcalendar_events ev
  WHERE ev.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 167;
+   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
