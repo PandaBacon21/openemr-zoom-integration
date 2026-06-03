@@ -28,6 +28,7 @@ Current implemented areas:
 
 ## Internal Developer Reference
 
+- See [ARCHITECTURE.md](ARCHITECTURE.md) for the top-level system architecture: service topology, network segmentation, data flow sequences, env var inventory, persistent state, production hardening (DbGate gating, single-replica scheduler), and the Must / Should / Must-preserve summary for a Kubernetes deployment.
 - See [docs/internal/integration-reference.md](docs/internal/integration-reference.md) for:
   - current data model field contracts
   - webhook payload/signature contract
@@ -44,46 +45,116 @@ Current implemented areas:
 >
 > Please use this sample application for inspiration, exploration and experimentation at your own risk and enjoyment. You may reach out to the app creator and broader Zoom Developer community on https://devforum.zoom.us/ for technical discussion and assistance, but understand there is no service level agreement support for this application. Thank you and happy coding!
 
-## Quick Start (Backend)
+## Quick Start
 
-1. Copy environment defaults:
+The stack is Docker Compose orchestrated — OpenEMR (PHP/Apache), MariaDB, PostgreSQL, the Flask integration service (`zoom-bridge`), and the React admin UI all run as containers, along with one-shot init containers for branding and the OpenEMR module registration. **Do not run `python run.py` directly** — Flask alone has no functional database peers and OpenEMR isn't started.
+
+### Prerequisites
+
+- Docker + Docker Compose
+- Node.js 20+ (only if you want Vite HMR for React development; the production bundle is baked into the Flask image)
+
+### 1. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-2. Set required values in `.env` for your environment:
+Set required values. The most load-bearing ones:
 
-- `ENCRYPTION_KEY`
-- `CONFIG_ADMIN_PASSWORD`
-- `CONFIG_JWT_SECRET`
-- `OPENEMR_BASE_URL`
-- `OPENEMR_PUBLIC_URL`
-- `OPENEMR_FHIR_BASE_URL`
-- `OPENEMR_FLASK_SECRET`
-- `OPENEMR_DB_USER`
-- `OPENEMR_DB_PASS`
-- `OPENEMR_DB_HOST`
-- `OPENEMR_DB_PORT`
-- `OPENEMR_DB_NAME`
-- `APP_PUBLIC_URL`
-- `APP_INTERNAL_URL`
-- `OPENEMR_SCOPES` (space-delimited SMART scopes)
+**Flask integration secrets**
+- `ENCRYPTION_KEY` — AES key for encrypted-at-rest stored Zoom/OpenEMR credentials. **Do not rotate without using `server/scripts/rotate-encryption-key.py`** — every stored credential becomes unreadable otherwise.
+- `SECRET_KEY`, `API_KEY` — Flask secrets
+- `CONFIG_ADMIN_PASSWORD` — login password for the admin UI
+- `CONFIG_JWT_SECRET` — signs admin UI JWTs
+- `OPENEMR_FLASK_SECRET` — HMAC shared between OpenEMR and Flask for webhook signing (same value in both)
 
-3. Install backend dependencies:
+**OpenEMR MariaDB**
+- `MYSQL_ROOT_PASSWORD`
+- `OPENEMR_DB_USER`, `OPENEMR_DB_PASS`, `OPENEMR_DB_NAME` (= `openemr`)
+- `OPENEMR_DB_HOST` (= `mariadb`), `OPENEMR_DB_PORT` (= `3306`)
+- `OPENEMR_ADMIN_USER`, `OPENEMR_ADMIN_PASS` — initial OpenEMR admin login
+
+**Zoomly Postgres**
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `DATABASE_URL` (e.g. `postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`)
+
+**URLs**
+- `OPENEMR_BASE_URL` (= `http://openemr:80`) — internal HTTP, used by Flask
+- `OPENEMR_FHIR_BASE_URL` (= `http://openemr:80/apis/default/fhir`)
+- `OPENEMR_PUBLIC_URL` — public HTTPS URL of OpenEMR. **Used only for OAuth2 `aud` claims and outbound URLs to Zoom**; never used for container-to-container traffic.
+- `APP_PUBLIC_URL` — public HTTPS URL of `zoom-bridge` (for webhook callbacks)
+- `APP_INTERNAL_URL` (= `http://zoom-bridge:5000`)
+- `OPENEMR_SCOPES` — space-delimited SMART scopes
+
+**Feature flags**
+- `ENABLE_DBGATE` — set to `true` in dev/staging to enable the DbGate database browser proxied at `/admin/db`. Leave unset or `false` in production. See [ARCHITECTURE.md §13](ARCHITECTURE.md) for the three-layer gating model.
+
+See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) for the full env-var reference (what each variable does, where to source it, and rollback semantics for registration secrets).
+
+### 2. Start the stack
 
 ```bash
-cd server
-uv sync --group dev
+./server/scripts/start.sh
 ```
 
-4. Run the backend:
+This brings up all containers (using Compose `--profile non-prod` to include DbGate), waits for OpenEMR to be healthy (~3-5 min on first boot), fixes mount permissions on the PHP patches, and waits for the one-shot module init to finish.
+
+### 3. Run database migrations
 
 ```bash
-uv run python run.py
+docker exec zoom-bridge uv run alembic upgrade head
 ```
 
-Default local URL: `http://localhost:5000`
+Migrations don't run automatically in dev. The staging script (`start-staging.sh`) runs them at the end of its boot sequence.
+
+### 4. Seed demo data (recommended)
+
+Without seed data, OpenEMR has no providers, patients, or appointments — most demo flows won't exercise correctly.
+
+```bash
+./seed_data/reset.sh && ./seed_data/seed.sh
+```
+
+Loads 7 ordered SQL files into a single MariaDB session (idempotent — re-runs produce the same state). See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) §"Optional: seed OpenEMR demo data" for details.
+
+### 5. (Optional) React development with HMR
+
+The Flask container serves the production Vite build out of `server/app/static/`. For frontend development with hot-module-reload:
+
+```bash
+cd client
+npm install        # first time only
+npm run dev        # served at http://localhost:5173, proxies API to :5000
+```
+
+To pick up React changes in the Flask-served bundle without HMR, build into the static folder:
+
+```bash
+cd client && npm run build
+```
+
+### Local URLs
+
+| URL | What it serves |
+| --- | --- |
+| `http://localhost:8300` | OpenEMR — clinical workflows, calendar, encounters |
+| `http://localhost:5000` | Flask + React admin UI (production build) |
+| `http://localhost:5173` | React dev server with HMR (only when running `npm run dev`) |
+
+### Other useful entry points
+
+```bash
+# Staging dry-run on your local box — no dev overrides, gunicorn-gevent,
+# baked image, same shape staging runs:
+./server/scripts/start-staging.sh
+
+# Tear down (preserves volumes / DB data):
+docker compose down
+
+# Tear down + wipe all data volumes (clean slate):
+docker compose down -v
+```
 
 ## API Surface (Current)
 
@@ -165,14 +236,22 @@ Zoom EHR Context endpoints:
 
 ## Testing
 
-Run backend tests from the repository root:
+The project pattern during development is to run pytest **inside the running container**:
+
+```bash
+docker exec zoom-bridge uv run pytest -q
+```
+
+This uses the container's installed deps and the same Python environment Flask runs against.
+
+For host-side execution (e.g. CI, or quickly iterating without the stack up), use the wrapper script:
 
 ```bash
 server/scripts/test.sh
 ```
 
-This script runs `uv run pytest -q` with `UV_CACHE_DIR` pinned to `server/.uv-cache` by default so it works in restricted/sandboxed environments.
+This runs `uv run pytest -q` from the `server/` directory with `UV_CACHE_DIR` pinned to `server/.uv-cache` so it works in restricted/sandboxed environments. Requires `uv` installed on the host plus `uv sync --group dev` first.
 
-Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, eSign-locked encounter writeback refusal (encounter-, SOAP-, and Clinical-Notes-level locks), forward-only appointment status state machine including the `patient_tracker_element` sync that keeps the Flow Board aligned, hydration service helpers and orchestrator, past locked-encounter seeder, demo seed/reset contracts, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, eSign-locked encounter writeback refusal (encounter-, SOAP-, and Clinical-Notes-level locks), forward-only appointment status state machine including the `patient_tracker_element` sync that keeps the Flow Board aligned, hydration service helpers and orchestrator, past locked-encounter seeder, demo seed/reset contracts, the `/config/features` feature-flag endpoint, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest backend run result in this workspace: `364 passed`.
+Latest backend run result in this workspace: `377 passed`.

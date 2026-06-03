@@ -18,7 +18,7 @@ The Docker Compose stack in `docker-compose.yml` defines:
 | `dbgate`           | DbGate database browser (MariaDB + Postgres), proxied through Flask at `/admin/db` with JWT cookie auth. **Non-prod only** — gated behind the `non-prod` compose profile and the `ENABLE_DBGATE` env var on `zoom-bridge` |
 | `zoom-bridge`      | Flask integration service plus built React config UI                                                    |
 
-By default, Docker Compose also reads `docker-compose.override.yml` if present. The current override runs the Flask service in development mode and sets `DATABASE_URL` from `.env`.
+By default, Docker Compose also reads `docker-compose.override.yml` if present. The current dev override replaces the Flask container's CMD with `flask run --debug` (hot-reload), sets `FLASK_ENV=development` / `FLASK_DEBUG=true`, and bind-mounts `./server/app`, `./server/tests`, `./seed_data`, and `./patches` for live editing. Passing `-f` explicitly (as `start-staging.sh` does) bypasses the override and runs the production-shaped gunicorn-gevent config from the base image.
 
 ## Prerequisites
 
@@ -52,21 +52,25 @@ cp .env.example .env
 
 3. Fill in `.env` using the variable guide below.
 
-4. Choose the database mode for the Flask integration.
+4. Start the stack.
 
-For production-like Docker Compose with PostgreSQL, use the PostgreSQL `DATABASE_URL` form from `.env.example` and start Compose without the development override:
+PostgreSQL is the only supported Flask-side database — both dev and staging use it (the `zoomly-postgres` container started by Compose). SQLite is no longer a supported option.
 
-```bash
-docker compose -f docker-compose.yml up -d --build
-```
-
-For development mode using the override file, Docker Compose will include `docker-compose.override.yml` automatically:
+For dev with hot-reload via the override file:
 
 ```bash
-docker compose up -d --build
+docker compose --profile non-prod up -d --build
 ```
 
-For local backend development outside Docker, `.env.example` uses `DATABASE_URL=sqlite:///zoomly.db`. For Docker Compose, the clearest copy-and-play path is PostgreSQL with the `POSTGRES_*` variables and the PostgreSQL `DATABASE_URL` form shown in `.env.example`.
+For staging-shaped behavior (no dev override, gunicorn-gevent, baked image):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.staging.yml --profile non-prod up -d --build
+```
+
+For production deploys, omit the `--profile non-prod` flag so DbGate is excluded.
+
+`DATABASE_URL` in `.env` should use the PostgreSQL form from `.env.example` (`postgresql+psycopg2://...@postgres:5432/...`). The compose file interpolates the `POSTGRES_*` env vars into this URL for the `zoom-bridge` service.
 
 5. Wait for OpenEMR and the Flask app to start.
 
@@ -84,13 +88,13 @@ docker compose exec zoom-bridge uv run alembic upgrade head
 
 7. If using the mounted OpenEMR patch helper, fix the ZoomBridge permissions after OpenEMR finishes its first boot.
 
-`server/scripts/start.sh` performs this permission fix after waiting for OpenEMR, but it runs plain `docker compose up -d`, which includes `docker-compose.override.yml` by default:
+`server/scripts/start.sh` performs the permission fix after waiting for OpenEMR. The script runs `docker compose --profile non-prod up -d` so DbGate is included for the dev/staging non-prod build:
 
 ```bash
 server/scripts/start.sh
 ```
 
-If you intentionally started with `docker compose -f docker-compose.yml ...` to avoid the development override, use the permission commands directly instead:
+If you intentionally started with `docker compose -f docker-compose.yml ...` to avoid the development override (e.g. simulating staging locally), use the permission commands directly instead:
 
 ```bash
 docker exec openemr chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly
@@ -140,6 +144,8 @@ Use `.env.example` as the source of truth. Do not commit `.env`.
 | `CONFIG_ADMIN_PASSWORD` | Password for `POST /api/auth/login` and the React config UI                     | Choose an internal admin password                                     |
 | `CONFIG_JWT_SECRET`     | Signs config/admin JWT bearer tokens                                            | Generate a long random secret                                         |
 | `OPENEMR_FLASK_SECRET`  | HMAC secret shared by OpenEMR patch code and Flask for OpenEMR-signed requests  | Generate a long random secret and use the same value in both services |
+| `API_KEY`               | API key for protected endpoint guard middleware                                 | Generate a long random secret                                         |
+| `ENABLE_DBGATE`         | Gates the DbGate database browser proxy at `/admin/db` and the React Database nav. Set `true` in dev/staging; leave unset or `false` in production | One of: `true`, `false` (default `false`)                             |
 
 Important: Do not change `ENCRYPTION_KEY` after accounts are registered unless you run the repository's key rotation workflow first. Existing encrypted values become unreadable if the key changes unexpectedly.
 

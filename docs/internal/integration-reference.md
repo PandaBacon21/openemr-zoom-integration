@@ -5,8 +5,9 @@ This is a working reference for model contracts, webhook payload expectations, a
 
 Related planning:
 
+- [Architecture & Deployment Handoff](../../ARCHITECTURE.md) is the top-level system view — service topology, network segmentation, data flow sequences, env var inventory, and the K8s migration must / should / preserve summary.
 - [Implementation Setup Guide](implementation-setup-guide.md) explains repo-based deployment, required credentials, and first-run setup.
-- [Phase 2 Sprint Plan](phase-2-sprint-plan.md) tracks the future-facing Sprint 7-11 planning.
+- [Phase 2 Sprint Plan](phase-2-sprint-plan.md) tracks Phase 2 Sprint 7-13 (Sprints 9, 10, 11 were skipped — see the sprint plan file for the renumbering).
 
 ## Data Models
 
@@ -380,6 +381,8 @@ Audit event taxonomy is canonical in the `write_audit_log()` docstring at `serve
 - `openemr.token_verify_*` — UI verify endpoint outcomes (`success` / `failed`). `failed` carries `detail.status_code` on HTTPError or `detail.stage="unexpected"` otherwise
 - `zoom.token_refresh_failed` — `_fetch_zoom_token` failure; HTTPError carries `detail.status_code`, `detail.zoom_error`, `detail.body_snippet`; otherwise `detail.stage="network"` or `"fetch"`. Pairs with `zoom.credentials_validation_failed` on the registration path
 - `zoom.credentials_*` — registration-time validation outcomes (`validated` with `detail.scopes` / `validation_failed` with `detail.status_code`)
+- `zoom.webhook_account_mismatch` — payload account_id didn't match the URL path account_id on a per-account webhook (`/webhooks/zoom/<account_id>`)
+- `demo.*` — Hydrate Demo Data orchestrator and past-encounter seeder events (Sprint 13): `hydrate_started`, `hydrate_completed`, `hydrate_request_failed`, `hydrate_provider_skipped` (with `detail.reason`), `future_appointment_created`, `future_appointment_create_failed`, `future_meeting_created`, `future_meeting_backfilled`, `past_encounter_seeded`, `past_encounter_skipped` (with `detail.reason`), `past_encounter_failed` (with `detail.stage`). Full taxonomy + detail field shapes in `services/audit.py`.
 
 `note.written` and `note.write_failed` include `openemr_encounter_number` and `detail.content_blank`; manual-fetch flows carry `detail.trigger=manual_fetch`.
 
