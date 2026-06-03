@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { useFeatures } from "./context/FeaturesContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -15,6 +16,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 
 const App: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { features } = useFeatures();
 
   return (
     <Routes>
@@ -33,7 +35,16 @@ const App: React.FC = () => {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="config" element={<ConfigPage />} />
-        <Route path="database" element={<DatabasePage />} />
+        <Route
+          path="database"
+          element={
+            features.db_browser ? (
+              <DatabasePage />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
       </Route>
     </Routes>
   );

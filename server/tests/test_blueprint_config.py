@@ -1077,3 +1077,29 @@ def test_set_ehr_context_credentials_audits_without_password_value(client, app, 
         account = ZoomAccount.query.filter_by(account_id="acct-ehr").first()
         assert account.ehr_context_username == "ehr-user"
         assert account.ehr_context_password_hash
+
+
+def test_features_returns_db_browser_true_when_enabled(app, client):
+    app.config["ENABLE_DBGATE"] = True
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json() == {"db_browser": True}
+
+
+def test_features_returns_db_browser_false_when_disabled(app, client):
+    app.config["ENABLE_DBGATE"] = False
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json() == {"db_browser": False}
+
+
+def test_features_returns_db_browser_false_when_unset(app, client):
+    app.config.pop("ENABLE_DBGATE", None)
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json() == {"db_browser": False}
+
+
+def test_features_requires_auth(client):
+    response = client.get("/config/features")
+    assert response.status_code == 401

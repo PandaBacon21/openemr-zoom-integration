@@ -281,6 +281,13 @@ export const getZoomUsers = (zoom_account_id: string) =>
     `/zoom/users?zoom_account_id=${zoom_account_id}`,
   );
 
+// Features (process-wide UI feature flags)
+export interface Features {
+  db_browser: boolean;
+}
+
+export const getFeatures = () => apiClient.get<Features>("/config/features");
+
 // Audit Logs
 export const getAuditLogs = (filters: AuditLogFilters = {}) => {
   const params = new URLSearchParams();

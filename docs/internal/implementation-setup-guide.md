@@ -15,7 +15,7 @@ The Docker Compose stack in `docker-compose.yml` defines:
 | `branding`         | One-shot OpenEMR logo/branding copy job                                                                 |
 | `zoom-module-init` | One-shot OpenEMR module registration job for the appointment listener                                   |
 | `postgres`         | PostgreSQL 16 database for the Flask integration service                                                |
-| `dbgate`           | DbGate database browser (MariaDB + Postgres), proxied through Flask at `/admin/db` with JWT cookie auth |
+| `dbgate`           | DbGate database browser (MariaDB + Postgres), proxied through Flask at `/admin/db` with JWT cookie auth. **Non-prod only** — gated behind the `non-prod` compose profile and the `ENABLE_DBGATE` env var on `zoom-bridge` |
 | `zoom-bridge`      | Flask integration service plus built React config UI                                                    |
 
 By default, Docker Compose also reads `docker-compose.override.yml` if present. The current override runs the Flask service in development mode and sets `DATABASE_URL` from `.env`.

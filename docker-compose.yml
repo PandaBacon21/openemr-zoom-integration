@@ -11,7 +11,7 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     networks:
-      - integration_net
+      - emr_net
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       start_period: 1m
@@ -90,7 +90,7 @@ services:
       # Patch for shared helper function
       - ./patches/library/zoomly/ZoomBridge.php:/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
     networks:
-      - integration_net
+      - emr_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
       start_period: 6m
@@ -143,7 +143,7 @@ services:
         echo 'Branding complete.'
       "
     networks:
-      - integration_net
+      - emr_net
 
   # ─── OpenEMR Module Init ──────────────────────────────────────────────────────
   # Runs once after OpenEMR is healthy and registers the Zoom Listener Module with
@@ -170,7 +170,7 @@ services:
         echo 'Module registration complete.'
       "
     networks:
-      - integration_net
+      - emr_net
 
   # ─── Postgres Integration Server DB ────────────────────────────────────────────
   # DB for integration service
@@ -185,7 +185,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - integration_net
+      - app_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zoomly}"]
       interval: 10s
@@ -193,9 +193,13 @@ services:
       retries: 5
 
   # ─── DbGate DB Browser ───────────────────────────────────────────────────────
-  # Internal-only DB browser. Accessible via Flask reverse proxy at /admin/db.
-  # NOT exposed through Nginx Proxy Manager — internal network only.
+  # Non-prod only — gated behind the "non-prod" compose profile so production
+  # start commands (no --profile flag) skip it entirely. Accessible in dev/staging
+  # via the Flask reverse proxy at /admin/db. NEVER exposed through Nginx Proxy
+  # Manager. SKIP_ALL_AUTH=1 is acceptable here only because (a) no host port
+  # mapping, (b) only reachable from zoom-bridge over the app_net/emr_net bridge.
   dbgate:
+    profiles: ["non-prod"]
     image: dbgate/dbgate
     container_name: zoomly-dbgate
     restart: unless-stopped
@@ -216,7 +220,8 @@ services:
       PORT_zoomly: 5432
       ENGINE_zoomly: postgres@dbgate-plugin-postgres
     networks:
-      - integration_net
+      - app_net
+      - emr_net
 
   # ─── Flask Integration Server ─────────────────────────────────────────────────
   # Built from server/ directory. Reaches OpenEMR by container name on the
@@ -243,14 +248,15 @@ services:
       APP_INTERNAL_URL: http://zoom-bridge:5000
       OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
       FLASK_ENV: production
+      ENABLE_DBGATE: ${ENABLE_DBGATE:-false}
     volumes:
-      - ./server/instance:/app/instance
       - ./keys:/app/keys
       - ./server/logs:/app/logs
       - ./server/migrations:/app/migrations
       - ./server/alembic.ini:/app/alembic.ini
     networks:
-      - integration_net
+      - app_net
+      - emr_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -267,5 +273,11 @@ volumes:
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
-  integration_net:
+  # OpenEMR data plane: openemr + mariadb + init containers + dbgate (non-prod).
+  # zoom-bridge is also attached for direct MariaDB SQL via OPENEMR_DB_URI and
+  # for OpenEMR ↔ Flask HTTP (FHIR/REST + webhooks).
+  emr_net:
+    driver: bridge
+  # Zoomly app data plane: zoom-bridge + postgres + dbgate (non-prod).
+  app_net:
     driver: bridge

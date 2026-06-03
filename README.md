@@ -129,7 +129,11 @@ Audit logs (JWT bearer protected):
 
 - `GET /audit/logs?zoom_account_id=...&event_type=...&success=true&page=1&per_page=50`
 
-DbGate database browser proxy (JWT cookie protected — required because iframes cannot send custom auth headers):
+Feature flags (JWT bearer protected):
+
+- `GET /config/features` — returns process-wide UI feature gates (e.g. `{"db_browser": bool}`) consumed by the React `FeaturesContext` to hide/show nav entries
+
+DbGate database browser proxy — **non-prod only** (JWT cookie protected, since iframes can't send custom auth headers). The blueprint is conditionally registered based on `ENABLE_DBGATE`; the DbGate container is gated behind the `non-prod` compose profile. In production both layers are off, so these routes return 404 and the upstream container isn't running:
 
 - `GET/POST /admin/db`
 - `GET/POST /admin/db/<path>`

@@ -3,7 +3,9 @@
 set -e
 
 echo "Starting Zoomly stack..."
-docker compose up -d
+# --profile non-prod includes DbGate (dev/staging only). Production deploys
+# omit the flag so DbGate is never started.
+docker compose --profile non-prod up -d
 
 echo "Waiting for OpenEMR to be healthy..."
 until docker exec openemr curl -sf http://localhost:80/ > /dev/null 2>&1; do

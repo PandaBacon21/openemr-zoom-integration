@@ -387,9 +387,9 @@ class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     event_type = db.Column(db.String(128), nullable=False)
-    # Examples: appointment.received, meeting.created, note.received,
-    #           note.retrieved, openemr.write_success, openemr.write_error,
-    #           zoom.completion_success, zoom.completion_error
+    # Canonical taxonomy lives in services/audit.py's write_audit_log docstring.
+    # Examples: appointment.received, meeting.created, note.written,
+    #           encounter.created, zoom.completion_success, demo.hydrate_completed
 
     # Context — not every event has all of these
     zoom_account_id = db.Column(db.String(128), nullable=True)

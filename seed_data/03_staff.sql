@@ -288,7 +288,7 @@ UPDATE users SET federaltaxid='84-1000036', upin='A10036', state_license_number=
 INSERT INTO `users_facility` (tablename, table_id, facility_id, warehouse_id)
 SELECT 'users', u.id, u.facility_id, ''
   FROM users u
- WHERE u.id BETWEEN 10 AND 36
+ WHERE u.id BETWEEN 10 AND 37
    AND u.facility_id > 0;
 
 -- =============================================================================

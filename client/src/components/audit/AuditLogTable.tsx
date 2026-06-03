@@ -24,36 +24,73 @@ import { getAuditLogs } from "../../api/config";
 import type { AuditLogEntry, AuditLogFilters } from "../../api/config";
 import AuditLogRow from "./AuditLogRow";
 
+// Mirrors the canonical event-type taxonomy in
+// server/app/services/audit.py's write_audit_log docstring. Grouped by domain
+// for readability — when adding new events, update both the Python docstring
+// and this array.
 const EVENT_TYPE_OPTIONS = [
+  // Appointment pipeline
   "appointment.received",
   "appointment.dropped",
+  "appointment.deleted",
+  "appointment.delete_no_record",
   "appointment.patient_arrived",
+  // Meeting lifecycle
   "meeting.created",
   "meeting.create_failed",
-  "meeting.recreated",
-  "meeting.recreate_failed",
   "meeting.updated",
   "meeting.update_failed",
+  "meeting.recreated",
+  "meeting.recreate_failed",
   "meeting.deleted",
   "meeting.delete_failed",
+  "meeting.cancelled",
   "meeting.started",
+  "meeting.ended",
+  // Note pipeline
   "note.received",
-  "note.record_created",
+  "note.processing_scheduled",
   "note.retrieved",
+  "note.fetch_error",
+  "note.fetched_after_retry",
+  "note.content_empty",
+  "note.context_missing",
+  "note.encounter_failed",
+  "note.dropped",
+  "note.record_created",
+  "note.handler_error",
+  "note.async_job_error",
+  "note.manual_fetch_requested",
+  "note.manual_fetch_failed",
   "note.written",
   "note.write_failed",
-  "note.dropped",
-  "note.encounter_failed",
-  "note.context_missing",
+  "note.write_skipped_locked",
+  // Encounter
+  "encounter.claimed",
+  "encounter.created",
+  "encounter.create_failed",
+  // Demo data hydration
+  "demo.hydrate_started",
+  "demo.hydrate_completed",
+  "demo.hydrate_request_failed",
+  "demo.hydrate_provider_skipped",
+  "demo.future_appointment_created",
+  "demo.future_appointment_create_failed",
+  "demo.future_meeting_created",
+  "demo.future_meeting_backfilled",
+  "demo.past_encounter_seeded",
+  "demo.past_encounter_skipped",
+  "demo.past_encounter_failed",
+  // Zoom integration
   "zoom.webhook_signature_failed",
+  "zoom.webhook_account_mismatch",
   "zoom.completion_success",
-  "zoom.completion_error",
   "zoom.completion_skipped",
+  "zoom.completion_error",
   "zoom.token_refresh_failed",
   "zoom.credentials_validated",
   "zoom.credentials_validation_failed",
-  "openemr.write_success",
-  "openemr.write_error",
+  // OpenEMR integration
   "openemr.url_writeback_success",
   "openemr.url_writeback_failed",
   "openemr.client_enabled",
@@ -61,6 +98,7 @@ const EVENT_TYPE_OPTIONS = [
   "openemr.token_verify_success",
   "openemr.token_verify_failed",
   "openemr.token_refresh_failed",
+  // JWKS / config
   "jwks.fetched",
   "config.registration_created",
   "config.registration_updated",

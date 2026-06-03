@@ -128,6 +128,43 @@ def write_audit_log(
                                             token_refresh_failed is the low-level
                                             HTTP failure.
 
+    Event types for demo data hydration (Sprint 13):
+      demo.hydrate_started          — Hydrate Demo Data orchestrator started
+                                       for an account
+      demo.hydrate_completed        — orchestrator finished; detail.summary
+                                       carries counts (providers_processed,
+                                       appointments_created, meetings_created,
+                                       meetings_backfilled, past_encounters_created,
+                                       errors[])
+      demo.hydrate_request_failed   — top-level failure in /config/demo/hydrate
+                                       endpoint (validation or unexpected
+                                       exception before/around orchestrator)
+      demo.hydrate_provider_skipped — provider skipped during orchestration.
+                                       detail.reason: 'unknown_specialty' |
+                                       'no_matching_categories' | 'no_patients'
+      demo.future_appointment_created       — appointment row inserted by
+                                                generate_future_appointment
+                                                (detail.slot, detail.category_id)
+      demo.future_appointment_create_failed — appointment insert failed
+                                                (detail.stage,
+                                                detail.openemr_provider_id)
+      demo.future_meeting_created    — Zoom meeting created for a newly-
+                                        generated future appointment
+      demo.future_meeting_backfilled — Zoom meeting added to an existing
+                                        appointment that lacked one (re-run
+                                        scenario)
+      demo.past_encounter_seeded    — historical locked encounter + sample
+                                       note seeded for a provider's patient
+                                       (detail.openemr_provider_id,
+                                       detail.openemr_patient_id, detail.eid)
+      demo.past_encounter_skipped   — past-encounter seed skipped.
+                                       detail.reason: 'unknown_specialty' |
+                                       'no_patients' | 'category_missing_in_openemr'
+                                       | '8am_slot_occupied'
+      demo.past_encounter_failed    — error during past-encounter seed.
+                                       detail.stage: 'create_appointment' |
+                                       'create_encounter' | 'write_note'
+
     Args:
         event_type:               One of the event type strings above
         success:                  Whether the operation succeeded

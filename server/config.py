@@ -38,6 +38,19 @@ class Config:
     # Database
     SQLALCHEMY_DATABASE_URI = _db_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        # Sized for the gevent worker (100 concurrent greenlets). SQLAlchemy
+        # defaults (pool_size=5 + max_overflow=10) would starve the pool under
+        # bursts; bumping both keeps queries from queueing on connection checkout.
+        "pool_size": 20,
+        "max_overflow": 30,
+        # Validate connections on checkout — long-lived greenlets can hold
+        # idle connections across CTI sessions; Postgres may close them
+        # server-side without the client noticing.
+        "pool_pre_ping": True,
+        # Force recycling after 30 min to dodge Postgres's idle timeout.
+        "pool_recycle": 1800,
+    }
 
     # OpenEMR
     OPENEMR_BASE_URL = os.environ.get("OPENEMR_BASE_URL", "http://localhost:8300")
@@ -66,6 +79,10 @@ class Config:
     # React Config Page
     CONFIG_ADMIN_PASSWORD = os.environ.get("CONFIG_ADMIN_PASSWORD")
     CONFIG_JWT_SECRET = os.environ.get("CONFIG_JWT_SECRET")
+
+    # DbGate DB browser (reverse-proxied at /admin/db) — non-prod only.
+    # Default off so a prod deploy without the flag never exposes the browser.
+    ENABLE_DBGATE = os.environ.get("ENABLE_DBGATE", "false").lower() in ("true", "1")
 
 
 class DevelopmentConfig(Config):

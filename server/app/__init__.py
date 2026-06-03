@@ -70,7 +70,6 @@ def _register_blueprints(app: Flask) -> None:
     from .blueprints.config import config_bp
     from .blueprints.audit import audit_bp
     from .blueprints.ehr_context import ehr_context_bp
-    from .blueprints.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp)
@@ -79,14 +78,19 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(config_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(ehr_context_bp)
-    app.register_blueprint(admin_bp)
+
+    # DbGate proxy is non-prod only. When ENABLE_DBGATE is false (prod default),
+    # the blueprint isn't registered so /admin/db/* returns 404.
+    if app.config.get("ENABLE_DBGATE"):
+        from .blueprints.admin import admin_bp
+        app.register_blueprint(admin_bp)
 
 def _register_app_routes(app: Flask) -> None:
 
 
     @app.route("/health")
     def health():
-        return {"status": "ok", "env": app.config.get("ENV", "development")}
+        return {"status": "ok", "env": os.environ.get("FLASK_ENV", "development")}
 
 
     @app.route("/.well-known/jwks.json")

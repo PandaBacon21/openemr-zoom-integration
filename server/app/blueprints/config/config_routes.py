@@ -1,5 +1,5 @@
 import logging
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 
 from app.models import ZoomAccount
 from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config,
@@ -539,3 +539,10 @@ def set_ehr_context_credentials_route():
     except Exception as e:
         logger.error(f"set_ehr_credentials | Failed for {data.get('zoom_account_id')}: {e}")
         return jsonify({"error": "Failed to update credentials", "detail": str(e)}), 500
+
+
+@config_bp.route("/features", methods=["GET"])
+def get_features():
+    return jsonify({
+        "db_browser": bool(current_app.config.get("ENABLE_DBGATE", False)),
+    }), 200

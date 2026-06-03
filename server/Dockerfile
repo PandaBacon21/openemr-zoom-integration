@@ -31,8 +31,14 @@ COPY server/ .
 # Copy built React static files from Stage 1
 COPY --from=frontend-builder /server/app/static ./app/static/
 
-RUN mkdir -p /app/instance /app/keys /app/logs
+RUN mkdir -p /app/keys /app/logs
 
 EXPOSE 5000
 
-CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "run:app"]
+CMD ["uv", "run", "gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--worker-class", "gevent", \
+     "--workers", "1", \
+     "--worker-connections", "100", \
+     "--timeout", "120", \
+     "run:app"]

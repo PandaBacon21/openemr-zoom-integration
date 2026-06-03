@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { AuthProvider } from "./context/AuthContext";
+import { FeaturesProvider } from "./context/FeaturesContext";
 import App from "./App";
 import theme from "./theme";
 
@@ -19,7 +20,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AuthProvider>
-          <App />
+          <FeaturesProvider>
+            <App />
+          </FeaturesProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

@@ -23,9 +23,6 @@ SPECIALTY_TO_CATEGORIES = {
     "Psychiatric Nurse Practitioner": ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
     "Clinical Social Work":           ["Zoom Behavioral Health", "Zoom New Patient", "Zoom Established Patient"],
     "Addiction Medicine":             ["Zoom MAT (Suboxone)", "Zoom New Patient", "Zoom Established Patient"],
-    # Charge Nurse — coordinates care across med refills, BH follow-ups,
-    # preventive touchpoints, and chronic-care management. Broad mix similar
-    # to a PCP since a Charge Nurse's panel spans the same patient population.
     "Charge Nursing":                 ["Zoom Chronic Care", "Zoom Behavioral Health", "Zoom Preventive", "Zoom Established Patient"],
 }
 

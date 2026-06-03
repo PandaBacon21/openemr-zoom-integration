@@ -17,19 +17,38 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import StorageIcon from "@mui/icons-material/Storage";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useAuth } from "../context/AuthContext";
+import { useFeatures } from "../context/FeaturesContext";
+import type { Features } from "../api/config";
 
 const DRAWER_WIDTH = 240;
 
-const NAV_ITEMS = [
+interface NavItem {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  gate?: (f: Features) => boolean;
+}
+
+const ALL_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
   { label: "Config", path: "/config", icon: <SettingsIcon /> },
-  { label: "Database", path: "/database", icon: <StorageIcon /> },
+  {
+    label: "Database",
+    path: "/database",
+    icon: <StorageIcon />,
+    gate: (f) => f.db_browser,
+  },
 ];
 
 const Layout: React.FC = () => {
   const { logout } = useAuth();
+  const { features } = useFeatures();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const NAV_ITEMS = ALL_NAV_ITEMS.filter((item) =>
+    item.gate ? item.gate(features) : true,
+  );
 
   return (
     <Box

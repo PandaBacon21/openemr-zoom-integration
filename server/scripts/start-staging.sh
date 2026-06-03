@@ -9,6 +9,8 @@
 #   2. Runs `alembic upgrade head` at the end so migrations are applied as
 #      part of deploy (dev users run alembic manually after editing
 #      migrations; staging has no live mount so it needs to be automatic).
+#   3. Docker compose flag '--profile non-prod' includes DbGate (staging is non-prod). 
+#      Production deploys omit the flag so DbGate is never started
 #
 # `git pull` and `docker compose build --no-cache` are intentionally NOT in
 # this script — they are deploy steps, not "start the stack" steps. Run
@@ -18,8 +20,8 @@
 
 set -e
 
-echo "Starting Zoomly staging stack..."
-docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+echo "Starting Zoomly staging stack...".
+docker compose -f docker-compose.yml -f docker-compose.staging.yml --profile non-prod up -d
 
 echo "Waiting for OpenEMR to be healthy (up to ~15 min on Proxmox)..."
 until docker exec openemr curl -sf http://localhost:80/ > /dev/null 2>&1; do
