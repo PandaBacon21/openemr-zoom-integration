@@ -250,8 +250,7 @@ sequenceDiagram
     Flask-->>Zoom: 200 OK (must respond <3s)
     Flask->>APS: schedule _process_note_async<br/>(immediate, 15s retry)
 
-    rect rgb(240, 245, 255)
-    note over APS,MariaDB: async, runs in same process
+    Note over APS,MariaDB: ─── async (same process, separate scheduler thread) ───
     APS->>Zoom: GET /clinical_notes/<note_id><br/>(retry up to 3x on empty)
     Zoom-->>APS: note content
     APS->>Flask: ensure_encounter_for_appointment
@@ -264,7 +263,6 @@ sequenceDiagram
     else encounter writable
     Flask->>MariaDB: UPSERT form_soap + form_clinical_notes
     Flask->>Postgres: audit note.written
-    end
     end
 ```
 
@@ -307,8 +305,11 @@ sequenceDiagram
 
 For `appointment.deleted`, the corresponding meeting is removed from Zoom;
 the local `MeetingRecord` is either deleted (no clinical note exists) or
-marked `cancelled` (clinical note exists — retained for audit). See
-`CLAUDE.md > Architecture Patterns > Appointment Delete Handling`.
+marked `cancelled` (clinical note exists — retained for audit). The
+distinction is enforced at the application layer: any `ClinicalNoteRecord`
+present represents real chart data that should never be silently cleaned up.
+A `ON DELETE CASCADE` on `clinical_note_records.zoom_meeting_id` is a safety
+net at the DB layer for any future raw-delete path.
 
 ---
 
