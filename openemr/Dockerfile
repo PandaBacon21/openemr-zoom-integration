@@ -59,6 +59,11 @@ COPY --chown=apache:apache --chmod=644 \
      openemr/patches/post_calendar/month/ajax_template.html \
      /var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html
 
+# ─── Main nav (navbar logo: link → zoom.us, height → 64, title → Zoom) ──────
+COPY --chown=apache:apache --chmod=644 \
+     openemr/patches/main.php \
+     /var/www/localhost/htdocs/openemr/interface/main/tabs/main.php
+
 # ─── Patient Flow Board patches (Telehealth column + Zoom button) ────────────
 COPY --chown=apache:apache --chmod=644 \
      openemr/patches/patient_tracker.inc.php \
