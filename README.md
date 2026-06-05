@@ -47,7 +47,7 @@ Current implemented areas:
 
 ## Quick Start
 
-The stack is Docker Compose orchestrated — OpenEMR (PHP/Apache), MariaDB, PostgreSQL, the Flask integration service (`zoom-bridge`), and the React admin UI all run as containers, along with one-shot init containers for branding and the OpenEMR module registration. **Do not run `python run.py` directly** — Flask alone has no functional database peers and OpenEMR isn't started.
+The stack is Docker Compose orchestrated — a custom OpenEMR image built from `openemr/Dockerfile` (PHP/Apache, with all Zoomly patches + branding baked in), MariaDB, PostgreSQL, the Flask integration service (`zoom-bridge`), and the React admin UI all run as containers, along with a one-shot `zoom-module-init` container that registers the Zoom Appointment Listener module in the OpenEMR DB. **Do not run `python run.py` directly** — Flask alone has no functional database peers and OpenEMR isn't started.
 
 ### Prerequisites
 
@@ -95,10 +95,23 @@ See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-s
 ### 2. Start the stack
 
 ```bash
-./server/scripts/start.sh
+# Fresh clone: bootstrap the gitignored dev override from the committed template
+cp docker-compose.override.yml.example docker-compose.override.yml
+
+./server/scripts/start-dev.sh
 ```
 
-This brings up all containers (using Compose `--profile non-prod` to include DbGate), waits for OpenEMR to be healthy (~3-5 min on first boot), fixes mount permissions on the PHP patches, and waits for the one-shot module init to finish.
+This brings up all containers (using Compose `--profile non-prod` to include DbGate), waits for OpenEMR to be healthy (~3-5 min on first boot, longer on the very first build when the custom OpenEMR image is being layered), and waits for the one-shot module init to finish.
+
+In default dev mode, Docker Compose auto-loads `docker-compose.override.yml` alongside the base file. The override carries (1) the Flask dev server (FLASK_DEBUG, hot reload, live `./server/app` mount) and (2) bind mounts of every file in `openemr/patches/` over the baked OpenEMR image. The bind mounts let you edit a `.php` file in `openemr/patches/`, refresh the page, and have mod_php pick up the change without rebuilding the image. The script's `chmod` block fixes ownership on bind-mounted files to match what OpenEMR expects (`apache:apache` + `644`).
+
+To simulate staging/prod locally — running the baked OpenEMR image (`zoomly-openemr:local` from `openemr/Dockerfile`) with no patch shadowing and gunicorn instead of the Flask dev server — pass `--baked`:
+
+```bash
+./server/scripts/start-dev.sh --baked
+```
+
+This skips the override entirely (explicit `-f docker-compose.yml`) so you can confirm a patch change is actually baked into the image before deploying. After landing a patch edit, run `docker compose build openemr` to refresh the image, then `start-dev.sh --baked` to verify.
 
 ### 3. Run database migrations
 
@@ -106,7 +119,7 @@ This brings up all containers (using Compose `--profile non-prod` to include DbG
 docker exec zoom-bridge uv run alembic upgrade head
 ```
 
-Migrations don't run automatically in dev. The staging script (`start-staging.sh`) runs them at the end of its boot sequence.
+Migrations don't run automatically in dev. The staging and prod scripts (`start-staging.sh`, `start-prod.sh`) run them at the end of their boot sequences.
 
 ### 4. Seed demo data (recommended)
 
@@ -148,6 +161,13 @@ cd client && npm run build
 # Staging dry-run on your local box — no dev overrides, gunicorn-gevent,
 # baked image, same shape staging runs:
 ./server/scripts/start-staging.sh
+
+# Production-shaped start — only docker-compose.yml, no overrides, no DbGate:
+./server/scripts/start-prod.sh
+
+# Rebuild the custom OpenEMR image after editing anything in openemr/patches/ or
+# openemr/branding/ (locks the change in for staging/prod):
+docker compose build openemr --no-cache
 
 # Tear down (preserves volumes / DB data):
 docker compose down

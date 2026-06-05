@@ -11,14 +11,13 @@ The Docker Compose stack in `docker-compose.yml` defines:
 | Service            | Purpose                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
 | `mariadb`          | OpenEMR database, using MariaDB 11.4                                                                    |
-| `openemr`          | OpenEMR 8.0.0 with repo patch files mounted into the container                                          |
-| `branding`         | One-shot OpenEMR logo/branding copy job                                                                 |
+| `openemr`          | Custom OpenEMR 8.0.0 image built from `openemr/Dockerfile` — bakes in every PHP patch from `openemr/patches/` and every Zoom-branded asset from `openemr/branding/`. Tagged `zoomly-openemr:local`. |
 | `zoom-module-init` | One-shot OpenEMR module registration job for the appointment listener                                   |
 | `postgres`         | PostgreSQL 16 database for the Flask integration service                                                |
 | `dbgate`           | DbGate database browser (MariaDB + Postgres), proxied through Flask at `/admin/db` with JWT cookie auth. **Non-prod only** — gated behind the `non-prod` compose profile and the `ENABLE_DBGATE` env var on `zoom-bridge` |
 | `zoom-bridge`      | Flask integration service plus built React config UI                                                    |
 
-By default, Docker Compose also reads `docker-compose.override.yml` if present. The current dev override replaces the Flask container's CMD with `flask run --debug` (hot-reload), sets `FLASK_ENV=development` / `FLASK_DEBUG=true`, and bind-mounts `./server/app`, `./server/tests`, `./seed_data`, and `./patches` for live editing. Passing `-f` explicitly (as `start-staging.sh` does) bypasses the override and runs the production-shaped gunicorn-gevent config from the base image.
+By default, Docker Compose also reads `docker-compose.override.yml` if present. The current dev override replaces the Flask container's CMD with `flask run --debug` (hot-reload), sets `FLASK_ENV=development` / `FLASK_DEBUG=true`, bind-mounts `./server/app`, `./server/tests`, and `./seed_data` into the Flask container, **and** bind-mounts every file in `openemr/patches/` over the baked OpenEMR image so PHP edits take effect on a page refresh without rebuilding the image. A committed template lives at `docker-compose.override.yml.example` — on a fresh clone, copy it to `docker-compose.override.yml`. Passing `-f` explicitly (as `start-staging.sh`, `start-prod.sh`, and `start-dev.sh --baked` do) bypasses the override and runs the production-shaped gunicorn-gevent config against the baked OpenEMR image.
 
 ## Prerequisites
 
@@ -86,22 +85,23 @@ The `zoom-bridge` container `CMD` starts Gunicorn directly; it does not run Alem
 docker compose exec zoom-bridge uv run alembic upgrade head
 ```
 
-7. If using the mounted OpenEMR patch helper, fix the ZoomBridge permissions after OpenEMR finishes its first boot.
+7. Use the appropriate startup script for your environment.
 
-`server/scripts/start.sh` performs the permission fix after waiting for OpenEMR. The script runs `docker compose --profile non-prod up -d` so DbGate is included for the dev/staging non-prod build:
-
-```bash
-server/scripts/start.sh
-```
-
-If you intentionally started with `docker compose -f docker-compose.yml ...` to avoid the development override (e.g. simulating staging locally), use the permission commands directly instead:
+`server/scripts/start-dev.sh` runs `docker compose --profile non-prod up -d` (auto-loading `docker-compose.override.yml`) so DbGate is included for the dev non-prod build, waits for OpenEMR to be healthy, then runs a chmod pass against the bind-mounted patch files (which inherit host ownership and need `apache:apache` + `644` to satisfy OpenEMR):
 
 ```bash
-docker exec openemr chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly
-docker exec openemr chmod 644 /var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
+server/scripts/start-dev.sh
 ```
 
-For staging deployments, use `server/scripts/start-staging.sh` instead. It layers the `docker-compose.staging.yml` overlay (extends OpenEMR healthcheck `start_period` to 15 minutes for slower Proxmox hardware), waits for OpenEMR healthy, runs the same permission fixes as `start.sh`, waits for `zoomly-module-init`, then runs `alembic upgrade head`. `git pull` and `docker compose build --no-cache` remain separate deploy steps that run before the script.
+To simulate staging/prod locally — running the baked `zoomly-openemr:local` image with no patch shadowing and gunicorn instead of the Flask dev server — pass `--baked`. The script then uses an explicit `-f docker-compose.yml` to bypass the override and skips the chmod block (the baked image already has correct ownership):
+
+```bash
+server/scripts/start-dev.sh --baked
+```
+
+For staging deployments, use `server/scripts/start-staging.sh`. It layers the `docker-compose.staging.yml` overlay (extends OpenEMR healthcheck `start_period` to 15 minutes for slower Proxmox hardware), waits for OpenEMR healthy, waits for `zoomly-module-init`, then runs `alembic upgrade head`. No chmod block is needed — the baked image is authoritative. `git pull` and `docker compose build --no-cache` remain separate deploy steps that run before the script.
+
+For production deployments, use `server/scripts/start-prod.sh`. It runs with only `-f docker-compose.yml` (no overrides, no staging overlay), omits `--profile non-prod` so DbGate is not started, and runs `alembic upgrade head` at the end. `ENABLE_DBGATE` must remain unset or `false` so the Flask `/admin/db` proxy is never registered.
 
 8. Confirm service health.
 
@@ -236,16 +236,18 @@ During registration, the Flask service:
 
 ## OpenEMR Patch Behavior
 
-When using `docker-compose.yml`, the repo mounts OpenEMR patch files directly into the OpenEMR container:
+OpenEMR patch files are baked into the custom `zoomly-openemr:local` image at build time by `openemr/Dockerfile` (every file under `openemr/patches/` is COPY'd with `apache:apache` ownership and `644` perms). The base file set:
 
-- `patches/AuthorizationController.php`
-- `patches/OAuth2AuthorizationListener.php`
-- `patches/RsaSha384Signer.php` — fixes a multi-client JWT verification bug in OpenEMR (S7-08); without this patch, any account whose key isn't first in the JWKS response fails token verification
-- `patches/zoom_appointment_listener/*`
-- `patches/add_edit_event.php`
-- `patches/post_calendar/ajax_template.html`
-- `patches/clinical_note_fetcher/*`
-- `patches/library/zoomly/ZoomBridge.php`
+- `openemr/patches/AuthorizationController.php`
+- `openemr/patches/OAuth2AuthorizationListener.php`
+- `openemr/patches/RsaSha384Signer.php` — fixes a multi-client JWT verification bug in OpenEMR (S7-08); without this patch, any account whose key isn't first in the JWKS response fails token verification
+- `openemr/patches/zoom_appointment_listener/*`
+- `openemr/patches/add_edit_event.php`
+- `openemr/patches/post_calendar/ajax_template.html`
+- `openemr/patches/clinical_note_fetcher/*`
+- `openemr/patches/library/zoomly/ZoomBridge.php`
+
+In dev, `docker-compose.override.yml` bind-mounts these same files over the baked copies so PHP edits take effect on a page refresh without rebuilding the image. `start-dev.sh --baked` skips the override to verify the baked image; staging and prod scripts always run image-authoritative.
 
 The `zoom-module-init` service inserts or activates the `zoom_appointment_listener` module row in OpenEMR's `modules` table.
 
