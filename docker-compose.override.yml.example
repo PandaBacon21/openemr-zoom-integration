@@ -1,0 +1,61 @@
+# Template for the gitignored docker-compose.override.yml.
+#
+# Copy on a fresh clone:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# Docker Compose auto-loads docker-compose.override.yml alongside
+# docker-compose.yml in dev — there's no -f flag needed. start-dev.sh relies on
+# that behavior; start-staging.sh and start-prod.sh explicitly pass
+# `-f docker-compose.yml` so they bypass any local override.
+#
+# Two things live in this override:
+#   1. Flask dev server config (FLASK_DEBUG, debug command, live code mount)
+#   2. openemr/patches/ bind mounts that shadow the baked OpenEMR image so PHP edits
+#      take effect on page refresh without rebuilding the image
+#
+# `start-dev.sh --baked` bypasses this entire file via explicit `-f
+# docker-compose.yml` — useful for confirming the baked OpenEMR image
+# (zoomly-openemr:local) behaves correctly before deploying to staging/prod.
+
+services:
+  # ─── OpenEMR — openemr/patches/ bind mounts for fast iteration ───────────────────────
+  # Bind-mounted files inherit host ownership; start-dev.sh re-runs the
+  # apache:apache + 644 chmod block whenever this override is active.
+  openemr:
+    volumes:
+      # OAuth2 / SMART patches
+      - ./openemr/patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
+      - ./openemr/patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
+      - ./openemr/patches/RsaSha384Signer.php:/var/www/localhost/htdocs/openemr/src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php:ro
+      # Zoom Appointment Listener module
+      - ./openemr/patches/zoom_appointment_listener/AppointmentListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
+      - ./openemr/patches/zoom_appointment_listener/Bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/Bootstrap.php
+      - ./openemr/patches/zoom_appointment_listener/DialogCloseListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/DialogCloseListener.php
+      - ./openemr/patches/zoom_appointment_listener/openemr.bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/openemr.bootstrap.php
+      # Calendar patches
+      - ./openemr/patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
+      - ./openemr/patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
+      - ./openemr/patches/post_calendar/week/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/week/ajax_template.html:ro
+      - ./openemr/patches/post_calendar/month/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html:ro
+      # Patient Flow Board patches
+      - ./openemr/patches/patient_tracker.inc.php:/var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php:ro
+      - ./openemr/patches/patient_tracker.php:/var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php:ro
+      # Encounter clinical note fetcher
+      - ./openemr/patches/clinical_note_fetcher/forms.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/forms.php
+      - ./openemr/patches/clinical_note_fetcher/fetch_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/fetch_zoom_note.php
+      - ./openemr/patches/clinical_note_fetcher/complete_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/complete_zoom_note.php
+      # Shared HMAC signing helper for PHP → Flask calls
+      - ./openemr/patches/library/zoomly/ZoomBridge.php:/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
+
+  # ─── zoom-bridge — Flask dev server ─────────────────────────────────────────
+  zoom-bridge:
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "true"
+    command:
+      ["uv", "run", "flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
+    volumes:
+      - ./server/app:/app/app # live code mount for hot reload
+      - ./server/tests:/app/tests # live test mount so pytest sees edits
+      - ./seed_data:/seed_data # tests resolve repo_root via parents[2]
+      - ./openemr/patches:/patches # tests resolve repo_root via parents[2]

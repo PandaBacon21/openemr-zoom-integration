@@ -405,12 +405,12 @@ Manual note endpoints under `/zoom/encounter/<encounter_number>/...` are OpenEMR
 
 ## OpenEMR Patch Module (PHP)
 
-Patch files under `patches/zoom_appointment_listener` currently wire two events:
+Patch files under `openemr/patches/zoom_appointment_listener` currently wire two events:
 
 - `AppointmentSetEvent` -> `AppointmentListener::onAppointmentSet` for create/update webhook payloads
 - `AppointmentDialogCloseEvent` -> `DialogCloseListener::onDialogClose` for delete webhook payloads
 
-Patch files under `patches/clinical_note_fetcher` provide OpenEMR encounter-page proxies:
+Patch files under `openemr/patches/clinical_note_fetcher` provide OpenEMR encounter-page proxies:
 
 - `fetch_zoom_note.php` signs and forwards "Retrieve Zoom Note" requests to Flask
 - `complete_zoom_note.php` signs and forwards Zoom note completion requests; the JavaScript trigger in `forms.php` is currently present but commented out
@@ -423,7 +423,7 @@ Current listener behavior highlights:
 - Sends compact `appointment.deleted` payload for delete actions
 - Signs all webhook payloads with HMAC-SHA256 using `OPENEMR_FLASK_SECRET`
 
-`patches/RsaSha384Signer.php` overrides `src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php` to fix a multi-client JWT verification bug (S7-08). Upstream's `verify()` reads kid from `$this->headers['kid']`, which is only populated during signing — during verification kid was always null, causing `JsonWebKeySet::getJSONWebKey()` to return the first RSA key in the JWKS regardless of which client's token was being validated. The patch extracts kid from the JWT header bytes in `$payload` (the signed segment Lcobucci passes into `verify()`). Bind-mounted `:ro` so OpenEMR's auto-config can't overwrite it.
+`openemr/patches/RsaSha384Signer.php` overrides `src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php` to fix a multi-client JWT verification bug (S7-08). Upstream's `verify()` reads kid from `$this->headers['kid']`, which is only populated during signing — during verification kid was always null, causing `JsonWebKeySet::getJSONWebKey()` to return the first RSA key in the JWKS regardless of which client's token was being validated. The patch extracts kid from the JWT header bytes in `$payload` (the signed segment Lcobucci passes into `verify()`). Baked into the custom OpenEMR image via `openemr/Dockerfile`.
 
 ## OpenEMR Appointment Status (`appt_status`) Mapping
 

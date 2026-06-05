@@ -21,8 +21,16 @@ services:
 
   # ─── OpenEMR ─────────────────────────────────────────────────────────────────
   # TLS is handled upstream by Nginx Proxy Manager.
+  #
+  # Image is built from openemr/Dockerfile, which layers every patch under
+  # openemr/patches/ and every branding asset under openemr/branding/ on top of
+  # openemr/openemr:8.0.0. There are no patch bind mounts here — to iterate on a
+  # patch without a full rebuild, dev uses docker-compose.override.yml.
   openemr:
-    image: openemr/openemr:8.0.0
+    build:
+      context: .
+      dockerfile: openemr/Dockerfile
+    image: zoomly-openemr:local
     container_name: openemr
     restart: unless-stopped
     ports:
@@ -60,35 +68,6 @@ services:
       # Backup this volume before any OpenEMR upgrade.
       - openemr_sites:/var/www/localhost/htdocs/openemr/sites
       - openemr_logs:/var/log
-      - openemr_public:/var/www/localhost/htdocs/openemr/public/images/logos
-
-      # Patch for bug and added delete method in OpenEMR Registration/De-Registration flow
-      - ./patches/AuthorizationController.php:/var/www/localhost/htdocs/openemr/src/RestControllers/AuthorizationController.php:ro
-      - ./patches/OAuth2AuthorizationListener.php:/var/www/localhost/htdocs/openemr/src/RestControllers/Subscriber/OAuth2AuthorizationListener.php:ro
-      # Patch for multi-client JWT kid lookup bug (S7-08): upstream RsaSha384Signer
-      # reads $this->headers['kid'] which is never populated during verification,
-      # so it returns the first RSA key in JWKS regardless of which client's JWT
-      # is being verified. Patch extracts kid from the payload header instead.
-      - ./patches/RsaSha384Signer.php:/var/www/localhost/htdocs/openemr/src/Common/Auth/OpenIDConnect/JWT/RsaSha384Signer.php:ro
-      # Patches for adding appointment event notifications
-      - ./patches/zoom_appointment_listener/AppointmentListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/AppointmentListener.php
-      - ./patches/zoom_appointment_listener/Bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/Bootstrap.php
-      - ./patches/zoom_appointment_listener/DialogCloseListener.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/DialogCloseListener.php
-      - ./patches/zoom_appointment_listener/openemr.bootstrap.php:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener/openemr.bootstrap.php
-      # Patch for adding Start Zoom Meeting button
-      - ./patches/add_edit_event.php:/var/www/localhost/htdocs/openemr/interface/main/calendar/add_edit_event.php
-      - ./patches/post_calendar/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/day/ajax_template.html
-      - ./patches/post_calendar/week/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/week/ajax_template.html:ro
-      - ./patches/post_calendar/month/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html:ro
-      # Patch for Telehealth column + Start Zoom Meeting button on the Patient Flow Board
-      - ./patches/patient_tracker.inc.php:/var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php:ro
-      - ./patches/patient_tracker.php:/var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php:ro
-      # Patch for Encounter Form to include a Retrieve Clinical Note Button
-      - ./patches/clinical_note_fetcher/forms.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/forms.php
-      - ./patches/clinical_note_fetcher/fetch_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/fetch_zoom_note.php
-      - ./patches/clinical_note_fetcher/complete_zoom_note.php:/var/www/localhost/htdocs/openemr/interface/patient_file/encounter/complete_zoom_note.php
-      # Patch for shared helper function
-      - ./patches/library/zoomly/ZoomBridge.php:/var/www/localhost/htdocs/openemr/library/zoomly/ZoomBridge.php
     networks:
       - emr_net
     healthcheck:
@@ -97,53 +76,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-
-  # ─── OpenEMR Branding Init ────────────────────────────────────────────────────
-  # Runs once after OpenEMR is healthy and copies branding files in.
-  # This avoids the permission conflict with OpenEMR's startup chmod sweep —
-  # by the time this container runs, OpenEMR has finished its setup and Apache
-  # is serving. The files land with correct ownership (www/apache) via docker cp
-  # semantics through the shared volume.
-  branding:
-    image: alpine:latest
-    container_name: zoomly-branding
-    restart: "no"
-    depends_on:
-      openemr:
-        condition: service_healthy
-    volumes:
-      - ./openemr/branding:/branding:ro
-      - openemr_public:/openemr_public
-    command: >
-      sh -c "
-        echo 'Setting permissions...' &&
-        chmod -R 755 /openemr_public/core/login/primary &&
-        chmod -R 755 /openemr_public/core/menu/primary &&
-        chmod -R 755 /openemr_public/core/favicon &&
-        echo 'Clearing default OpenEMR logos...' &&
-        rm -f /openemr_public/core/login/primary/* &&
-        rm -f /openemr_public/core/menu/primary/* &&
-        rm -f /openemr_public/core/favicon/* &&
-        echo 'Copying branding files...' &&
-        cp /branding/core/login/primary/logo.png /openemr_public/core/login/primary/logo.png &&
-        cp /branding/core/menu/primary/logo.png /openemr_public/core/menu/primary/logo.png &&
-        cp /branding/core/favicon/favicon.ico /openemr_public/core/favicon/favicon.ico &&
-        cp /branding/core/login/primary/logo.png /openemr_public/portal/login/primary/logo.png &&
-        cp /branding/core/menu/primary/logo.png /openemr_public/portal/menu/primary/logo.png &&
-        cp /branding/Product_Meetings_Light_Badge-Solo.png /openemr_public/Product_Meetings_Light_Badge-Solo.png &&
-        cp /branding/Product_Meetings_Bloom_Badge-Solo.png /openemr_public/Product_Meetings_Bloom_Badge-Solo.png &&
-        echo 'Setting file permissions...' &&
-        chmod 644 /openemr_public/core/login/primary/logo.png &&
-        chmod 644 /openemr_public/core/menu/primary/logo.png &&
-        chmod 644 /openemr_public/core/favicon/favicon.ico &&
-        chmod 644 /openemr_public/portal/login/primary/logo.png &&
-        chmod 644 /openemr_public/portal/menu/primary/logo.png &&
-        chmod 644 /openemr_public/Product_Meetings_Light_Badge-Solo.png &&
-        chmod 644 /openemr_public/Product_Meetings_Bloom_Badge-Solo.png &&
-        echo 'Branding complete.'
-      "
-    networks:
-      - emr_net
 
   # ─── OpenEMR Module Init ──────────────────────────────────────────────────────
   # Runs once after OpenEMR is healthy and registers the Zoom Listener Module with
@@ -269,7 +201,6 @@ volumes:
   postgres_data:
   openemr_sites:
   openemr_logs:
-  openemr_public:
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:

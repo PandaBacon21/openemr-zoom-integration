@@ -65,9 +65,10 @@ Key shapes to internalize:
 - **DbGate is non-prod only.** Dashed arrows mark its paths. In prod it's
   not started, the Flask `/admin/db` proxy is unregistered, and the React UI
   hides the nav entry (§13).
-- **`branding` and `zoom-module-init`** are one-shot containers that run
-  during stack startup and exit. Omitted from this diagram — they have no
-  runtime data flow.
+- **`zoom-module-init`** is a one-shot container that runs during stack
+  startup and exits. Omitted from this diagram — it has no runtime data flow.
+  (The previous `branding` init container was retired when patches + branding
+  were baked into the custom OpenEMR image built from `openemr/Dockerfile`.)
 
 ---
 
@@ -76,8 +77,7 @@ Key shapes to internalize:
 | Service            | Image                          | Long-lived? | Host port   | Restart          | Network attachments  | Role                                                                                          |
 | ------------------ | ------------------------------ | ----------- | ----------- | ---------------- | -------------------- | --------------------------------------------------------------------------------------------- |
 | `mariadb`          | `mariadb:11.4`                 | yes         | none        | `unless-stopped` | `emr_net`            | OpenEMR's relational store                                                                    |
-| `openemr`          | `openemr/openemr:8.0.0`        | yes         | `8300:80`   | `unless-stopped` | `emr_net`            | EHR application (PHP + Apache)                                                                |
-| `branding`         | `alpine:latest`                | no (exits)  | none        | `no`             | `emr_net`            | One-shot — copies Zoom-branded assets into the openemr_public volume after OpenEMR is healthy |
+| `openemr`          | `zoomly-openemr:local` (built from `openemr/Dockerfile` `FROM openemr/openemr:8.0.0`) | yes | `8300:80` | `unless-stopped` | `emr_net` | EHR application (PHP + Apache); patches + branding baked into the image |
 | `zoom-module-init` | `alpine:latest`                | no (exits)  | none        | `no`             | `emr_net`            | One-shot — inserts the ZoomAppointmentListener row into the `modules` MariaDB table           |
 | `postgres`         | `postgres:16`                  | yes         | none        | `unless-stopped` | `app_net`            | Zoomly app DB (accounts, meetings, notes, audit log)                                          |
 | `dbgate`           | `dbgate/dbgate`                | yes         | none        | `unless-stopped` | `app_net`, `emr_net` | **Non-prod only** (compose profile `non-prod`). Web DB browser, reverse-proxied through Flask |
@@ -108,7 +108,6 @@ flowchart LR
         direction TB
         OE_e[openemr]
         MDB_e[(mariadb)]
-        BR_e[branding<br/>init, one-shot]
         ZMI_e[zoom-module-init<br/>one-shot]
         ZB_e["zoom-bridge<br/>★ bridge"]
         DBG_e["dbgate<br/>(non-prod)"]
@@ -142,7 +141,6 @@ service; it's one instance with two IP addresses.
 | ------------------------- | :-------: | :-------: |
 | `openemr`                 |     ✓     |           |
 | `mariadb`                 |     ✓     |           |
-| `branding` (init)         |     ✓     |           |
 | `zoom-module-init` (init) |     ✓     |           |
 | `zoom-bridge`             |     ✓     |     ✓     |
 | `dbgate` (non-prod)       |     ✓     |     ✓     |
@@ -152,7 +150,7 @@ service; it's one instance with two IP addresses.
 
 | Network   | Members                                                                           | Excludes   | Purpose                                                                                                                           |
 | --------- | --------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `emr_net` | `openemr`, `mariadb`, `zoom-bridge`, `dbgate` (non-prod), the two init containers | `postgres` | OpenEMR ↔ MariaDB SQL, OpenEMR ↔ zoom-bridge HTTP (FHIR/REST + webhooks), zoom-bridge direct MariaDB queries via `OPENEMR_DB_URI` |
+| `emr_net` | `openemr`, `mariadb`, `zoom-bridge`, `dbgate` (non-prod), `zoom-module-init` (init) | `postgres` | OpenEMR ↔ MariaDB SQL, OpenEMR ↔ zoom-bridge HTTP (FHIR/REST + webhooks), zoom-bridge direct MariaDB queries via `OPENEMR_DB_URI` |
 | `app_net` | `postgres`, `zoom-bridge`, `dbgate` (non-prod)                                    | `openemr`  | Zoomly app DB access from zoom-bridge; non-prod DB browsing                                                                       |
 
 ### Why the segmentation matters
@@ -326,37 +324,38 @@ shipped to OpenEMR via bind mount, the third is application logs.
 | `postgres_data`  | `postgres:/var/lib/postgresql/data`                | Zoomly app DB — Zoom accounts, meeting records, clinical note records, audit log, provider mappings, encryption-at-rest keys for stored secrets | All Zoom integrations break; re-registration required for each account      |
 | `openemr_sites`  | `openemr:/var/www/.../openemr/sites`               | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                               | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
 | `openemr_logs`   | `openemr:/var/log`                                 | OpenEMR Apache + PHP error logs                                                                                                                 | Diagnostic data only — non-load-bearing                                     |
-| `openemr_public` | `openemr:/var/www/.../openemr/public/images/logos` | Branding assets (Zoom logos baked in by the `branding` init container)                                                                          | Re-runs of `branding` recreate; ephemeral                                   |
+
+(The previous `openemr_public` named volume was retired when branding moved into the custom OpenEMR image — `openemr/Dockerfile` now lays the Zoom logos and favicon under `/var/www/.../openemr/public/images/logos/` at build time.)
 
 ### 7b. Bind mounts — code/config shipped to running containers
 
-These exist because the upstream images don't ship the customizations Zoomly
-needs. Patched PHP files are mounted read-only over the OpenEMR image at
-runtime; Flask-side mounts carry live code (in dev) plus persistent state.
+PHP patches and branding are baked into the custom OpenEMR image
+(`openemr/Dockerfile`). In dev, the auto-loaded `docker-compose.override.yml`
+re-introduces the `openemr/patches/` bind mounts to shadow the baked files for fast
+iteration; `start-dev.sh --baked` skips the override entirely and runs the
+baked image as it would behave in staging/prod. Staging and prod scripts pass
+`-f docker-compose.yml` explicitly so they never see the override and are
+always image-authoritative.
 
-| Source (repo)                                                                    | Target (container)                                                       | Purpose                                                                                                                                                                    |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `./patches/AuthorizationController.php`                                          | `openemr/src/.../AuthorizationController.php`                            | Fixes registration_access_token column-name mismatch in OpenEMR's DELETE handler                                                                                           |
-| `./patches/OAuth2AuthorizationListener.php`                                      | `openemr/src/.../OAuth2AuthorizationListener.php`                        | OAuth2 request router (oauth2/\* dispatch)                                                                                                                                 |
-| `./patches/RsaSha384Signer.php`                                                  | `openemr/src/.../RsaSha384Signer.php`                                    | Fixes multi-client JWT kid lookup bug (single-line root cause: upstream reads `$this->headers['kid']` which is never populated during verify). See `TD-02` in `CLAUDE.md`. |
-| `./patches/zoom_appointment_listener/*.php` (4 files)                            | `openemr/interface/modules/custom_modules/zoom_appointment_listener/...` | OpenEMR event listener module for appointment create/update/delete webhooks                                                                                                |
-| `./patches/add_edit_event.php`                                                   | `openemr/interface/main/calendar/add_edit_event.php`                     | Calendar UI patch — adds Start Zoom Meeting button                                                                                                                         |
-| `./patches/post_calendar/{day,week,month}/ajax_template.html`                    | `openemr/.../views/{day,week,month}/ajax_template.html`                  | Calendar grid template patches — Zoom icon rendering                                                                                                                       |
-| `./patches/patient_tracker.{inc.php,php}`                                        | `openemr/.../patient_tracker.*`                                          | Flow Board UI patches — Telehealth column + Start Zoom Meeting button                                                                                                      |
-| `./patches/clinical_note_fetcher/{forms,fetch_zoom_note,complete_zoom_note}.php` | `openemr/interface/patient_file/encounter/...`                           | Encounter form patches — Retrieve Zoom Note button + eSign trigger                                                                                                         |
-| `./patches/library/zoomly/ZoomBridge.php`                                        | `openemr/library/zoomly/ZoomBridge.php`                                  | Shared HMAC signing helper used by every PHP→Flask call                                                                                                                    |
-| `./keys`                                                                         | `zoom-bridge:/app/keys`                                                  | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive.                                                        |
-| `./server/logs`                                                                  | `zoom-bridge:/app/logs`                                                  | Flask app logs (also written to stdout)                                                                                                                                    |
-| `./server/migrations`                                                            | `zoom-bridge:/app/migrations`                                            | Alembic migration files                                                                                                                                                    |
-| `./server/alembic.ini`                                                           | `zoom-bridge:/app/alembic.ini`                                           | Alembic config                                                                                                                                                             |
-| `./openemr/branding`                                                             | `branding:/branding`                                                     | Source for the one-shot branding copy                                                                                                                                      |
+| Source (repo)         | Target (container)             | Purpose                                                                                                              |
+| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `./keys`              | `zoom-bridge:/app/keys`        | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive.  |
+| `./server/logs`       | `zoom-bridge:/app/logs`        | Flask app logs (also written to stdout)                                                                              |
+| `./server/migrations` | `zoom-bridge:/app/migrations`  | Alembic migration files                                                                                              |
+| `./server/alembic.ini`| `zoom-bridge:/app/alembic.ini` | Alembic config                                                                                                       |
+
+The full set of PHP files baked into the OpenEMR image is enumerated in
+`openemr/Dockerfile`. Notable patches: `AuthorizationController.php` (DELETE
+column-name fix), `RsaSha384Signer.php` (multi-client JWT kid lookup — see
+`TD-02` in `CLAUDE.md`), the four `zoom_appointment_listener` module files,
+and `library/zoomly/ZoomBridge.php` (shared HMAC signing helper).
 
 ### 7c. K8s notes on persistence
 
 - `db_data`, `postgres_data`, `openemr_sites` → PVCs or managed DB (RDS/Cloud SQL). **DB hosting strategy is still open per the demo team** — managed-DB simplifies backup but loses bin-log access; in-cluster StatefulSets keep parity with current behavior. Either works.
-- `openemr_logs`, `openemr_public`, `server/logs` → emptyDir is fine; logs go to stdout in K8s regardless.
+- `openemr_logs`, `server/logs` → emptyDir is fine; logs go to stdout in K8s regardless.
 - `keys/` (per-account RSA private keys) → **Secret material**. Mount from K8s Secrets (or ESO/Vault). Do not bake into image.
-- All PHP patch bind mounts → bake into a custom OpenEMR image (`FROM openemr/openemr:8.0.0` + COPY patches). This is the "Custom OpenEMR Docker Image (Phase 2)" roadmap item in `CLAUDE.md` — for K8s it stops being optional.
+- PHP patches + branding → already baked into the custom OpenEMR image via `openemr/Dockerfile`; the K8s deploy just pulls the published image (once a Zoom-internal GitLab registry is selected).
 - `server/migrations` → bake into the `zoom-bridge` image; `alembic upgrade head` runs as an init container or one-shot Job before pods start.
 
 ---
@@ -489,9 +488,14 @@ The gunicorn-gevent config is what staging and production use.
 
 ## 10. OpenEMR PHP patches
 
-OpenEMR doesn't ship the integration hooks Zoomly needs, so we bind-mount 15+
-patched PHP files into the upstream image. See §7b for the full list. Two
-things worth knowing:
+OpenEMR doesn't ship the integration hooks Zoomly needs, so the custom image
+(`openemr/Dockerfile`) layers 15+ patched PHP files over the upstream
+`openemr/openemr:8.0.0` base. Editing a patch in `openemr/patches/` requires a rebuild
+(`docker compose build openemr`) for the change to land in the image; the dev
+override (`docker-compose.override.yml`, auto-loaded by `start-dev.sh`)
+re-introduces the bind mounts so day-to-day iteration doesn't pay the rebuild
+cost. `start-dev.sh --baked` opts out of the override to verify the baked
+image. See §7b. Two things worth knowing:
 
 1. **One patch is for an actual upstream bug** that hasn't been merged
    yet: `RsaSha384Signer.php` (multi-client JWT kid lookup). Tracked as
@@ -512,8 +516,8 @@ things worth knowing:
 docker exec zoom-bridge uv run alembic upgrade head
 ```
 
-In dev: manual after editing migrations. In staging: `start-staging.sh` runs
-it automatically at the end of the boot sequence.
+In dev: manual after editing migrations. In staging (`start-staging.sh`) and
+prod (`start-prod.sh`): runs automatically at the end of the boot sequence.
 
 ### 11b. Seed data
 
@@ -547,10 +551,10 @@ mini); every other service is sub-minute.
    (non-prod only).
 2. **After `mariadb` healthy:** `openemr` starts and dominates wall-clock
    time during its first-boot DB schema initialization.
-3. **After `openemr` healthy:** the two one-shot init containers fire —
-   `branding` (copies Zoom logos into `openemr_public`) and
-   `zoom-module-init` (registers the appointment listener row). Both exit on
-   completion.
+3. **After `openemr` healthy:** the one-shot `zoom-module-init` container
+   fires (registers the appointment listener row in the `modules` table) and
+   exits. Branding is no longer an init step — the custom OpenEMR image bakes
+   the logos in at build time.
 4. **After `openemr` started + `postgres` healthy:** `zoom-bridge` starts.
    Note that `zoom-bridge` waits on `service_started` for openemr, not
    `service_healthy` — it doesn't need OpenEMR's HTTP layer up before
@@ -562,7 +566,7 @@ mini); every other service is sub-minute.
 | `openemr`                      | `curl -f http://localhost:80/`                  | **6-minute** start_period in dev, **15-minute** in staging (Staging server is a ~12 year old repurposed Zoom Room Mac Mini). This is OpenEMR's first-boot DB-schema initialization. |
 | `postgres`                     | `pg_isready`                                    | Fast                                                                                                                                                                                |
 | `zoom-bridge`                  | `curl -f http://localhost:5000/health`          | Flask `/health` endpoint returns 200 + JSON                                                                                                                                         |
-| `branding`, `zoom-module-init` | n/a                                             | Restart `"no"` — one-shot, expected to exit 0                                                                                                                                       |
+| `zoom-module-init`             | n/a                                             | Restart `"no"` — one-shot, expected to exit 0                                                                                                                                       |
 | `dbgate`                       | n/a                                             | No healthcheck configured                                                                                                                                                           |
 
 ### Cold-boot reality
@@ -620,7 +624,15 @@ else — network shape, services, env vars, DbGate profile, alembic invocation �
 matches dev semantics. The only operational difference vs dev is the slower
 boot and the explicit `alembic upgrade head` step at the end of the script
 (dev users run alembic manually after editing migrations; staging has no live
-code mount so it must run on every deploy).
+code mount so it must run on every deploy). Patch + branding work is also
+identical — the custom OpenEMR image is authoritative everywhere.
+
+For production, `start-prod.sh` brings the stack up with only
+`docker-compose.yml` (no overlays, no auto-loaded `docker-compose.override.yml`,
+no `--profile non-prod` so DbGate stays off) and runs migrations at the end.
+The OpenEMR image must already be built from `openemr/Dockerfile` — once a
+Zoom-internal GitLab container registry is selected, the prod compose will
+swap the `build:` block for an `image:` pull.
 
 ---
 
@@ -634,8 +646,10 @@ matter how the migration is structured.
 
 ### Must change
 
-- **Custom OpenEMR image.** Bake all 15+ PHP patches from `patches/` into a
-  `FROM openemr/openemr:8.0.0` image. Bind mounts don't translate.
+- **Push the custom OpenEMR image to a registry.** Already built locally from
+  `openemr/Dockerfile` (`FROM openemr/openemr:8.0.0` + COPY patches + branding).
+  K8s needs a registry-hosted tag (Zoom-internal GitLab is the planned host);
+  swap the compose `build:` block for `image: <registry>/zoomly-openemr:<sha>`.
 - **Bake `alembic.ini` + `server/migrations/` into the `zoom-bridge` image.**
   Currently bind-mounted from the repo. Run `alembic upgrade head` as a K8s
   Job or init container before the main pod is considered ready.
@@ -650,8 +664,9 @@ matter how the migration is structured.
   Compose networks (§4). Load-bearing — Postgres holds the
   `ENCRYPTION_KEY`-derived ciphertexts for stored Zoom credentials and OAuth
   tokens.
-- **`branding` and `zoom-module-init` → K8s init containers or Jobs.** Both
-  are idempotent (`SELECT … WHERE NOT EXISTS`-style guards); safe to re-run.
+- **`zoom-module-init` → K8s init container or Job.** Idempotent
+  (`SELECT … WHERE NOT EXISTS` guard); safe to re-run. Branding no longer
+  needs an init step — the image carries it.
 - **DbGate compose profile → Helm/Kustomize value.** Today the non-prod
   profile gates whether the DbGate container starts; in K8s this becomes a
   values flag that controls whether the DbGate Deployment is rendered at all.
@@ -702,24 +717,27 @@ Application/clinical concerns omitted — see `CLAUDE.md` for the full tree.
 
 ```
 OpenEMR-Integration/
-├── docker-compose.yml                    ← Base (production-shaped)
-├── docker-compose.override.yml           ← Dev only, gitignored
+├── docker-compose.yml                    ← Base (production-shaped); openemr service uses build: openemr/Dockerfile
+├── docker-compose.override.yml           ← Dev only, gitignored — Flask dev server + openemr/patches/ bind mounts
+├── docker-compose.override.yml.example   ← Committed template for the dev override
 ├── docker-compose.staging.yml            ← Staging overlay (healthcheck only)
 ├── .env                                  ← gitignored
 ├── ARCHITECTURE.md                       ← (this file)
 ├── CLAUDE.md                             ← Application-level context
-├── patches/                              ← OpenEMR PHP patches (bind-mounted into the openemr container)
-│   ├── AuthorizationController.php
-│   ├── OAuth2AuthorizationListener.php
-│   ├── RsaSha384Signer.php
-│   ├── add_edit_event.php
-│   ├── patient_tracker.inc.php
-│   ├── patient_tracker.php
-│   ├── clinical_note_fetcher/            ← forms.php, fetch_zoom_note.php, complete_zoom_note.php
-│   ├── library/zoomly/ZoomBridge.php     ← Shared HMAC helper
-│   ├── post_calendar/                    ← day/week/month ajax_template.html
-│   └── zoom_appointment_listener/        ← AppointmentListener, Bootstrap, DialogCloseListener, openemr.bootstrap
-├── openemr/branding/                     ← Zoom-branded assets (copied in by the branding init container)
+├── openemr/
+│   ├── Dockerfile                        ← Custom OpenEMR image — bakes patches/ + branding/ into FROM openemr/openemr:8.0.0
+│   ├── branding/                         ← Zoom-branded assets (baked into the image)
+│   └── patches/                          ← OpenEMR PHP patches (COPY'd into the image; bind-mounted in dev via override.yml)
+│       ├── AuthorizationController.php
+│       ├── OAuth2AuthorizationListener.php
+│       ├── RsaSha384Signer.php
+│       ├── add_edit_event.php
+│       ├── patient_tracker.inc.php
+│       ├── patient_tracker.php
+│       ├── clinical_note_fetcher/        ← forms.php, fetch_zoom_note.php, complete_zoom_note.php
+│       ├── library/zoomly/ZoomBridge.php ← Shared HMAC helper
+│       ├── post_calendar/                ← day/week/month ajax_template.html
+│       └── zoom_appointment_listener/    ← AppointmentListener, Bootstrap, DialogCloseListener, openemr.bootstrap
 ├── seed_data/                            ← 7 ordered .sql files + seed.sh / reset.sh
 ├── keys/                                 ← Per-account RSA private keys, gitignored, **sensitive**
 ├── server/
@@ -733,8 +751,9 @@ OpenEMR-Integration/
 │   ├── tests/                            ← pytest suite (live-mounted in dev)
 │   ├── logs/                             ← Flask file logs (also stdout)
 │   └── scripts/
-│       ├── start.sh                      ← Dev bootstrap (uses --profile non-prod)
+│       ├── start-dev.sh                  ← Dev bootstrap; --baked flag bypasses override.yml to run the baked image
 │       ├── start-staging.sh              ← Staging bootstrap (overlay + alembic + --profile non-prod)
+│       ├── start-prod.sh                 ← Production bootstrap (no overlays, no DbGate, runs alembic)
 │       └── rotate-encryption-key.py      ← Currently only a stub. No logic yet
 └── client/                               ← React/Vite/TS frontend (built into server/app/static)
 ```
