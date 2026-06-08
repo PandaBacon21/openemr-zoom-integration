@@ -74,14 +74,14 @@ Key shapes to internalize:
 
 ## 3. Service inventory
 
-| Service            | Image                          | Long-lived? | Host port   | Restart          | Network attachments  | Role                                                                                          |
-| ------------------ | ------------------------------ | ----------- | ----------- | ---------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| `mariadb`          | `mariadb:11.4`                 | yes         | none        | `unless-stopped` | `emr_net`            | OpenEMR's relational store                                                                    |
-| `openemr`          | `zoomly-openemr:local` (built from `openemr/Dockerfile` `FROM openemr/openemr:8.0.0`) | yes | `8300:80` | `unless-stopped` | `emr_net` | EHR application (PHP + Apache); patches + branding baked into the image |
-| `zoom-module-init` | `alpine:latest`                | no (exits)  | none        | `no`             | `emr_net`            | One-shot — inserts the ZoomAppointmentListener row into the `modules` MariaDB table           |
-| `postgres`         | `postgres:16`                  | yes         | none        | `unless-stopped` | `app_net`            | Zoomly app DB (accounts, meetings, notes, audit log)                                          |
-| `dbgate`           | `dbgate/dbgate`                | yes         | none        | `unless-stopped` | `app_net`, `emr_net` | **Non-prod only** (compose profile `non-prod`). Web DB browser, reverse-proxied through Flask |
-| `zoom-bridge`      | built from `server/Dockerfile` | yes         | `5000:5000` | `unless-stopped` | `emr_net`, `app_net` | Flask integration server + React static assets + APScheduler                                  |
+| Service            | Image                                                                                 | Long-lived? | Host port   | Restart          | Network attachments  | Role                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------- | ----------- | ----------- | ---------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| `mariadb`          | `mariadb:11.4`                                                                        | yes         | none        | `unless-stopped` | `emr_net`            | OpenEMR's relational store                                                                    |
+| `openemr`          | `zoomly-openemr:local` (built from `openemr/Dockerfile` `FROM openemr/openemr:8.0.0`) | yes         | `8300:80`   | `unless-stopped` | `emr_net`            | EHR application (PHP + Apache); patches + branding baked into the image                       |
+| `zoom-module-init` | `alpine:latest`                                                                       | no (exits)  | none        | `no`             | `emr_net`            | One-shot — inserts the ZoomAppointmentListener row into the `modules` MariaDB table           |
+| `postgres`         | `postgres:16`                                                                         | yes         | none        | `unless-stopped` | `app_net`            | Zoomly app DB (accounts, meetings, notes, audit log)                                          |
+| `dbgate`           | `dbgate/dbgate`                                                                       | yes         | none        | `unless-stopped` | `app_net`, `emr_net` | **Non-prod only** (compose profile `non-prod`). Web DB browser, reverse-proxied through Flask |
+| `zoom-bridge`      | built from `server/Dockerfile`                                                        | yes         | `5000:5000` | `unless-stopped` | `emr_net`, `app_net` | Flask integration server + React static assets + APScheduler                                  |
 
 ### Host ports
 
@@ -148,10 +148,10 @@ service; it's one instance with two IP addresses.
 
 ### What each network does
 
-| Network   | Members                                                                           | Excludes   | Purpose                                                                                                                           |
-| --------- | --------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Network   | Members                                                                             | Excludes   | Purpose                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `emr_net` | `openemr`, `mariadb`, `zoom-bridge`, `dbgate` (non-prod), `zoom-module-init` (init) | `postgres` | OpenEMR ↔ MariaDB SQL, OpenEMR ↔ zoom-bridge HTTP (FHIR/REST + webhooks), zoom-bridge direct MariaDB queries via `OPENEMR_DB_URI` |
-| `app_net` | `postgres`, `zoom-bridge`, `dbgate` (non-prod)                                    | `openemr`  | Zoomly app DB access from zoom-bridge; non-prod DB browsing                                                                       |
+| `app_net` | `postgres`, `zoom-bridge`, `dbgate` (non-prod)                                      | `openemr`  | Zoomly app DB access from zoom-bridge; non-prod DB browsing                                                                       |
 
 ### Why the segmentation matters
 
@@ -180,7 +180,7 @@ client  ──HTTPS──►  edge ── HTTPS ──►  NPM  ── HTTP ─�
 ```
 
 **Cloudflare** (`theloosemoose.us`) is the authoritative DNS provider for the
-domain *and* runs in proxied mode (orange-cloud) for the Zoomly hostnames.
+domain _and_ runs in proxied mode (orange-cloud) for the Zoomly hostnames.
 That means Cloudflare's edge terminates the public TLS connection, applies
 WAF / DDoS / rate-limiting at the edge, and then forwards traffic over HTTPS
 to NPM at the origin. Cloudflare manages the public-facing cert (the one
@@ -318,12 +318,12 @@ shipped to OpenEMR via bind mount, the third is application logs.
 
 ### 7a. Named volumes (real runtime state)
 
-| Volume           | Container path                                     | Contents                                                                                                                                        | Blast radius if lost                                                        |
-| ---------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `db_data`        | `mariadb:/var/lib/mysql`                           | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                  | Total demo loss; re-seed required                                           |
-| `postgres_data`  | `postgres:/var/lib/postgresql/data`                | Zoomly app DB — Zoom accounts, meeting records, clinical note records, audit log, provider mappings, encryption-at-rest keys for stored secrets | All Zoom integrations break; re-registration required for each account      |
-| `openemr_sites`  | `openemr:/var/www/.../openemr/sites`               | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                               | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
-| `openemr_logs`   | `openemr:/var/log`                                 | OpenEMR Apache + PHP error logs                                                                                                                 | Diagnostic data only — non-load-bearing                                     |
+| Volume          | Container path                       | Contents                                                                                                                                        | Blast radius if lost                                                        |
+| --------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `db_data`       | `mariadb:/var/lib/mysql`             | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                  | Total demo loss; re-seed required                                           |
+| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, meeting records, clinical note records, audit log, provider mappings, encryption-at-rest keys for stored secrets | All Zoom integrations break; re-registration required for each account      |
+| `openemr_sites` | `openemr:/var/www/.../openemr/sites` | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                               | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
+| `openemr_logs`  | `openemr:/var/log`                   | OpenEMR Apache + PHP error logs                                                                                                                 | Diagnostic data only — non-load-bearing                                     |
 
 (The previous `openemr_public` named volume was retired when branding moved into the custom OpenEMR image — `openemr/Dockerfile` now lays the Zoom logos and favicon under `/var/www/.../openemr/public/images/logos/` at build time.)
 
@@ -337,12 +337,12 @@ baked image as it would behave in staging/prod. Staging and prod scripts pass
 `-f docker-compose.yml` explicitly so they never see the override and are
 always image-authoritative.
 
-| Source (repo)         | Target (container)             | Purpose                                                                                                              |
-| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `./keys`              | `zoom-bridge:/app/keys`        | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive.  |
-| `./server/logs`       | `zoom-bridge:/app/logs`        | Flask app logs (also written to stdout)                                                                              |
-| `./server/migrations` | `zoom-bridge:/app/migrations`  | Alembic migration files                                                                                              |
-| `./server/alembic.ini`| `zoom-bridge:/app/alembic.ini` | Alembic config                                                                                                       |
+| Source (repo)          | Target (container)             | Purpose                                                                                                             |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `./keys`               | `zoom-bridge:/app/keys`        | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive. |
+| `./server/logs`        | `zoom-bridge:/app/logs`        | Flask app logs (also written to stdout)                                                                             |
+| `./server/migrations`  | `zoom-bridge:/app/migrations`  | Alembic migration files                                                                                             |
+| `./server/alembic.ini` | `zoom-bridge:/app/alembic.ini` | Alembic config                                                                                                      |
 
 The full set of PHP files baked into the OpenEMR image is enumerated in
 `openemr/Dockerfile`. Notable patches: `AuthorizationController.php` (DELETE
@@ -560,14 +560,14 @@ mini); every other service is sub-minute.
    `service_healthy` — it doesn't need OpenEMR's HTTP layer up before
    booting, only running.
 
-| Service                        | Healthcheck                                     | Notes                                                                                                                                                                               |
-| ------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mariadb`                      | `healthcheck.sh --connect --innodb_initialized` | Fast (~30-60s)                                                                                                                                                                      |
-| `openemr`                      | `curl -f http://localhost:80/`                  | **6-minute** start_period in dev, **15-minute** in staging (Staging server is a ~12 year old repurposed Zoom Room Mac Mini). This is OpenEMR's first-boot DB-schema initialization. |
-| `postgres`                     | `pg_isready`                                    | Fast                                                                                                                                                                                |
-| `zoom-bridge`                  | `curl -f http://localhost:5000/health`          | Flask `/health` endpoint returns 200 + JSON                                                                                                                                         |
-| `zoom-module-init`             | n/a                                             | Restart `"no"` — one-shot, expected to exit 0                                                                                                                                       |
-| `dbgate`                       | n/a                                             | No healthcheck configured                                                                                                                                                           |
+| Service            | Healthcheck                                     | Notes                                                                                                                                                                               |
+| ------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mariadb`          | `healthcheck.sh --connect --innodb_initialized` | Fast (~30-60s)                                                                                                                                                                      |
+| `openemr`          | `curl -f http://localhost:80/`                  | **6-minute** start_period in dev, **15-minute** in staging (Staging server is a ~12 year old repurposed Zoom Room Mac Mini). This is OpenEMR's first-boot DB-schema initialization. |
+| `postgres`         | `pg_isready`                                    | Fast                                                                                                                                                                                |
+| `zoom-bridge`      | `curl -f http://localhost:5000/health`          | Flask `/health` endpoint returns 200 + JSON                                                                                                                                         |
+| `zoom-module-init` | n/a                                             | Restart `"no"` — one-shot, expected to exit 0                                                                                                                                       |
+| `dbgate`           | n/a                                             | No healthcheck configured                                                                                                                                                           |
 
 ### Cold-boot reality
 
@@ -646,13 +646,16 @@ matter how the migration is structured.
 
 ### Must change
 
-- **Push the custom OpenEMR image to a registry.** Already built locally from
-  `openemr/Dockerfile` (`FROM openemr/openemr:8.0.0` + COPY patches + branding).
-  K8s needs a registry-hosted tag (Zoom-internal GitLab is the planned host);
-  swap the compose `build:` block for `image: <registry>/zoomly-openemr:<sha>`.
-- **Bake `alembic.ini` + `server/migrations/` into the `zoom-bridge` image.**
-  Currently bind-mounted from the repo. Run `alembic upgrade head` as a K8s
-  Job or init container before the main pod is considered ready.
+- **Push the custom images to a registry.** Both `zoomly-openemr:local` (built
+  from `openemr/Dockerfile`, `FROM openemr/openemr:8.0.0` + COPY patches +
+  branding) and `zoomly-bridge:local` (built from `server/Dockerfile`,
+  multi-stage Node + Python) are local-only today. K8s needs registry-hosted
+  tags; swap each compose `build:`
+  block for `image: <registry>/zoomly-{openemr,bridge}:<sha>`.
+- **Run `alembic upgrade head` as a K8s Job or init container.**
+  `alembic.ini` + `server/migrations/` are already baked into the
+  `zoomly-bridge:local` image by `server/Dockerfile`'s `COPY server/ .`; the
+  dev override re-bind-mounts them for fast iteration.
 - **`keys/` → K8s Secret.** Per-account RSA private keys used for SMART on
   FHIR JWT assertions. Highly sensitive. Mount from a Secret; never bake into
   an image.
@@ -682,7 +685,19 @@ matter how the migration is structured.
 - **Switch Flask logging to stdout-only.** Drop the
   `ConcurrentRotatingFileHandler` in `_configure_logging` and the
   `server/logs` bind mount with it. Logs go to whatever cluster log
-  aggregator is in use.
+  aggregator is in use. Deferred during the compose-side image hardening pass
+  — the change is real (touches the Flask logging config, drops a feature)
+  and is best done when the target log stack (Loki / ELK / CloudWatch) is
+  selected so we know the stdout format requirements.
+- **Run `zoomly-bridge` as a non-root user.** Stock `python:3.13-slim`
+  containers run as root, which most K8s `PodSecurityContext` policies
+  reject. Add a `useradd app && USER app` step to `server/Dockerfile` and
+  chown `/app` + the writable paths (`/app/keys`, `/app/logs`) accordingly.
+  Deferred during the compose-side image hardening pass — modest blast
+  radius (perms on mount targets), so worth landing with the K8s deploy when
+  the actual SecurityContext is being authored. The `zoomly-openemr:local`
+  image already runs as `apache` (uid 1000) from the upstream base, no
+  change needed there.
 - **Move seed/reset into a Flask endpoint.** Today `seed.sh` runs on the host
   via `docker exec` against a `mariadb` client. Pattern to copy: the existing
   `/config/demo/hydrate` endpoint.

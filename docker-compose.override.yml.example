@@ -61,3 +61,7 @@ services:
       - ./server/tests:/app/tests # live test mount so pytest sees edits
       - ./seed_data:/seed_data # tests resolve repo_root via parents[2]
       - ./openemr/patches:/patches # tests resolve repo_root via parents[2]
+      # Bake-shadow: migrations + alembic.ini live in the image, but devs need
+      # new migration files to take effect without rebuilding zoom-bridge.
+      - ./server/migrations:/app/migrations
+      - ./server/alembic.ini:/app/alembic.ini
