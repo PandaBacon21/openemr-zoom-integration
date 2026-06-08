@@ -1,0 +1,77 @@
+# Build context exclusions shared by openemr/Dockerfile and server/Dockerfile.
+# Both use `context: .` (repo root) so anything not excluded here is sent to
+# the Docker daemon on every build.
+#
+# Two concerns:
+#   1. Speed — keep the build context lean (the repo root carries node_modules,
+#      .git history, and pytest/Vite caches that have no business in an image).
+#   2. Safety — secrets (.env, keys/, *.pem) must NEVER be sent to the build
+#      daemon, even by accident. The Dockerfiles don't COPY them, but a stray
+#      COPY . or future refactor would expose them otherwise.
+
+# ─── Secrets / sensitive (NEVER bake these into an image) ─────────────────────
+.env
+.env.*
+!.env.example
+keys/
+*.pem
+*.key
+
+# ─── Git + tooling ────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+.gitlab-ci.yml
+
+# ─── Editor + OS ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# ─── Python (host venv + cache shouldn't leak into the image) ─────────────────
+.venv/
+venv/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.uv-cache/
+**/.uv-cache/
+
+# ─── Node / Vite (host node_modules is huge; build container reinstalls) ──────
+node_modules/
+**/node_modules/
+client/dist/
+client/.vite/
+server/app/static/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ─── Logs (runtime artifacts, never source) ───────────────────────────────────
+**/logs/
+*.log
+
+# ─── Docs / non-code (not needed at runtime) ──────────────────────────────────
+*.md
+!server/README.md
+docs/
+*.docx
+
+# ─── Compose overrides + local-only files ─────────────────────────────────────
+docker-compose.override.yml
+*.override.yml
+.temp
+*.tmp
+*.temp
+
+# ─── Test + build artifacts ───────────────────────────────────────────────────
+.coverage
+htmlcov/
+build/
+dist/
+wheels/
+*.egg-info/

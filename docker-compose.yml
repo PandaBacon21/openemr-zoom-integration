@@ -158,6 +158,7 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+    image: zoomly-bridge:local
     container_name: zoom-bridge
     restart: unless-stopped
     ports:
@@ -178,10 +179,12 @@ services:
       FLASK_ENV: production
       ENABLE_DBGATE: ${ENABLE_DBGATE:-false}
     volumes:
+      # migrations/ + alembic.ini are baked into the image by server/Dockerfile
+      # (COPY server/ .). Dev re-introduces them as bind mounts via
+      # docker-compose.override.yml so new migration files take effect without
+      # a rebuild; staging and prod run from the baked copies.
       - ./keys:/app/keys
       - ./server/logs:/app/logs
-      - ./server/migrations:/app/migrations
-      - ./server/alembic.ini:/app/alembic.ini
     networks:
       - app_net
       - emr_net
