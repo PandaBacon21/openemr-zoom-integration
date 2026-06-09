@@ -173,3 +173,41 @@ def build_jwks_for_accounts(accounts: list) -> dict:
             )
 
     return {"keys": keys}
+
+def build_single_key_jwks(account) -> dict:
+    """Build a single-key JWKS document for an account's Epic-ZCC keypair.
+
+    Returns {"keys": [<JWK>]} with kid = account.epic_kid. The underlying RSA
+    keypair (account.private_key_path) is the same one that backs OpenEMR
+    SMART on FHIR; only the kid label differs so Zoom can resolve our public
+    key via an Epic-shaped JKU URL.
+
+    Returns {"keys": []} if epic_kid is unset or the key file is missing —
+    the caller decides whether that maps to 404 or some other outcome.
+    Load failures are logged but never raise, matching build_jwks_for_accounts.
+    """
+    if not account.epic_kid or not account.private_key_path:
+        return {"keys": []}
+
+    try:
+        private_key = load_private_key(account.account_id)
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        jwk = JsonWebKey.import_key(
+            public_pem,  # type: ignore[arg-type]
+            {"kty": "RSA", "use": "sig", "kid": account.epic_kid},
+        )
+        return {"keys": [dict(jwk)]}
+    except FileNotFoundError:
+        logger.error(
+            f"Epic-ZCC private key not found for account {account.account_id} "
+            f"at {account.private_key_path}"
+        )
+        return {"keys": []}
+    except Exception as e:
+        logger.error(
+            f"Error loading Epic-ZCC key for account {account.account_id}: {e}"
+        )
+        return {"keys": []}

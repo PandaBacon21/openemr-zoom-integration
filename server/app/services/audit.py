@@ -129,6 +129,9 @@ def write_audit_log(
                                             HTTP failure.
 
     Event types for Epic-ZCC CTI middleware (Sprint 11):
+      epic_zcc.jwks_fetched         — GET /oauth2/keys/<version>/<kid> served
+                                       a single-key JWKS to Zoom.
+                                       detail.client_ip, detail.kid, detail.version
       epic_zcc.token_issued         — POST /oauth2/token minted an opaque
                                        access token. detail.iss, detail.jti,
                                        detail.expires_in

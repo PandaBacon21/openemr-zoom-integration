@@ -124,6 +124,8 @@ The script loads `MYSQL_ROOT_PASSWORD`, `OPENEMR_DB_NAME`, and optional `MARIADB
 
 Demo patient, provider, nurse, and medical assistant emails are all defined directly in the Sprint 12 seed files — patients in `seed_data/05_patients.sql`, staff in `seed_data/03_staff.sql`. The seed loader (`seed.sh`) cat-pipes `01_globals.sql` through `07_clinical_data.sql` into a single mariadb session so cross-file `@var` references resolve correctly.
 
+Current seed shape: 4 facilities, 18 patient-panel providers, 108 patients (PIDs 100-207), 292 weekday appointments, regional pharmacies/payers, complete patient contact/insurance fields, and provider+nurse care teams.
+
 To clear the seeded demo data later:
 
 ```bash

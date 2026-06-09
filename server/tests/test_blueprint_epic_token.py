@@ -356,3 +356,162 @@ def test_bearer_helper_rejects_account_mismatch(app, rsa_keypair, stub_jwks):
         assert status == 401
         failed = _audit_details(app, "epic_zcc.bearer_token_invalid")
         assert any(d.get("reason") == "account_mismatch" for d in failed)
+
+
+# ============================================================================
+# S11-04 — Per-account JWKS endpoint and build_client_assertion jku kwarg
+# ============================================================================
+
+
+TEST_EPIC_KID = "F9658B7A027904FB43A16DB652A31A6C"
+JWKS_PATH = f"/zoomly/{TEST_ACCOUNT_ID}/interconnect-amcurprd-oauth/oauth2/keys/1/{TEST_EPIC_KID}"
+
+
+def _seed_account_with_real_keypair(app, *, epic_kid: str | None = TEST_EPIC_KID) -> str:
+    """Seed an active CTI account whose RSA keypair actually exists on disk.
+
+    Writes the keypair into KEYS_BASE_DIR/<account_id>/ via generate_keypair so
+    services/keys.py:load_private_key (which derives the path from the account
+    ID) can resolve it. Returns the private_key_path stored on the model.
+    """
+    from app.services.keys import generate_keypair
+
+    with app.app_context():
+        private_path, _ = generate_keypair(TEST_ACCOUNT_ID)
+        account = ZoomAccount(
+            account_id=TEST_ACCOUNT_ID,
+            client_id="zoom-client-id",
+            client_secret="zoom-client-secret",
+            webhook_secret="zoom-webhook-secret",
+            openemr_client_id="openemr-client-id",
+            private_key_path=private_path,
+            kid=f"zoomly-{TEST_ACCOUNT_ID}",
+            epic_kid=epic_kid,
+            is_active=True,
+        )
+        db.session.add(account)
+        db.session.add(
+            AccountConfig(
+                account_id=TEST_ACCOUNT_ID,
+                timezone="America/New_York",
+                epic_zcc_enabled=True,
+            )
+        )
+        db.session.commit()
+        return private_path
+
+
+def test_jwks_endpoint_happy_path(app, client):
+    _seed_account_with_real_keypair(app)
+
+    resp = client.get(JWKS_PATH)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert isinstance(body.get("keys"), list)
+    assert len(body["keys"]) == 1
+    jwk = body["keys"][0]
+    assert jwk["kid"] == TEST_EPIC_KID
+    assert jwk["kty"] == "RSA"
+    assert jwk["use"] == "sig"
+    assert "n" in jwk and "e" in jwk
+
+    fetched = _audit_rows(app, "epic_zcc.jwks_fetched")
+    assert len(fetched) == 1
+    detail = json.loads(fetched[0].detail)
+    assert detail["kid"] == TEST_EPIC_KID
+    assert detail["version"] == "1"
+
+
+def test_jwks_endpoint_wrong_kid(app, client):
+    _seed_account_with_real_keypair(app)
+
+    resp = client.get(
+        f"/zoomly/{TEST_ACCOUNT_ID}/interconnect-amcurprd-oauth/oauth2/keys/1/some-other-kid"
+    )
+
+    assert resp.status_code == 404
+
+
+def test_jwks_endpoint_wrong_version(app, client):
+    _seed_account_with_real_keypair(app)
+
+    resp = client.get(
+        f"/zoomly/{TEST_ACCOUNT_ID}/interconnect-amcurprd-oauth/oauth2/keys/2/{TEST_EPIC_KID}"
+    )
+
+    assert resp.status_code == 404
+
+
+def test_jwks_endpoint_account_without_epic_kid(app, client):
+    """Account has CTI enabled but Initialize CTI button hasn't been pressed yet."""
+    _seed_account_with_real_keypair(app, epic_kid=None)
+
+    resp = client.get(JWKS_PATH)
+
+    assert resp.status_code == 404
+
+
+def test_jwks_endpoint_cti_disabled(app, client):
+    """Blueprint-level gate: epic_zcc_enabled=False returns 404 even with the right kid."""
+    from app.services.keys import generate_keypair
+
+    with app.app_context():
+        private_path, _ = generate_keypair(TEST_ACCOUNT_ID)
+        db.session.add(ZoomAccount(
+            account_id=TEST_ACCOUNT_ID,
+            client_id="zoom-client-id",
+            client_secret="zoom-client-secret",
+            webhook_secret="zoom-webhook-secret",
+            private_key_path=private_path,
+            kid=f"zoomly-{TEST_ACCOUNT_ID}",
+            epic_kid=TEST_EPIC_KID,
+            is_active=True,
+        ))
+        db.session.add(AccountConfig(
+            account_id=TEST_ACCOUNT_ID,
+            timezone="America/New_York",
+            epic_zcc_enabled=False,
+        ))
+        db.session.commit()
+
+    resp = client.get(JWKS_PATH)
+    assert resp.status_code == 404
+
+
+def test_build_client_assertion_with_jku_header(app, tmp_path):
+    """build_client_assertion adds jku to the JWT header when provided."""
+    from app.auth.jwt_assertion import build_client_assertion
+    from app.services.keys import generate_keypair
+
+    with app.app_context():
+        private_path, _ = generate_keypair(TEST_ACCOUNT_ID)
+        jku_url = "https://zoom-bridge.example.us/zoomly/x/interconnect-amcurprd-oauth/oauth2/keys/1/abc"
+        token = build_client_assertion(
+            client_id="test-client",
+            audience="https://example/token",
+            key_path=private_path,
+            key_id="kid-123",
+            jku=jku_url,
+        )
+        header = jwt.get_unverified_header(token)
+        assert header["kid"] == "kid-123"
+        assert header["jku"] == jku_url
+
+
+def test_build_client_assertion_without_jku_omits_header(app, tmp_path):
+    """Existing OpenEMR call sites pass no jku — header must not contain it."""
+    from app.auth.jwt_assertion import build_client_assertion
+    from app.services.keys import generate_keypair
+
+    with app.app_context():
+        private_path, _ = generate_keypair(TEST_ACCOUNT_ID)
+        token = build_client_assertion(
+            client_id="test-client",
+            audience="https://example/token",
+            key_path=private_path,
+            key_id="kid-123",
+        )
+        header = jwt.get_unverified_header(token)
+        assert header["kid"] == "kid-123"
+        assert "jku" not in header

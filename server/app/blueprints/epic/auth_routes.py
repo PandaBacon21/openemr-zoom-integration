@@ -11,9 +11,10 @@ from flask import current_app, g, jsonify, request
 
 from app.blueprints.epic import epic_bp
 from app.services.audit import write_audit_log
-from app.services.epic.constants import EPIC_DEFAULT_SCOPES
+from app.services.epic.constants import EPIC_DEFAULT_SCOPES, EPIC_KEY_VERSION
 from app.services.epic.inbound_jwt import InvalidAssertionError, verify_zoom_assertion
 from app.services.epic.token_store import issue_token
+from app.services.keys import build_single_key_jwks
 
 
 logger = logging.getLogger(__name__)
@@ -85,3 +86,42 @@ def token(zoom_account_id: str):
         "expires_in": expires_in,
         "scope": EPIC_DEFAULT_SCOPES,
     }), 200
+
+
+@epic_bp.route("/oauth2/keys/<version>/<kid>", methods=["GET"])
+def jwks(zoom_account_id: str, version: str, kid: str):
+    """Per-account single-key JWKS endpoint.
+
+    Zoom fetches this URL (registered as "JWT key set URL" in their admin
+    portal) to resolve the kid we use when signing outbound assertions to
+    ZCC. The version segment is hardcoded to EPIC_KEY_VERSION for Sprint 11;
+    a future key-rotation feature will bump it.
+
+    We refuse to return a JWKS unless the path kid matches account.epic_kid
+    exactly — that way the endpoint can't be used to enumerate other
+    accounts' kids via guessing.
+    """
+    account = g.zoom_account
+
+    if version != EPIC_KEY_VERSION:
+        return jsonify({"error": "not_found"}), 404
+    if not account.epic_kid or kid != account.epic_kid:
+        return jsonify({"error": "not_found"}), 404
+
+    jwks_doc = build_single_key_jwks(account)
+    if not jwks_doc["keys"]:
+        # epic_kid was set but the key file is missing — log + 404.
+        # build_single_key_jwks already wrote the diagnostic to the app log.
+        return jsonify({"error": "not_found"}), 404
+
+    client_ip = (
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.remote_addr
+    )
+    write_audit_log(
+        event_type="epic_zcc.jwks_fetched",
+        success=True,
+        zoom_account_id=account.account_id,
+        detail={"client_ip": client_ip, "kid": kid, "version": version},
+    )
+    return jsonify(jwks_doc), 200

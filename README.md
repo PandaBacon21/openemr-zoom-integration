@@ -131,6 +131,8 @@ Without seed data, OpenEMR has no providers, patients, or appointments — most 
 
 Loads 7 ordered SQL files into a single MariaDB session (idempotent — re-runs produce the same state). See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) §"Optional: seed OpenEMR demo data" for details.
 
+Current seed shape: 4 facilities, 18 patient-panel providers, 108 patients (PIDs 100-207), 292 weekday appointments, regional pharmacies/payers, complete patient contact/insurance fields, and provider+nurse care teams.
+
 ### 5. (Optional) React development with HMR
 
 The Flask container serves the production Vite build out of `server/app/static/`. For frontend development with hot-module-reload:
