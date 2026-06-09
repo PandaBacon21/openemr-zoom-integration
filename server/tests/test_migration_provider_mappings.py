@@ -1,3 +1,12 @@
+"""Archaeology check on the Sprint 6 schema migration (5ecd2a942ca3).
+
+The test names and content reference `provider_mappings` / `openemr_provider_id`
+because that's the historical schema the migration created. Sprint 11 (S11-01)
+renamed the table to `user_mappings` and the column to `openemr_user_id` in a
+later migration (fadc607b7921). The old migration file is frozen history; this
+test asserts it still says what it always said.
+"""
+
 from pathlib import Path
 
 

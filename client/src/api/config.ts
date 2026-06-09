@@ -17,7 +17,6 @@ export interface Registration {
   demo_patient_email_override: string | null;
   demo_patient_phone_override_enabled: boolean;
   demo_patient_phone_override: string | null;
-  allow_shared_zoom_user: boolean;
   note_writeback_mode: "both" | "clinical_note_only" | "soap_only";
   created_at: string;
   updated_at: string;
@@ -31,19 +30,32 @@ export interface VerifyResult {
 }
 
 // User Mapping
-export interface ProviderMapping {
-  openemr_fhir_id: string;
-  openemr_provider_npi: string;
-  openemr_provider_id: string;
-  openemr_provider_name: string;
+// One row per OpenEMR user per Zoomly account. A row can hold either or both
+// roles via `is_provider` / `is_zcc_agent`. Provider-role fields
+// (openemr_fhir_id / openemr_provider_npi / zoom_user_id) are nullable so an
+// agent-only row can omit them. ZCC-agent-role fields (zcc_user_id /
+// agent_role) are nullable so a provider-only row can omit them.
+export interface UserMapping {
+  // Always populated
+  openemr_user_id: string;
+  zoom_user_email: string;
+  is_provider: boolean;
+  is_zcc_agent: boolean;
+  zoom_account_id: string;
+  created_at: string;
+  // OpenEMR-side (provider role)
+  openemr_fhir_id: string | null;
+  openemr_provider_npi: string | null;
+  openemr_provider_name: string | null;
   openemr_facility_id: number | null;
   openemr_facility_name: string | null;
-  zoom_account_id: string;
-  zoom_user_id: string;
-  zoom_user_email: string;
-  zoom_user_name: string;
+  // Zoom-side (shared across roles; populated for both providers and agents)
+  zoom_user_id: string | null;
+  zoom_user_name: string | null;
   zoom_user_timezone: string | null;
-  created_at: string;
+  // ZCC-agent role
+  zcc_user_id: string | null;
+  agent_role: string | null;
 }
 
 export interface OpenEMRProvider {
@@ -68,6 +80,19 @@ export interface ZoomUser {
   timezone: string | null;
 }
 
+// A ZCC user — subset of Zoom platform users with Contact Center entitlement.
+// Returned by GET /zoom/zcc/users (Zoom REST: /contact_center/users).
+// The form cross-references by email: a Zoom user that matches a ZCC user can
+// be assigned the ZCC Agent role; one without can only be a provider.
+export interface ZccUser {
+  zcc_user_id: string;
+  zoom_user_id: string;
+  email: string;
+  display_name: string;
+  status: string | null;
+  role_name: string | null;
+}
+
 // Appointment Type Filter
 export interface AppointmentType {
   zoom_account_id: number;
@@ -88,7 +113,7 @@ export interface AuditLogEntry {
   zoom_account_id: string | null;
   openemr_appointment_id: string | null;
   openemr_encounter_number: string | null;
-  openemr_provider_id: string | null;
+  openemr_user_id: string | null;
   openemr_patient_id: string | null;
   zoom_meeting_id: string | null;
   zoom_note_id: string | null;
@@ -118,7 +143,7 @@ export interface AuditLogFilters {
   exclude_event_types?: string;
   openemr_appointment_id?: string;
   openemr_encounter_number?: string;
-  openemr_provider_id?: string;
+  openemr_user_id?: string;
   openemr_patient_id?: string;
   zoom_meeting_id?: string;
   zoom_note_id?: string;
@@ -167,38 +192,45 @@ export const verifyAccount = (zoom_account_id: string) =>
 export const deregisterAccount = (zoom_account_id: string) =>
   apiClient.delete(`/config/register/${zoom_account_id}`);
 
-// Provider mappings
-export const getProviderMappings = (zoom_account_id: string) =>
-  apiClient.get<{ count: number; providers: ProviderMapping[] }>(
+// User mappings (formerly provider mappings; route URL kept stable for now)
+export const getUserMappings = (zoom_account_id: string) =>
+  apiClient.get<{ count: number; providers: UserMapping[] }>(
     `/config/providers?zoom_account_id=${zoom_account_id}`,
   );
 
-export const createProviderMapping = (data: {
+export const createUserMapping = (data: {
   zoom_account_id: string;
-  openemr_fhir_id: string;
-  openemr_provider_npi: string;
-  openemr_provider_id?: string;
+  zoom_user_email: string;
+  is_provider?: boolean;
+  is_zcc_agent?: boolean;
+  // Provider-role fields (required when is_provider)
+  openemr_fhir_id?: string | null;
+  openemr_provider_npi?: string | null;
   openemr_provider_name?: string;
   openemr_facility_id?: number | null;
   openemr_facility_name?: string | null;
-  zoom_user_id: string;
-  zoom_user_email: string;
+  zoom_user_id?: string | null;
   zoom_user_name?: string;
-  zoom_user_type: string;
+  zoom_user_type?: number | null;
   zoom_user_timezone?: string | null;
-}) => apiClient.post<ProviderMapping>("/config/providers", data);
+  // OpenEMR user (any role)
+  openemr_user_id?: string;
+  // ZCC-agent fields (required when is_zcc_agent)
+  zcc_user_id?: string | null;
+  agent_role?: string | null;
+}) => apiClient.post<UserMapping>("/config/providers", data);
 
-export const deleteProviderMapping = (
-  openemr_provider_id: string,
+export const deleteUserMapping = (
+  openemr_user_id: string,
   zoom_account_id: string,
 ) =>
   apiClient.delete(
-    `/config/providers/${openemr_provider_id}?zoom_account_id=${zoom_account_id}`,
+    `/config/providers/${openemr_user_id}?zoom_account_id=${zoom_account_id}`,
   );
 
 // Demo hydration
 export interface HydrateSkip {
-  openemr_provider_id: string;
+  openemr_user_id: string;
   reason: "unknown_specialty" | "no_matching_categories" | "no_patients";
 }
 
@@ -207,14 +239,14 @@ export interface HydrateError {
     | "generate_appointment"
     | "create_meeting"
     | "backfill_meeting";
-  openemr_provider_id: string;
+  openemr_user_id: string;
   openemr_appointment_id?: number | string;
   slot?: string;
   error?: string;
 }
 
 export interface PastEncounterSkip {
-  openemr_provider_id: string;
+  openemr_user_id: string;
   reason:
     | "unknown_specialty"
     | "no_patients"
@@ -223,7 +255,7 @@ export interface PastEncounterSkip {
 }
 
 export interface PastEncounterError {
-  openemr_provider_id: string;
+  openemr_user_id: string;
   stage: "create_appointment" | "create_encounter" | "write_note";
   error: string;
 }
@@ -279,6 +311,14 @@ export const getOpenEMRProviders = (zoom_account_id: string) =>
 export const getZoomUsers = (zoom_account_id: string) =>
   apiClient.get<{ users: ZoomUser[] }>(
     `/zoom/users?zoom_account_id=${zoom_account_id}`,
+  );
+
+// ZCC user lookup — Contact Center subset of Zoom platform users.
+// Used by the user-mapping form to enable/disable the ZCC Agent checkbox
+// based on whether the selected Zoom user has CC entitlement.
+export const getZccUsers = (zoom_account_id: string) =>
+  apiClient.get<{ count: number; users: ZccUser[] }>(
+    `/zoom/zcc/users?zoom_account_id=${zoom_account_id}`,
   );
 
 // Features (process-wide UI feature flags)

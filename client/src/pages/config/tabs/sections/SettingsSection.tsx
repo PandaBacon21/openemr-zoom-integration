@@ -63,9 +63,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
     account.demo_patient_phone_override ?? "",
   );
 
-  const [allowSharedZoomUser, setAllowSharedZoomUser] = useState(
-    account.allow_shared_zoom_user ?? false,
-  );
   const [noteWritebackMode, setNoteWritebackMode] = useState<
     "both" | "clinical_note_only" | "soap_only"
   >(account.note_writeback_mode ?? "both");
@@ -90,7 +87,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
     );
     setCustomEmail(account.demo_patient_email_override ?? "");
     setCustomPhone(account.demo_patient_phone_override ?? "");
-    setAllowSharedZoomUser(account.allow_shared_zoom_user ?? false);
     setNoteWritebackMode(account.note_writeback_mode ?? "both");
     setError(null);
     setSuccess(false);
@@ -98,7 +94,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
 
   const isDirty =
     timezone !== account.timezone ||
-    allowSharedZoomUser !== (account.allow_shared_zoom_user ?? false) ||
     noteWritebackMode !== (account.note_writeback_mode ?? "both") ||
     (emailMode === "custom") !==
       (account.demo_patient_email_override_enabled ?? false) ||
@@ -138,7 +133,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
     payload.demo_patient_phone_override =
       effectivePhoneMode === "custom" ? customPhone.trim() : null;
 
-    payload.allow_shared_zoom_user = allowSharedZoomUser;
     payload.note_writeback_mode = noteWritebackMode;
 
     try {
@@ -152,7 +146,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
           effectiveEmailMode === "custom" ? customEmail.trim() : null,
         demo_patient_phone_override:
           effectivePhoneMode === "custom" ? customPhone.trim() : null,
-        allow_shared_zoom_user: allowSharedZoomUser,
         note_writeback_mode: noteWritebackMode,
       });
       setSuccess(true);
@@ -201,51 +194,6 @@ const SettingsSection: React.FC<Props> = ({ account, onAccountUpdated }) => {
               </MenuItem>
             ))}
           </TextField>
-          <Divider />
-
-          {/* Provider mapping behavior */}
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            Provider Mapping
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={allowSharedZoomUser}
-                onChange={(e) => {
-                  setAllowSharedZoomUser(e.target.checked);
-                  setError(null);
-                }}
-                sx={{
-                  "& .MuiSwitch-switchBase.Mui-checked": {
-                    color: "primary.main",
-                  },
-                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-                    bgcolor: "primary.main",
-                  },
-                }}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  Multiple providers to one Zoom license
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  When enabled, multiple OpenEMR providers can share the same
-                  Zoom user license
-                </Typography>
-              </Box>
-            }
-          />
-
           <Divider />
 
           {/* Note writeback mode */}

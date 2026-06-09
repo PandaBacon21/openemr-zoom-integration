@@ -30,7 +30,7 @@ from datetime import date, datetime, time, timezone
 from sqlalchemy import text
 
 from app.extensions import get_openemr_db_engine
-from app.models import ProviderMapping, ZoomAccount
+from app.models import UserMapping, ZoomAccount
 from app.services.audit import write_audit_log
 from app.services.openemr.appointments.appointment import (
     generate_future_appointment,
@@ -89,8 +89,8 @@ def seed_past_locked_encounters(account: ZoomAccount, note_text: str | None = No
     Returns a summary dict:
         {
             "past_encounters_created": int,
-            "past_encounter_skips": [{"openemr_provider_id": str, "reason": str}, ...],
-            "past_encounter_errors": [{"openemr_provider_id": str, "stage": str, "error": str}, ...],
+            "past_encounter_skips": [{"openemr_user_id": str, "reason": str}, ...],
+            "past_encounter_errors": [{"openemr_user_id": str, "stage": str, "error": str}, ...],
         }
     """
     summary = {
@@ -99,7 +99,7 @@ def seed_past_locked_encounters(account: ZoomAccount, note_text: str | None = No
         "past_encounter_errors": [],
     }
 
-    mappings = ProviderMapping.query.filter_by(
+    mappings = UserMapping.query.filter_by(
         zoom_account_id=account.account_id, is_active=True
     ).all()
 
@@ -115,11 +115,11 @@ def seed_past_locked_encounters(account: ZoomAccount, note_text: str | None = No
 
 def _seed_one_provider(
     account: ZoomAccount,
-    mapping: ProviderMapping,
+    mapping: UserMapping,
     note_text: str | None,
     summary: dict,
 ) -> None:
-    provider_user_id = int(mapping.openemr_provider_id)
+    provider_user_id = int(mapping.openemr_user_id)
 
     # 0. Per-provider, per-day guard. Earlier versions used a global check
     # that broke multi-account hydration (one account's seed marker
@@ -290,7 +290,7 @@ def _seed_one_provider(
         event_type="demo.past_encounter_seeded",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         openemr_patient_id=str(slot_patient_pid),
         openemr_appointment_id=str(eid),
         openemr_encounter_number=str(encounter_number),
@@ -830,11 +830,11 @@ def _record_skip(summary: dict, account: ZoomAccount, provider_user_id: int, rea
         event_type="demo.past_encounter_skipped",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         detail={"reason": reason},
     )
     summary["past_encounter_skips"].append({
-        "openemr_provider_id": str(provider_user_id),
+        "openemr_user_id": str(provider_user_id),
         "reason": reason,
     })
 
@@ -844,12 +844,12 @@ def _record_error(summary: dict, account: ZoomAccount, provider_user_id: int, st
         event_type="demo.past_encounter_failed",
         success=False,
         zoom_account_id=account.account_id,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         error_message=message,
         detail={"stage": stage},
     )
     summary["past_encounter_errors"].append({
-        "openemr_provider_id": str(provider_user_id),
+        "openemr_user_id": str(provider_user_id),
         "stage": stage,
         "error": message,
     })

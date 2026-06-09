@@ -12,7 +12,7 @@ def test_write_audit_log_persists_entry_and_normalizes_context_fields(app):
             zoom_account_id="acct-1",
             openemr_appointment_id=999,
             openemr_encounter_number=555001,
-            openemr_provider_id=10,
+            openemr_user_id=10,
             openemr_patient_id=1,
             zoom_meeting_id=123456789,
             detail={"event": "appointment.set", "appointment_type": 27},
@@ -25,7 +25,7 @@ def test_write_audit_log_persists_entry_and_normalizes_context_fields(app):
     assert entry.zoom_account_id == "acct-1"
     assert entry.openemr_appointment_id == "999"
     assert entry.openemr_encounter_number == "555001"
-    assert entry.openemr_provider_id == "10"
+    assert entry.openemr_user_id == "10"
     assert entry.openemr_patient_id == "1"
     assert entry.zoom_meeting_id == "123456789"
     assert json.loads(entry.detail) == {"event": "appointment.set", "appointment_type": 27}

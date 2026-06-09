@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from app.models import ZoomAccount, ProviderMapping, AppointmentTypeFilter
+from app.models import ZoomAccount, UserMapping, AppointmentTypeFilter
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class AppointmentMatch:
     Passed downstream to the Zoom meeting creation step (S4-04).
     """
     zoom_account: ZoomAccount
-    provider_mapping: ProviderMapping
+    provider_mapping: UserMapping
     payload: dict
 
 
@@ -33,7 +33,7 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
 
     An appointment passes the filter for a given account when ALL of:
       1. provider_id resolves to a known NPI in OpenEMR's users table
-      2. That NPI has an active ProviderMapping for the account
+      2. That NPI has an active UserMapping for the account
       3. The appointment's category_id is in the account's AppointmentTypeFilter list
 
     If the filter list for an account is empty, ALL appointment types pass
@@ -55,19 +55,19 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
     category_id = payload.get("category_id")
     eid = payload.get("eid")
 
-    # --- 1. Resolve provider_id → ProviderMapping ---
+    # --- 1. Resolve provider_id → UserMapping ---
     if not provider_id:
         logger.info(
             f"appointment_processor | eid={eid} has no provider_id, dropping"
         )
         return [], "missing_provider_id"
 
-    # --- 2. Find all active ProviderMappings for this NPI ---
+    # --- 2. Find all active UserMappings for this NPI ---
     # A single NPI could theoretically be mapped across multiple Zoom accounts
     # (e.g. a multi-tenant demo). We handle all of them.
     mappings = (
-        ProviderMapping.query
-        .filter_by(openemr_provider_id=str(provider_id), is_active=True)
+        UserMapping.query
+        .filter_by(openemr_user_id=str(provider_id), is_active=True)
         .all()
     )
 
@@ -90,7 +90,7 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
 
         if not account:
             logger.warning(
-                f"appointment_processor | eid={eid} ProviderMapping id={mapping.id} "
+                f"appointment_processor | eid={eid} UserMapping id={mapping.id} "
                 f"references inactive or missing ZoomAccount account_id={mapping.zoom_account_id}, skipping"
             )
             continue

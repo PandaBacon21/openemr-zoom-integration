@@ -368,10 +368,9 @@ def update_zoom_account_credentials(
 def update_account_config(
     zoom_account_id: str,
     timezone: str | None = None,
-    allow_shared_zoom_user: bool | None = None,
     demo_patient_email_override_enabled: bool | None = None,
     demo_patient_email_override: str | None = None,
-    demo_patient_phone_override_enabled: bool| None = None, 
+    demo_patient_phone_override_enabled: bool| None = None,
     demo_patient_phone_override: str | None = None,
     note_writeback_mode: str | None = None,
 ) -> AccountConfig:
@@ -390,7 +389,6 @@ def update_account_config(
 
     FIELD_MAP = {
         "timezone":                      timezone,
-        "allow_shared_zoom_user":        allow_shared_zoom_user,
         "demo_patient_email_override_enabled": demo_patient_email_override_enabled,
         "demo_patient_email_override":   demo_patient_email_override,
         "demo_patient_phone_override_enabled": demo_patient_phone_override_enabled,

@@ -11,8 +11,8 @@ import {
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
-import type { Registration, ProviderMapping } from "../../api/config";
-import { verifyAccount, getProviderMappings } from "../../api/config";
+import type { Registration, UserMapping } from "../../api/config";
+import { verifyAccount, getUserMappings } from "../../api/config";
 import AccountConfigTab from "./tabs/AccountConfigTab";
 import AccountProvidersTab from "./tabs/AccountProvidersTab";
 import AccountDashboardTab from "./tabs/AccountDashboardTab";
@@ -33,7 +33,7 @@ const AccountDetail: React.FC<Props> = ({
   const [tab, setTab] = useState(0);
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>("loading");
   const [verifyMessage, setVerifyMessage] = useState<string>("");
-  const [mappings, setMappings] = useState<ProviderMapping[]>([]);
+  const [mappings, setMappings] = useState<UserMapping[]>([]);
   const [loadingMappings, setLoadingMappings] = useState(false);
 
   const lastCheckedAccountId = useRef<string | null>(null);
@@ -74,7 +74,7 @@ const AccountDetail: React.FC<Props> = ({
     // wrong UX for that case — the Re-verify button covers it explicitly.
     runVerify(account.zoom_account_id);
 
-    getProviderMappings(account.zoom_account_id)
+    getUserMappings(account.zoom_account_id)
       .then((res) => setMappings(res.data.providers))
       .catch(() => console.error("Failed to load mappings"))
       .finally(() => setLoadingMappings(false));
@@ -158,7 +158,7 @@ const AccountDetail: React.FC<Props> = ({
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab label="Config" />
-          <Tab label="Providers" disabled={!isVerified || loadingMappings} />
+          <Tab label="User Mappings" disabled={!isVerified || loadingMappings} />
           <Tab label="Dashboard" disabled={!isVerified} />
         </Tabs>
       </Box>

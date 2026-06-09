@@ -1,7 +1,7 @@
 """
 Sprint 13 demo hydration orchestrator.
 
-Walks every active ProviderMapping for a registered ZoomAccount and ensures
+Walks every active UserMapping for a registered ZoomAccount and ensures
 the next-2-weekdays x 2-slots-per-day grid (= 4 slots per provider) is fully
 populated with appointments + Zoom meetings. Idempotent — re-running tops up
 any slot missing an appointment, or backfills a Zoom meeting on an existing
@@ -28,7 +28,7 @@ from app.extensions import get_openemr_db_engine
 from app.models import (
     AppointmentTypeFilter,
     MeetingRecord,
-    ProviderMapping,
+    UserMapping,
     ZoomAccount,
 )
 from app.services.audit import write_audit_log
@@ -59,7 +59,7 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
 
         {
             "providers_processed": int,
-            "providers_skipped": [{"openemr_provider_id": "10", "reason": "no_patients"}, ...],
+            "providers_skipped": [{"openemr_user_id": "10", "reason": "no_patients"}, ...],
             "appointments_created": int,
             "meetings_created": int,
             "meetings_backfilled": int,
@@ -94,12 +94,12 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
         {int(f.openemr_type_id) for f in filter_rows} if filter_rows else None
     )
 
-    mappings = ProviderMapping.query.filter_by(
+    mappings = UserMapping.query.filter_by(
         zoom_account_id=account.account_id, is_active=True
     ).all()
 
     for mapping in mappings:
-        provider_user_id = int(mapping.openemr_provider_id)
+        provider_user_id = int(mapping.openemr_user_id)
 
         skip_reason, effective_categories, patients = _evaluate_provider(
             provider_user_id, category_id_map, filter_type_ids
@@ -109,11 +109,11 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
                 event_type="demo.hydrate_provider_skipped",
                 success=True,
                 zoom_account_id=account.account_id,
-                openemr_provider_id=str(provider_user_id),
+                openemr_user_id=str(provider_user_id),
                 detail={"reason": skip_reason},
             )
             summary["providers_skipped"].append({
-                "openemr_provider_id": str(provider_user_id),
+                "openemr_user_id": str(provider_user_id),
                 "reason": skip_reason,
             })
             continue
@@ -222,7 +222,7 @@ def _handle_empty_slot(
     if new_eid is None:
         summary["errors"].append({
             "stage": "generate_appointment",
-            "openemr_provider_id": str(provider_user_id),
+            "openemr_user_id": str(provider_user_id),
             "slot": f"{slot_date.isoformat()}T{slot_time.isoformat()}",
         })
         return
@@ -245,7 +245,7 @@ def _handle_empty_slot(
     if "error" in result:
         summary["errors"].append({
             "stage": "create_meeting",
-            "openemr_provider_id": str(provider_user_id),
+            "openemr_user_id": str(provider_user_id),
             "openemr_appointment_id": new_eid,
             "error": result["error"],
         })
@@ -255,7 +255,7 @@ def _handle_empty_slot(
         event_type="demo.future_meeting_created",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         openemr_patient_id=str(patient["pid"]),
         openemr_appointment_id=str(new_eid),
         zoom_meeting_id=result.get("zoom_meeting_id"),
@@ -302,7 +302,7 @@ def _handle_existing_slot(
     if "error" in result:
         summary["errors"].append({
             "stage": "backfill_meeting",
-            "openemr_provider_id": str(provider_user_id),
+            "openemr_user_id": str(provider_user_id),
             "openemr_appointment_id": existing_eid,
             "error": result["error"],
         })
@@ -312,7 +312,7 @@ def _handle_existing_slot(
         event_type="demo.future_meeting_backfilled",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         openemr_patient_id=str(existing_pid),
         openemr_appointment_id=str(existing_eid),
         zoom_meeting_id=result.get("zoom_meeting_id"),
@@ -359,7 +359,7 @@ def _find_existing_appt_for_slot(
 
 def _lookup_provider_facility(provider_user_id: int) -> int:
     """
-    Fallback for pre-S7-14 ProviderMappings whose openemr_facility_id is NULL.
+    Fallback for pre-S7-14 UserMappings whose openemr_facility_id is NULL.
     Returns the provider's users.facility_id (0 if unresolvable).
     """
     engine = get_openemr_db_engine()
