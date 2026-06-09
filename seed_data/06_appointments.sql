@@ -1,5 +1,5 @@
 -- =============================================================================
--- 06 — APPOINTMENTS (175 total: 112 original + 63 new)
+-- 06 — APPOINTMENTS (292 total: 112 original + 72 Sprint 12/13 + 108 panel-expansion)
 --
 -- Order in file:
 --   a) Original 112 appointments across 14 days (DAY 1 ... DAY 14)
@@ -7,7 +7,8 @@
 --   c) S12-20 drop Zoom Cardiology (absorbed into Zoom Chronic Care — kept
 --      as a historical no-op now that seeded appointments are non-Zoom)
 --   d) S12-29 pc_aid retarget UPDATE (point at each patient's new providerID)
---   e) 63 new appointments for PIDs 130-150
+--   e) 72 new appointments for PIDs 130-150 + Sarah Chen panel appointments
+--   f) 108 panel-expansion appointments for PIDs 172-207
 --
 -- S13 update: every appointment seeded by this file uses an OpenEMR built-in
 -- category (Office Visit / Established Patient / New Patient / Behavioral
@@ -603,8 +604,8 @@ DELETE FROM openemr_postcalendar_categories
 --
 -- Step 1: retarget ALL existing 112 appointments so pc_aid matches each
 -- patient's new providerID. Single JOIN-based UPDATE.
--- Step 2: add 63 new appointments for PIDs 130-150 (3 per patient over the
--- 14-day window). Each appointment uses the patient's providerID (pc_aid) and
+-- Step 2: add 72 appointments for PIDs 130-150 plus Sarah Chen's 168-170
+-- panel (3 per patient over the 14-day window). Each appointment uses the patient's providerID (pc_aid) and
 -- a persona-appropriate OpenEMR built-in category (Behavioral Assessment /
 -- Established Patient / Preventive Care / New Patient). Zoom-typed
 -- appointments come from the Hydrate Demo Data flow, not from seed.
@@ -614,9 +615,9 @@ UPDATE openemr_postcalendar_events e
 JOIN patient_data pd ON pd.pid = CAST(e.pc_pid AS UNSIGNED)
    SET e.pc_aid = CAST(pd.providerID AS CHAR)
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 207;
 
--- New appointments for the 21 new patients (3 each, spread across days 1-14)
+-- New appointments for PIDs 130-150 plus Sarah Chen's 168-170 panel (3 each, spread across days 1-14)
 INSERT INTO `openemr_postcalendar_events` (
     `pc_catid`, `pc_multiple`, `pc_aid`, `pc_pid`,
     `pc_title`, `pc_time`, `pc_hometext`,
@@ -728,6 +729,108 @@ INSERT INTO `openemr_postcalendar_events` (
 (@preventive_catid, 0, '37', '170', 'Preventive Care', NOW(), 'Flu vaccine + screening', @day10, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@preventive_catid, 0, '37', '170', 'Preventive Care', NOW(), 'Lipid screen', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:30:00', '16:00:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', '')));
 
+-- S13/S14 panel expansion appointments — three visits per new patient.
+DROP TEMPORARY TABLE IF EXISTS zoomly_panel_expansion_appts;
+CREATE TEMPORARY TABLE zoomly_panel_expansion_appts (
+    pid INT PRIMARY KEY,
+    persona VARCHAR(8) NOT NULL,
+    reason1 VARCHAR(255) NOT NULL,
+    reason2 VARCHAR(255) NOT NULL,
+    reason3 VARCHAR(255) NOT NULL
+);
+
+INSERT INTO zoomly_panel_expansion_appts (pid, persona, reason1, reason2, reason3) VALUES
+(172, 'CHR', 'T2DM + HTN follow-up', 'A1c review', 'Medication review'),
+(173, 'HYA', 'Annual preventive visit', 'Smoking cessation counseling', 'Lifestyle follow-up'),
+(174, 'CHR', 'Diabetes follow-up', 'BP log review', 'Medication refill'),
+(175, 'BH',  'Anxiety follow-up', 'SSRI tolerance check', 'Mood check-in'),
+(176, 'BH',  'MDD med management', 'Sleep follow-up', 'Care coordination'),
+(177, 'BH',  'PTSD follow-up', 'Prazosin tolerance check', 'Therapy coordination'),
+(178, 'CHR', 'CAD + HTN follow-up', 'Lipid panel review', 'Medication review'),
+(179, 'HYA', 'Annual preventive visit', 'Exercise counseling', 'Lab review'),
+(180, 'GER', 'Geriatric wellness review', 'Polypharmacy follow-up', 'Osteoporosis check-in'),
+(181, 'HYA', 'Annual preventive visit', 'Travel health counseling', 'Lifestyle follow-up'),
+(182, 'BH',  'GAD med management', 'SSRI tolerance check', 'Anxiety follow-up'),
+(183, 'BH',  'Bipolar II follow-up', 'Mood stabilizer review', 'Sleep check-in'),
+(184, 'CHR', 'Hypertension follow-up', 'Home BP review', 'Medication refill'),
+(185, 'HYA', 'Annual preventive visit', 'Sports injury follow-up', 'Wellness check'),
+(186, 'BH',  'OCD follow-up', 'Sertraline review', 'Behavioral health check-in'),
+(187, 'BH',  'Depression follow-up', 'Medication tolerance check', 'Mood check-in'),
+(188, 'BH',  'Adjustment disorder follow-up', 'CBT progress review', 'Care coordination'),
+(189, 'BH',  'MDD follow-up', 'Bupropion review', 'Mood check-in'),
+(190, 'CHR', 'HTN + HLD follow-up', 'Lipid panel review', 'Medication refill'),
+(191, 'HYA', 'Preventive visit', 'Smoking cessation counseling', 'Wellness follow-up'),
+(192, 'CHR', 'Diabetes follow-up', 'A1c review', 'Medication review'),
+(193, 'HYA', 'Well-woman preventive visit', 'Contraception counseling', 'MH screening'),
+(194, 'SUD', 'Buprenorphine monthly check-in', 'Recovery counseling', 'MAT refill'),
+(195, 'SUD', 'Naltrexone follow-up', 'AUD counseling', 'Medication refill'),
+(196, 'CHR', 'HTN + HLD check-in', 'Lab review', 'Medication review'),
+(197, 'NEW', 'New patient intake', 'Follow-up visit', 'Lab review'),
+(198, 'CHR', 'Diabetes follow-up', 'BP review', 'Medication refill'),
+(199, 'HYA', 'Annual preventive visit', 'Sports physical', 'Lifestyle counseling'),
+(200, 'GER', 'Geriatric wellness review', 'Polypharmacy follow-up', 'OA pain management'),
+(201, 'CHR', 'Hypertension follow-up', 'Lipid panel review', 'Medication refill'),
+(202, 'CHR', 'Diabetes follow-up', 'A1c review', 'Medication refill'),
+(203, 'HYA', 'Annual preventive visit', 'Smoking cessation counseling', 'Wellness follow-up'),
+(204, 'GER', 'Geriatric wellness review', 'Fall risk review', 'Medication reconciliation'),
+(205, 'CHR', 'HTN + HLD follow-up', 'Lab review', 'Medication refill'),
+(206, 'CHR', 'Diabetes follow-up', 'A1c review', 'Medication review'),
+(207, 'BH',  'Behavioral health follow-up', 'SSRI tolerance check', 'Care coordination');
+
+INSERT INTO `openemr_postcalendar_events` (
+    `pc_catid`, `pc_multiple`, `pc_aid`, `pc_pid`,
+    `pc_title`, `pc_time`, `pc_hometext`,
+    `pc_eventDate`, `pc_endDate`,
+    `pc_duration`, `pc_recurrtype`, `pc_recurrfreq`,
+    `pc_recurrspec`, `pc_location`,
+    `pc_startTime`, `pc_endTime`,
+    `pc_alldayevent`, `pc_apptstatus`, `pc_eventstatus`,
+    `pc_sharing`, `pc_facility`, `pc_billing_location`,
+    `pc_informant`, `pc_sendalertsms`, `pc_sendalertemail`,
+    `uuid`
+)
+SELECT
+    CASE
+        WHEN e.persona = 'BH' THEN @behavioral_catid
+        WHEN e.persona = 'HYA' THEN @preventive_catid
+        WHEN e.persona = 'NEW' AND visit.seq = 1 THEN @new_patient_catid
+        ELSE @established_catid
+    END,
+    0,
+    CAST(pd.providerID AS CHAR),
+    CAST(pd.pid AS CHAR),
+    CASE
+        WHEN e.persona = 'BH' THEN 'Behavioral Assessment'
+        WHEN e.persona = 'HYA' THEN 'Preventive Care'
+        WHEN e.persona = 'NEW' AND visit.seq = 1 THEN 'New Patient'
+        ELSE 'Established Patient'
+    END,
+    NOW(),
+    CASE visit.seq WHEN 1 THEN e.reason1 WHEN 2 THEN e.reason2 ELSE e.reason3 END,
+    CASE MOD(e.pid - 172 + ((visit.seq - 1) * 5), 14)
+        WHEN 0 THEN @day1 WHEN 1 THEN @day2 WHEN 2 THEN @day3 WHEN 3 THEN @day4
+        WHEN 4 THEN @day5 WHEN 5 THEN @day6 WHEN 6 THEN @day7 WHEN 7 THEN @day8
+        WHEN 8 THEN @day9 WHEN 9 THEN @day10 WHEN 10 THEN @day11 WHEN 11 THEN @day12
+        WHEN 12 THEN @day13 ELSE @day14
+    END,
+    '0000-00-00',
+    CASE WHEN e.persona = 'NEW' AND visit.seq = 1 THEN 2700 ELSE 1800 END,
+    0, 0, @recurrspec, @location,
+    CASE visit.seq WHEN 1 THEN '08:00:00' WHEN 2 THEN '12:30:00' ELSE '16:00:00' END,
+    CASE
+        WHEN e.persona = 'NEW' AND visit.seq = 1 THEN '08:45:00'
+        WHEN visit.seq = 1 THEN '08:30:00'
+        WHEN visit.seq = 2 THEN '13:00:00'
+        ELSE '16:30:00'
+    END,
+    0, '-', 1, 1, 1, 1, 1, 'NO', 'NO',
+    UNHEX(REPLACE(UUID(), '-', ''))
+  FROM patient_data pd
+  JOIN zoomly_panel_expansion_appts e ON e.pid = pd.pid
+  JOIN (
+        SELECT 1 AS seq UNION ALL SELECT 2 UNION ALL SELECT 3
+  ) visit;
+
 -- =============================================================================
 -- f) pc_facility + pc_billing_location retarget — every row above was inserted
 -- with pc_facility=1 hardcoded. Set it to the provider's home facility so
@@ -740,7 +843,7 @@ JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)
    SET e.pc_facility = u.facility_id,
        e.pc_billing_location = u.facility_id
  WHERE e.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
+   AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 207;
 
 -- =============================================================================
 -- PATIENT_TRACKER ROWS
@@ -761,7 +864,7 @@ SELECT NOW(), ev.pc_eventDate, ev.pc_startTime, ev.pc_eid,
        CAST(ev.pc_pid AS UNSIGNED), 'seed', 0, '1', 0
   FROM openemr_postcalendar_events ev
  WHERE ev.pc_pid REGEXP '^[0-9]+$'
-   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 171;
+   AND CAST(ev.pc_pid AS UNSIGNED) BETWEEN 100 AND 207;
 
 SET FOREIGN_KEY_CHECKS = 1;
 

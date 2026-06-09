@@ -128,6 +128,23 @@ def write_audit_log(
                                             token_refresh_failed is the low-level
                                             HTTP failure.
 
+    Event types for Epic-ZCC CTI middleware (Sprint 11):
+      epic_zcc.token_issued         — POST /oauth2/token minted an opaque
+                                       access token. detail.iss, detail.jti,
+                                       detail.expires_in
+      epic_zcc.token_request_failed — token issuance refused. detail.reason:
+                                       'bad_request' | 'kid_missing' |
+                                       'alg_unsupported' | 'jku_untrusted' |
+                                       'jwks_fetch_failed' | 'bad_signature' |
+                                       'expired' | 'replay' | 'aud_mismatch' |
+                                       'iss_sub_mismatch'
+      epic_zcc.bearer_token_invalid — protected endpoint (PatientLookUp /
+                                       Practitioner / ReceiveCommunication3)
+                                       rejected a bearer token. detail.reason:
+                                       'missing_header' | 'expired_or_unknown' |
+                                       'account_mismatch' (with
+                                       detail.path_account_id)
+
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started
                                        for an account

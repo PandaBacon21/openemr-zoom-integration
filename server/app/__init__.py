@@ -85,6 +85,13 @@ def _register_blueprints(app: Flask) -> None:
         from .blueprints.admin import admin_bp
         app.register_blueprint(admin_bp)
 
+    # Epic-style ZCC CTI middleware. When ENABLE_EPIC_ZCC is false the
+    # blueprint isn't registered, so the `/zoomly/<id>/interconnect-amcurprd-oauth/*`
+    # surface is entirely absent — Zoom and any prober gets 404.
+    if app.config.get("ENABLE_EPIC_ZCC"):
+        from .blueprints.epic import epic_bp
+        app.register_blueprint(epic_bp)
+
 def _register_app_routes(app: Flask) -> None:
 
 

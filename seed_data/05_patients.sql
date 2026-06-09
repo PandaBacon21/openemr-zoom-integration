@@ -1,5 +1,5 @@
 -- =============================================================================
--- 05 — PATIENTS (51 = 30 original + 21 new, distributed across 4 facilities)
+-- 05 — PATIENTS (108 = previous 72 + 36 panel-expansion patients, distributed across 4 facilities)
 -- =============================================================================
 
 -- =============================================================================
@@ -358,6 +358,155 @@ INSERT INTO `patient_data` (
  '1969-07-19', 'Female', 'married', '88 Atlantic Avenue',     'Boston',       'MA', '02110', 'USA',
  '617-555-0171', 'margaret.walsh@example.org',            37, '171', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter');
 
+-- =============================================================================
+-- PANEL EXPANSION PATIENTS (S13/S14) — PIDs 172-207
+-- Two additional realistic panel patients per patient-panel provider, bringing
+-- each provider to exactly six seeded patients and the total patient count to
+-- 108. These are regular panel patients, not Zoomly Demo Past Encounter targets.
+-- =============================================================================
+
+INSERT INTO `patient_data` (
+    `pid`, `uuid`, `fname`, `lname`, `mname`, `title`,
+    `DOB`, `sex`, `status`,
+    `street`, `city`, `state`, `postal_code`, `country_code`,
+    `phone_cell`, `email`,
+    `providerID`, `pubpid`,
+    `hipaa_mail`, `hipaa_voice`, `hipaa_notice`, `hipaa_message`,
+    `hipaa_allowsms`, `hipaa_allowemail`,
+    `language`, `financial`, `date`, `referrer`
+) VALUES
+(172, UNHEX(REPLACE(UUID(), '-', '')), 'Grace',    'Sullivan',  'E', 'Ms.',
+ '1976-02-18', 'Female', 'married', '300 Stuart Street',       'Boston',       'MA', '02116', 'USA',
+ '617-555-0172', 'grace.sullivan@example.org',           10, '172', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(173, UNHEX(REPLACE(UUID(), '-', '')), 'Daniel',   'Brooks',    'J', 'Mr.',
+ '1998-09-07', 'Male',   'single',  '225 W 37th Street',      'New York',     'NY', '10018', 'USA',
+ '212-555-0173', 'daniel.brooks@example.org',           10, '173', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(174, UNHEX(REPLACE(UUID(), '-', '')), 'Marisol',  'Vega',      'R', 'Mrs.',
+ '1970-12-11', 'Female', 'married', '1401 Brickell Avenue',    'Miami',        'FL', '33131', 'USA',
+ '305-555-0174', 'marisol.vega@example.org',            11, '174', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(175, UNHEX(REPLACE(UUID(), '-', '')), 'Owen',     'Pierce',    'L', 'Mr.',
+ '1986-03-22', 'Male',   'married', '201 S Tryon Street',      'Charlotte',    'NC', '28202', 'USA',
+ '704-555-0175', 'owen.pierce@example.org',             11, '175', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(176, UNHEX(REPLACE(UUID(), '-', '')), 'Natalie',  'Brooks',    'M', 'Ms.',
+ '1989-06-04', 'Female', 'single',  '110 Huntington Avenue',   'Boston',       'MA', '02116', 'USA',
+ '617-555-0176', 'natalie.brooks@example.org',          12, '176', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(177, UNHEX(REPLACE(UUID(), '-', '')), 'Victor',   'Ramirez',   'A', 'Mr.',
+ '1981-10-16', 'Male',   'married', '1700 Market Street',      'Philadelphia', 'PA', '19103', 'USA',
+ '215-555-0177', 'victor.ramirez@example.org',          12, '177', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(178, UNHEX(REPLACE(UUID(), '-', '')), 'Elaine',   'Park',      'S', 'Mrs.',
+ '1968-05-03', 'Female', 'married', '550 Mission Street',      'San Francisco','CA', '94105', 'USA',
+ '415-555-0178', 'elaine.park@example.org',             13, '178', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(179, UNHEX(REPLACE(UUID(), '-', '')), 'Jason',    'Reed',      'C', 'Mr.',
+ '1996-01-29', 'Male',   'single',  '1221 SW 4th Avenue',     'Portland',     'OR', '97204', 'USA',
+ '503-555-0179', 'jason.reed@example.org',              13, '179', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(180, UNHEX(REPLACE(UUID(), '-', '')), 'Teresa',   'Morgan',    'D', 'Mrs.',
+ '1954-08-21', 'Female', 'widowed', '1600 Wynkoop Street',     'Denver',       'CO', '80202', 'USA',
+ '303-555-0180', 'teresa.morgan@example.org',           14, '180', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(181, UNHEX(REPLACE(UUID(), '-', '')), 'Colin',    'Adams',     'P', 'Mr.',
+ '1999-04-13', 'Male',   'single',  '1301 Pearl Street',      'Boulder',      'CO', '80302', 'USA',
+ '720-555-0181', 'colin.adams@example.org',             14, '181', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(182, UNHEX(REPLACE(UUID(), '-', '')), 'Leila',    'Ahmed',     'N', 'Ms.',
+ '1992-11-19', 'Female', 'single',  '1 Beacon Street',        'Boston',       'MA', '02108', 'USA',
+ '617-555-0182', 'leila.ahmed@example.org',             15, '182', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(183, UNHEX(REPLACE(UUID(), '-', '')), 'Patrick',  'ONeill',    'T', 'Mr.',
+ '1984-07-01', 'Male',   'divorced','60 E 42nd Street',       'New York',     'NY', '10165', 'USA',
+ '212-555-0183', 'patrick.oneill@example.org',          15, '183', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(184, UNHEX(REPLACE(UUID(), '-', '')), 'Grace',    'Romero',    'I', 'Mrs.',
+ '1974-09-27', 'Female', 'married', '1700 Lincoln Street',     'Denver',       'CO', '80203', 'USA',
+ '303-555-0184', 'grace.romero@example.org',            16, '184', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(185, UNHEX(REPLACE(UUID(), '-', '')), 'Noah',     'Bennett',   'W', 'Mr.',
+ '1997-12-05', 'Male',   'single',  '1942 Broadway',          'Boulder',      'CO', '80302', 'USA',
+ '720-555-0185', 'noah.bennett@example.org',            16, '185', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(186, UNHEX(REPLACE(UUID(), '-', '')), 'Lauren',   'Stein',     'K', 'Ms.',
+ '1988-02-14', 'Female', 'married', '350 5th Avenue',         'New York',     'NY', '10118', 'USA',
+ '212-555-0186', 'lauren.stein@example.org',            17, '186', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(187, UNHEX(REPLACE(UUID(), '-', '')), 'Malcolm',  'Price',     'B', 'Mr.',
+ '1991-05-25', 'Male',   'single',  '1401 H Street NW',       'Washington',   'DC', '20005', 'USA',
+ '202-555-0187', 'malcolm.price@example.org',           17, '187', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(188, UNHEX(REPLACE(UUID(), '-', '')), 'Anika',    'Bose',      'R', 'Mrs.',
+ '1985-08-09', 'Female', 'married', '100 Cambridge Street',    'Boston',       'MA', '02114', 'USA',
+ '617-555-0188', 'anika.bose@example.org',              18, '188', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(189, UNHEX(REPLACE(UUID(), '-', '')), 'Henry',    'Collins',   'F', 'Mr.',
+ '1979-01-30', 'Male',   'divorced','1901 Market Street',     'Philadelphia', 'PA', '19103', 'USA',
+ '215-555-0189', 'henry.collins@example.org',           18, '189', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(190, UNHEX(REPLACE(UUID(), '-', '')), 'Vivian',   'Moore',     'L', 'Mrs.',
+ '1971-06-18', 'Female', 'married', '50 Hurt Plaza',          'Atlanta',      'GA', '30303', 'USA',
+ '404-555-0190', 'vivian.moore@example.org',            19, '190', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(191, UNHEX(REPLACE(UUID(), '-', '')), 'Benji',    'Ortiz',     'M', 'Mr.',
+ '1995-03-03', 'Male',   'single',  '401 E Jackson Street',   'Tampa',        'FL', '33602', 'USA',
+ '813-555-0191', 'benji.ortiz@example.org',             19, '191', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(192, UNHEX(REPLACE(UUID(), '-', '')), 'Paula',    'Grant',     'V', 'Mrs.',
+ '1976-10-10', 'Female', 'married', '399 Boylston Street',    'Boston',       'MA', '02116', 'USA',
+ '617-555-0192', 'paula.grant@example.org',             21, '192', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(193, UNHEX(REPLACE(UUID(), '-', '')), 'Maya',     'Flores',    'Q', 'Ms.',
+ '1993-12-22', 'Female', 'single',  '200 Park Avenue',        'New York',     'NY', '10166', 'USA',
+ '212-555-0193', 'maya.flores@example.org',             21, '193', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(194, UNHEX(REPLACE(UUID(), '-', '')), 'Shane',    'McCarthy',  'G', 'Mr.',
+ '1982-04-28', 'Male',   'divorced','500 Boylston Street',    'Boston',       'MA', '02116', 'USA',
+ '617-555-0194', 'shane.mccarthy@example.org',          22, '194', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(195, UNHEX(REPLACE(UUID(), '-', '')), 'Elena',    'Torres',    'C', 'Mrs.',
+ '1987-09-15', 'Female', 'married', '1650 Market Street',     'Philadelphia', 'PA', '19103', 'USA',
+ '215-555-0195', 'elena.torres@example.org',            22, '195', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(196, UNHEX(REPLACE(UUID(), '-', '')), 'Priya',    'Mehta',     'A', 'Mrs.',
+ '1973-07-20', 'Female', 'married', '200 Berkeley Street',    'Boston',       'MA', '02116', 'USA',
+ '617-555-0196', 'priya.mehta@example.org',             23, '196', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(197, UNHEX(REPLACE(UUID(), '-', '')), 'Nicholas', 'Allen',     'D', 'Mr.',
+ '1990-02-02', 'Male',   'single',  '125 High Street',        'Boston',       'MA', '02110', 'USA',
+ '617-555-0197', 'nicholas.allen@example.org',          23, '197', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(198, UNHEX(REPLACE(UUID(), '-', '')), 'Denise',   'Carter',    'H', 'Mrs.',
+ '1969-11-07', 'Female', 'married', '1100 Main Street',       'Kansas City',  'MO', '64105', 'USA',
+ '816-555-0198', 'denise.carter@example.org',           24, '198', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(199, UNHEX(REPLACE(UUID(), '-', '')), 'Tyler',    'Nguyen',    'S', 'Mr.',
+ '1998-06-12', 'Male',   'single',  '1919 Main Street',       'Kansas City',  'MO', '64108', 'USA',
+ '816-555-0199', 'tyler.nguyen@example.org',            24, '199', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(200, UNHEX(REPLACE(UUID(), '-', '')), 'Howard',   'Kaplan',    'P', 'Mr.',
+ '1953-04-09', 'Male',   'widowed', '1735 Market Street',     'Philadelphia', 'PA', '19103', 'USA',
+ '215-555-0200', 'howard.kaplan@example.org',           25, '200', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(201, UNHEX(REPLACE(UUID(), '-', '')), 'Camille',  'Young',     'J', 'Mrs.',
+ '1978-08-24', 'Female', 'married', '1100 Peachtree Street',  'Atlanta',      'GA', '30309', 'USA',
+ '404-555-0201', 'camille.young@example.org',           25, '201', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(202, UNHEX(REPLACE(UUID(), '-', '')), 'Luis',     'Ortega',    'N', 'Mr.',
+ '1972-02-26', 'Male',   'married', '30 E Pikes Peak Avenue', 'Colorado Springs','CO','80903','USA',
+ '719-555-0202', 'luis.ortega@example.org',             26, '202', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(203, UNHEX(REPLACE(UUID(), '-', '')), 'Aimee',    'Sanders',   'T', 'Ms.',
+ '1996-10-03', 'Female', 'single',  '2 N Nevada Avenue',      'Colorado Springs','CO','80903','USA',
+ '719-555-0203', 'aimee.sanders@example.org',           26, '203', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(204, UNHEX(REPLACE(UUID(), '-', '')), 'Martha',   'Kim',       'Y', 'Mrs.',
+ '1956-12-18', 'Female', 'widowed', '999 18th Street',        'Denver',       'CO', '80202', 'USA',
+ '303-555-0204', 'martha.kim@example.org',              27, '204', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(205, UNHEX(REPLACE(UUID(), '-', '')), 'Simon',    'Ellis',     'E', 'Mr.',
+ '1975-05-11', 'Male',   'married', '136 S Main Street',      'Salt Lake City','UT','84101','USA',
+ '801-555-0205', 'simon.ellis@example.org',             27, '205', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(206, UNHEX(REPLACE(UUID(), '-', '')), 'Rachel',   'Green',     'B', 'Mrs.',
+ '1977-09-09', 'Female', 'married', '60 State Street',        'Boston',       'MA', '02109', 'USA',
+ '617-555-0206', 'rachel.green@example.org',            37, '206', 'YES','YES','YES','portal','YES','YES','English','', NOW(), ''),
+(207, UNHEX(REPLACE(UUID(), '-', '')), 'Andre',    'Walker',    'K', 'Mr.',
+ '1984-11-14', 'Male',   'single',  '101 Arch Street',        'Boston',       'MA', '02110', 'USA',
+ '617-555-0207', 'andre.walker@example.org',            37, '207', 'YES','YES','YES','portal','YES','YES','English','', NOW(), '');
+
+-- Align patient locations to the current provider facility assignments.
+-- Provider/staff users.facility_id is the source of truth for region.
+UPDATE patient_data SET street='185 Dartmouth Street', city='Boston', state='MA', postal_code='02116', phone_cell='617-555-0107' WHERE pid=107;
+UPDATE patient_data SET street='44 E 32nd Street', city='New York', state='NY', postal_code='10016', phone_cell='212-555-0115' WHERE pid=115;
+UPDATE patient_data SET street='1801 Wynkoop Street', city='Denver', state='CO', postal_code='80202', phone_cell='303-555-0119' WHERE pid=119;
+UPDATE patient_data SET street='225 Huntington Avenue', city='Boston', state='MA', postal_code='02115', phone_cell='617-555-0122' WHERE pid=122;
+UPDATE patient_data SET street='310 Madison Avenue', city='New York', state='NY', postal_code='10017', phone_cell='212-555-0126' WHERE pid=126;
+UPDATE patient_data SET street='800 Boylston Street', city='Boston', state='MA', postal_code='02199', phone_cell='617-555-0131' WHERE pid=131;
+UPDATE patient_data SET street='1900 Pearl Street', city='Boulder', state='CO', postal_code='80302', phone_cell='720-555-0134' WHERE pid=134;
+UPDATE patient_data SET street='1550 Wewatta Street', city='Denver', state='CO', postal_code='80202', phone_cell='303-555-0135' WHERE pid=135;
+UPDATE patient_data SET street='1600 Arch Street', city='Philadelphia', state='PA', postal_code='19103', phone_cell='215-555-0147' WHERE pid=147;
+UPDATE patient_data SET street='1800 Market Street', city='Philadelphia', state='PA', postal_code='19103', phone_cell='215-555-0156' WHERE pid=156;
+UPDATE patient_data SET street='1045 Pearl Street', city='Boulder', state='CO', postal_code='80302', phone_cell='720-555-0157' WHERE pid=157;
+UPDATE patient_data SET street='75 State Street', city='Boston', state='MA', postal_code='02109', phone_cell='617-555-0163' WHERE pid=163;
+
 -- Synthetic SSNs for all seeded demo patients. The 900 prefix keeps these out
 -- of the issued SSN range while still giving each seeded patient a unique value.
-UPDATE patient_data SET ss = CONCAT('90010', LPAD(pid, 4, '0')) WHERE pid BETWEEN 100 AND 171;
+UPDATE patient_data SET ss = CONCAT('90010', LPAD(pid, 4, '0')) WHERE pid BETWEEN 100 AND 207;
+
+-- Patient contact/pharmacy completeness for demo charts.
+UPDATE patient_data pd
+JOIN users u ON u.id = pd.providerID
+   SET pd.phone_home = pd.phone_cell,
+       pd.email_direct = pd.email,
+       pd.pharmacy_id = u.facility_id
+ WHERE pd.pid BETWEEN 100 AND 207;

@@ -1,15 +1,17 @@
 -- =============================================================================
--- 03 — STAFF (17 providers + 4 nurses + 4 MAs = 25 users)
+-- 03 — STAFF (18 patient-panel providers + 4 nurses + 4 MAs = 26 users)
 -- =============================================================================
 
 -- =============================================================================
--- PROVIDERS — 17 total, all Primary Care or Behavioral Health
+-- PROVIDERS — 18 total, all Primary Care, Behavioral Health, or provider-level RN
 --   IDs 10-13: original four (OConnor, Rodriguez, Miller, Thompson*)
 --             * Thompson reframed from Cardiology to Internal Medicine
 --   IDs 14-19, 22-27: 12 new providers (S12-21)
 --   ID  21: Amy Martin (promoted RN → Family NP, S12-22)
+--   ID  37: Sarah Chen (provider-level RN panel owner)
 --
--- Facility distribution: East=10, Mountain=4, West=2, Central=1
+-- Facility distribution by current facility_id: CO=4, MA=12, CA=1, MO=1.
+-- The facility_id value on each row is the source of truth for region/panel mapping.
 -- =============================================================================
 
 INSERT INTO `users` (
@@ -18,7 +20,7 @@ INSERT INTO `users` (
     `facility_id`, `calendar`, `abook_type`, `taxonomy`,
     `main_menu_role`, `patient_menu_role`, `physician_type`, `npi`
 ) VALUES
--- East (id=2)
+-- Provider rows
 (10, UNHEX(REPLACE(UUID(), '-', '')), 'moconnor',         '', 1, 1,
  'Michael',  'OConnor',   'Dr.',  'Internal Medicine',    'michael.oconnor@example.org',  'michael.oconnor@example.org',
  2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567890'),
@@ -52,7 +54,7 @@ INSERT INTO `users` (
 (37, UNHEX(REPLACE(UUID(), '-', '')), 'schen',      '', 1, 1,
  'Sarah',    'Chen',      'RN',   'Charge Nursing',       'sarah.chen@example.org',       'sarah.chen@example.org',
  2, 1, 'physician', '163WC1500X', 'standard', 'standard', 'RN', '1234567907'),
--- Mountain (id=1)
+-- Additional providers
 (14, UNHEX(REPLACE(UUID(), '-', '')), 'jnelson',  '', 1, 1,
  'Jonathan', 'Nelson',    'Dr.',  'Family Medicine',      'jonathan.nelson@example.org',  'jonathan.nelson@example.org',
  1, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567894'),
@@ -65,14 +67,14 @@ INSERT INTO `users` (
 (27, UNHEX(REPLACE(UUID(), '-', '')), 'dthompson',   '', 1, 1,
  'David',    'Thompson',  'Dr.',  'Internal Medicine',    'david.thompson@example.org',   'david.thompson@example.org',
  1, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567905'),
--- West (id=4)
+-- Additional providers
 (13, UNHEX(REPLACE(UUID(), '-', '')), 'mthompson',        '', 1, 1,
  'Marcus',   'Thompson',  'Dr.',  'Internal Medicine',    'marcus.thompson@example.org',  'marcus.thompson@example.org',
  3, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567893'),
 (23, UNHEX(REPLACE(UUID(), '-', '')), 'danderson',    '', 1, 1,
  'Dave',     'Anderson',  'Dr.',  'Family Medicine',      'dave.anderson@example.org',    'dave.anderson@example.org',
  2, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567901'),
--- Central (id=5)
+-- Central (id=4)
 (24, UNHEX(REPLACE(UUID(), '-', '')), 'jsmith',        '', 1, 1,
  'Joe',      'Smith',     'Dr.',  'Family Medicine',      'joe.smith@example.org',        'joe.smith@example.org',
  4, 1, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567902');
@@ -298,4 +300,3 @@ SELECT 'users', u.id, u.facility_id, ''
 -- editors) that weren't needed for provider-side demos. Admin user (id=1)
 -- retains its own Administrators group membership for cross-cutting tasks.
 -- =============================================================================
-

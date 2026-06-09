@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 import re
 
@@ -27,13 +28,13 @@ def _seed_script_text() -> str:
 
 
 def _patient_insert_values(text: str) -> str:
-    match = re.search(
+    matches = list(re.finditer(
         r"INSERT INTO `patient_data`\s*\(.*?\)\s*VALUES(?P<values>.*?);\n",
         text,
         flags=re.DOTALL,
-    )
-    assert match is not None, "Could not find patient_data INSERT statement"
-    return match.group("values")
+    ))
+    assert matches, "Could not find patient_data INSERT statement"
+    return "\n".join(match.group("values") for match in matches)
 
 
 def test_users_insert_includes_npi_column():
@@ -92,8 +93,36 @@ def test_seed_data_uses_reserved_patient_email_addresses():
     patient_values = _patient_insert_values(text)
     emails = re.findall(r"'([^']+@[^']+)'", patient_values)
 
-    assert len(emails) == 51
+    assert len(emails) == 108
     assert all(email.endswith("@example.org") for email in emails)
+
+
+def test_seed_data_expands_patient_panel_to_108_records():
+    text = _demo_sql_text()
+    patient_values = _patient_insert_values(text)
+    pids = re.findall(r"\(\s*(\d+),\s*UNHEX", patient_values)
+
+    assert len(pids) == 108
+    assert len(set(pids)) == 108
+    assert pids[0] == "100"
+    assert pids[-1] == "207"
+
+
+def test_seed_data_assigns_six_patients_per_panel_provider():
+    text = _demo_sql_text()
+    patient_values = _patient_insert_values(text)
+    rows = re.findall(r"'[^']+@example\.org',\s*(\d+),\s*'(\d+)'", patient_values)
+    provider_by_pid = {int(pid): int(provider_id) for provider_id, pid in rows}
+
+    for provider_id, pid in re.findall(r"UPDATE patient_data SET .*?providerID=(\d+) WHERE pid=(\d+);", text):
+        provider_by_pid[int(pid)] = int(provider_id)
+
+    counts = Counter(provider_by_pid.values())
+
+    assert len(rows) == 108
+    assert len(provider_by_pid) == 108
+    for provider_id in [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 37]:
+        assert counts[provider_id] == 6
 
 
 def test_seed_data_assigns_synthetic_ssns_to_seeded_patients():
@@ -101,7 +130,7 @@ def test_seed_data_assigns_synthetic_ssns_to_seeded_patients():
 
     assert (
         "UPDATE patient_data SET ss = CONCAT('90010', LPAD(pid, 4, '0')) "
-        "WHERE pid BETWEEN 100 AND 171;"
+        "WHERE pid BETWEEN 100 AND 207;"
     ) in text
 
 

@@ -20,6 +20,10 @@ os.environ["ZOOM_API_BASE_URL"] = "https://api.zoom.us/v2"
 os.environ["API_KEY"] = "test-api-key"
 os.environ["CONFIG_ADMIN_PASSWORD"] = "test-admin-password"
 os.environ["CONFIG_JWT_SECRET"] = "test-config-jwt-secret-0123456789"
+# Epic-ZCC CTI blueprint needs the flag on to register. Must be set before
+# any module imports config.py — Config.ENABLE_EPIC_ZCC is class-level and
+# only evaluates os.environ once.
+os.environ["ENABLE_EPIC_ZCC"] = "true"
 
 
 @pytest.fixture()
