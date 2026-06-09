@@ -72,7 +72,7 @@ const AuditLogRow: React.FC<Props> = ({ log, showAccountColumn }) => {
   const hasDetail =
     log.error_message ||
     log.detail ||
-    log.openemr_provider_id ||
+    log.openemr_user_id ||
     log.openemr_patient_id;
 
   let parsedDetail: Record<string, unknown> | null = null;
@@ -173,7 +173,7 @@ const AuditLogRow: React.FC<Props> = ({ log, showAccountColumn }) => {
         <MonoCell value={log.openemr_encounter_number} minWidth={130} />
 
         {/* Provider ID */}
-        <MonoCell value={log.openemr_provider_id} minWidth={130} />
+        <MonoCell value={log.openemr_user_id} minWidth={130} />
 
         {/* Patient ID */}
         <MonoCell value={log.openemr_patient_id} minWidth={130} />
@@ -205,7 +205,7 @@ const AuditLogRow: React.FC<Props> = ({ log, showAccountColumn }) => {
                   </Alert>
                 )}
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                  {log.openemr_provider_id && (
+                  {log.openemr_user_id && (
                     <Box>
                       <Typography
                         variant="caption"
@@ -218,7 +218,7 @@ const AuditLogRow: React.FC<Props> = ({ log, showAccountColumn }) => {
                         variant="body2"
                         sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
                       >
-                        {log.openemr_provider_id}
+                        {log.openemr_user_id}
                       </Typography>
                     </Box>
                   )}

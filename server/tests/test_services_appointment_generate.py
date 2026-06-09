@@ -221,7 +221,7 @@ def test_generate_future_appointment_writes_success_audit(app, monkeypatch):
         assert row.success is True
         assert row.zoom_account_id == "acct-hydrate"
         assert row.openemr_appointment_id == "555"
-        assert row.openemr_provider_id == "10"
+        assert row.openemr_user_id == "10"
         assert row.openemr_patient_id == "100"
         detail = json.loads(row.detail)
         assert detail["category_name"] == "Zoom Behavioral Health"
@@ -261,7 +261,7 @@ def test_generate_future_appointment_returns_none_and_audits_failure(app, monkey
         row = audits[0]
         assert row.success is False
         assert row.zoom_account_id == "acct-hydrate"
-        assert row.openemr_provider_id == "10"
+        assert row.openemr_user_id == "10"
         assert row.openemr_patient_id == "100"
         assert "connection refused" in (row.error_message or "")
         # detail still populated even on failure so we can debug which slot blew up

@@ -234,6 +234,20 @@ During registration, the Flask service:
 5. Validates Zoom credentials by requesting a Zoom Server-to-Server OAuth token.
 6. Generates a deterministic `tenant_id` from Zoom account ID and client ID.
 
+### Zoom S2S OAuth Scopes
+
+The Zoom S2S OAuth app (created in Zoom Marketplace) must have the following scopes enabled. Without a scope, Zoom returns `401 Unauthorized` on the corresponding endpoint and the Flask error log shows the URL that was rejected. Scopes are added in the Zoom Marketplace app's **Scopes** tab; new scopes take effect on the next token mint.
+
+| Feature | Endpoint(s) Zoomly hits | Required scope(s) |
+| --- | --- | --- |
+| List Zoom users (provider mapping dropdown) | `GET /users` | `user:read:list_users:admin` |
+| Read a single Zoom user (profile timezone for meeting host) | `GET /users/{userId}` | `user:read:user:admin` |
+| Create / read / update / delete Zoom meetings (telehealth flow) | `POST /users/{userId}/meetings`, `GET/PATCH/DELETE /meetings/{meetingId}` | `meeting:read:meeting:admin`, `meeting:write:meeting:admin`, `meeting:update:meeting:admin`, `meeting:delete:meeting:admin` |
+| Read Zoom clinical notes (note writeback flow) | `GET /clinical_notes/...` | `clinical_notes:read:admin` (verify in Marketplace UI) |
+| **List ZCC users (CTI agent mapping dropdown — Sprint 11)** | `GET /contact_center/users` | `contact_center_user:read:list:admin` |
+
+If you add a new Zoom API endpoint to Flask and get a 401 on first call, check this table and the Zoom Marketplace app's Scopes tab — the most common cause is a missing scope. The Flask error log will print `Failed to fetch ... 401 Client Error: Unauthorized for url: <endpoint>` which tells you which endpoint to scope-check.
+
 ## OpenEMR Patch Behavior
 
 OpenEMR patch files are baked into the custom `zoomly-openemr:local` image at build time by `openemr/Dockerfile` (every file under `openemr/patches/` is COPY'd with `apache:apache` ownership and `644` perms). The base file set:

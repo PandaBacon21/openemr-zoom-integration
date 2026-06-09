@@ -10,7 +10,7 @@ from app.extensions import db
 from app.models import (
     AccountConfig,
     AuditLog,
-    ProviderMapping,
+    UserMapping,
     ZoomAccount,
 )
 from app.services.openemr.encounter import past_encounter
@@ -35,16 +35,16 @@ def _create_account(account_id: str = "acct-past") -> ZoomAccount:
     return account
 
 
-def _create_mapping(account_id: str, *, openemr_provider_id: str = "10") -> ProviderMapping:
-    mapping = ProviderMapping(
+def _create_mapping(account_id: str, *, openemr_user_id: str = "10") -> UserMapping:
+    mapping = UserMapping(
         zoom_account_id=account_id,
-        openemr_fhir_id=f"fhir-{openemr_provider_id}",
-        openemr_provider_npi=f"npi-{openemr_provider_id}",
-        openemr_provider_id=openemr_provider_id,
-        openemr_provider_name=f"Dr {openemr_provider_id}",
-        zoom_user_id=f"user-{openemr_provider_id}",
-        zoom_user_email=f"u{openemr_provider_id}@example.com",
-        zoom_user_name=f"User {openemr_provider_id}",
+        openemr_fhir_id=f"fhir-{openemr_user_id}",
+        openemr_provider_npi=f"npi-{openemr_user_id}",
+        openemr_user_id=openemr_user_id,
+        openemr_provider_name=f"Dr {openemr_user_id}",
+        zoom_user_id=f"user-{openemr_user_id}",
+        zoom_user_email=f"u{openemr_user_id}@example.com",
+        zoom_user_name=f"User {openemr_user_id}",
         zoom_user_type=2,
         openemr_facility_id=2,
         is_active=True,
@@ -186,7 +186,7 @@ def _patch_happy_path(monkeypatch, *,
 def test_seed_creates_encounter_when_8am_is_free(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch)
 
         summary = past_encounter.seed_past_locked_encounters(account)
@@ -226,7 +226,7 @@ def test_seed_prefers_demo_patient_over_provider_patients(app, monkeypatch):
     falling through to get_provider_patients()[0]."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch)
 
         # Override the default (None) with an explicit demo patient
@@ -247,7 +247,7 @@ def test_seed_uses_existing_pending_8am_appointment(app, monkeypatch):
     """Existing 8am appt in '-' Pending state → flip to Checked Out + use it."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         existing = {
             "pc_eid": 999, "pc_pid": 100, "pc_aid": 10,
             "pc_eventDate": date.today(), "pc_startTime": time(8, 0),
@@ -269,7 +269,7 @@ def test_seed_skips_when_8am_is_already_checked_out(app, monkeypatch):
     """Existing 8am appt already past the Pending phase → skip with reason."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         existing = {
             "pc_eid": 999, "pc_pid": 100, "pc_aid": 10,
             "pc_eventDate": date.today(), "pc_startTime": time(8, 0),
@@ -283,7 +283,7 @@ def test_seed_skips_when_8am_is_already_checked_out(app, monkeypatch):
 
     assert summary["past_encounters_created"] == 0
     assert summary["past_encounter_skips"] == [
-        {"openemr_provider_id": "10", "reason": "8am_slot_occupied"}
+        {"openemr_user_id": "10", "reason": "8am_slot_occupied"}
     ]
     assert captured["create_encounter"] == []
 
@@ -298,8 +298,8 @@ def test_per_provider_per_day_guard_skips_only_matching_provider(app, monkeypatc
     """
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
-        _create_mapping(account.account_id, openemr_provider_id="11")
+        _create_mapping(account.account_id, openemr_user_id="10")
+        _create_mapping(account.account_id, openemr_user_id="11")
         captured = _patch_happy_path(
             monkeypatch,
             seed_marker_provider_ids={10},  # only provider 10 already seeded
@@ -310,7 +310,7 @@ def test_per_provider_per_day_guard_skips_only_matching_provider(app, monkeypatc
         # Provider 11 was seeded; provider 10 was the single skip.
         assert summary["past_encounters_created"] == 1
         assert summary["past_encounter_skips"] == [
-            {"openemr_provider_id": "10", "reason": "already_seeded_today"}
+            {"openemr_user_id": "10", "reason": "already_seeded_today"}
         ]
         # Real work happened for provider 11 only.
         generated_pids = [c["provider_user_id"] for c in captured["generate_appointment"]]
@@ -319,15 +319,15 @@ def test_per_provider_per_day_guard_skips_only_matching_provider(app, monkeypatc
         # Skip audit recorded once, for provider 10.
         skip_audits = AuditLog.query.filter_by(event_type="demo.past_encounter_skipped").all()
         assert len(skip_audits) == 1
-        assert skip_audits[0].openemr_provider_id == "10"
+        assert skip_audits[0].openemr_user_id == "10"
 
 
 def test_per_provider_guard_skips_all_when_all_already_seeded(app, monkeypatch):
     """Re-hydrating the same account same day → every provider is a no-op."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
-        _create_mapping(account.account_id, openemr_provider_id="11")
+        _create_mapping(account.account_id, openemr_user_id="10")
+        _create_mapping(account.account_id, openemr_user_id="11")
         captured = _patch_happy_path(monkeypatch, seed_marker_present=True)
 
         summary = past_encounter.seed_past_locked_encounters(account)
@@ -335,7 +335,7 @@ def test_per_provider_guard_skips_all_when_all_already_seeded(app, monkeypatch):
         assert summary["past_encounters_created"] == 0
         # Both providers landed in the skip list with the new reason
         skip_reasons = sorted(
-            (s["openemr_provider_id"], s["reason"]) for s in summary["past_encounter_skips"]
+            (s["openemr_user_id"], s["reason"]) for s in summary["past_encounter_skips"]
         )
         assert skip_reasons == [
             ("10", "already_seeded_today"),
@@ -349,13 +349,13 @@ def test_per_provider_guard_skips_all_when_all_already_seeded(app, monkeypatch):
 def test_seed_skips_provider_with_unknown_specialty(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch, specialty_categories=[])
 
         summary = past_encounter.seed_past_locked_encounters(account)
 
     assert summary["past_encounter_skips"] == [
-        {"openemr_provider_id": "10", "reason": "unknown_specialty"}
+        {"openemr_user_id": "10", "reason": "unknown_specialty"}
     ]
     assert captured["create_encounter"] == []
 
@@ -363,13 +363,13 @@ def test_seed_skips_provider_with_unknown_specialty(app, monkeypatch):
 def test_seed_skips_provider_with_no_patients(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch, patients=[])
 
         summary = past_encounter.seed_past_locked_encounters(account)
 
     assert summary["past_encounter_skips"] == [
-        {"openemr_provider_id": "10", "reason": "no_patients"}
+        {"openemr_user_id": "10", "reason": "no_patients"}
     ]
     assert captured["create_encounter"] == []
 
@@ -379,7 +379,7 @@ def test_seed_honors_soap_only_writeback_mode(app, monkeypatch):
         account = _create_account()
         account.config.note_writeback_mode = "soap_only"
         db.session.commit()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch)
 
         past_encounter.seed_past_locked_encounters(account)
@@ -391,7 +391,7 @@ def test_seed_honors_soap_only_writeback_mode(app, monkeypatch):
 def test_seed_records_error_when_write_note_fails(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         captured = _patch_happy_path(monkeypatch, write_note_ok=False)
 
         summary = past_encounter.seed_past_locked_encounters(account)
@@ -410,7 +410,7 @@ def test_seed_records_error_when_write_note_fails(app, monkeypatch):
 def test_seed_emits_per_encounter_audit_with_context(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         _patch_happy_path(monkeypatch)
 
         past_encounter.seed_past_locked_encounters(account)
@@ -419,7 +419,7 @@ def test_seed_emits_per_encounter_audit_with_context(app, monkeypatch):
         assert len(audits) == 1
         row = audits[0]
         assert row.zoom_account_id == "acct-past"
-        assert row.openemr_provider_id == "10"
+        assert row.openemr_user_id == "10"
         assert row.openemr_patient_id == "100"
         assert row.openemr_encounter_number == "900001"
         assert json.loads(row.detail)["category_name"] == "Zoom Chronic Care"

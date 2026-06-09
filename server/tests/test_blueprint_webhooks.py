@@ -65,7 +65,7 @@ def _create_meeting_record(account_id: str, *, meeting_id: str = "existing-123",
         zoom_start_url=f"https://zoom.example/start/{meeting_id}",
         zoom_join_url=f"https://zoom.example/join/{meeting_id}",
         openemr_appointment_id=eid,
-        openemr_provider_id="10",
+        openemr_user_id="10",
         openemr_appt_status="^",
         status="created",
     )
@@ -151,7 +151,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         lambda payload: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=payload,
             )
         ], None),
@@ -189,7 +189,7 @@ def test_openemr_webhook_creates_records_for_matching_payload(client, app, monke
         meeting = MeetingRecord.query.filter_by(zoom_meeting_id="123456789").first()
         assert meeting is not None
         assert meeting.openemr_appointment_id == "999"
-        assert meeting.openemr_provider_id == "10"
+        assert meeting.openemr_user_id == "10"
         assert meeting.openemr_appt_status == "^"
         assert meeting.status == "created"
 
@@ -211,12 +211,12 @@ def test_openemr_webhook_returns_partial_when_one_match_fails(client, app, monke
         lambda payload: ([
             SimpleNamespace(
                 zoom_account=account_1_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=payload,
             ),
             SimpleNamespace(
                 zoom_account=account_2_stub,
-                provider_mapping=SimpleNamespace(id=11, openemr_provider_id=11),
+                provider_mapping=SimpleNamespace(id=11, openemr_user_id=11),
                 payload=payload,
             ),
         ], None),
@@ -267,7 +267,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
         lambda payload: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=payload,
             )
         ], None),
@@ -295,7 +295,7 @@ def test_openemr_webhook_returns_500_when_all_matches_fail(client, app, monkeypa
     assert audit_call["success"] is False
     assert audit_call["zoom_account_id"] == "acct-err"
     assert audit_call["openemr_appointment_id"] == 999
-    assert audit_call["openemr_provider_id"] == 10
+    assert audit_call["openemr_user_id"] == 10
     assert audit_call["openemr_patient_id"] == 1
     assert audit_call["error_message"] == "zoom failure"
     assert audit_call["detail"] == {"stage": "zoom_create"}
@@ -411,7 +411,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
         lambda payload: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=payload,
             )
         ], None),
@@ -454,7 +454,7 @@ def test_openemr_webhook_create_writes_openemr_urls_and_audits_success(client, a
     assert "meeting.created" in event_types
     assert "openemr.url_writeback_success" in event_types
     writeback_call = next(call for call in calls if call["event_type"] == "openemr.url_writeback_success")
-    assert writeback_call["openemr_provider_id"] == 10
+    assert writeback_call["openemr_user_id"] == 10
     assert writeback_call["openemr_patient_id"] == 1
     assert writeback_call["error_message"] is None
 
@@ -471,7 +471,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
         lambda payload: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=payload,
             )
         ], None),
@@ -504,7 +504,7 @@ def test_openemr_webhook_create_audits_writeback_failure(client, app, monkeypatc
     event_types = [call["event_type"] for call in calls]
     assert "openemr.url_writeback_failed" in event_types
     writeback_call = next(call for call in calls if call["event_type"] == "openemr.url_writeback_failed")
-    assert writeback_call["openemr_provider_id"] == 10
+    assert writeback_call["openemr_user_id"] == 10
     assert writeback_call["openemr_patient_id"] == 1
     assert writeback_call["error_message"] == "Zoom URL writeback failed"
 
@@ -524,7 +524,7 @@ def test_openemr_webhook_updates_existing_meeting_when_zoom_meeting_exists(clien
         lambda p: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=p,
             )
         ], None),
@@ -573,7 +573,7 @@ def test_openemr_webhook_update_audits_zoom_update_failure(client, app, monkeypa
         lambda p: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=p,
             )
         ], None),
@@ -597,7 +597,7 @@ def test_openemr_webhook_update_audits_zoom_update_failure(client, app, monkeypa
     assert audit_call["success"] is False
     assert audit_call["zoom_account_id"] == "acct-update-fail"
     assert audit_call["openemr_appointment_id"] == 999
-    assert audit_call["openemr_provider_id"] == 10
+    assert audit_call["openemr_user_id"] == 10
     assert audit_call["openemr_patient_id"] == 1
     assert audit_call["zoom_meeting_id"] == "meet-update-fail"
     assert audit_call["error_message"] == "zoom update failed"
@@ -616,7 +616,7 @@ def test_openemr_webhook_recreates_existing_meeting_when_zoom_meeting_missing(cl
         lambda p: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=p,
             )
         ], None),
@@ -670,7 +670,7 @@ def test_openemr_webhook_recreate_audits_replacement_create_failure(client, app,
         lambda p: ([
             SimpleNamespace(
                 zoom_account=account_stub,
-                provider_mapping=SimpleNamespace(id=10, openemr_provider_id=10),
+                provider_mapping=SimpleNamespace(id=10, openemr_user_id=10),
                 payload=p,
             )
         ], None),
@@ -694,7 +694,7 @@ def test_openemr_webhook_recreate_audits_replacement_create_failure(client, app,
     assert audit_call["success"] is False
     assert audit_call["zoom_account_id"] == "acct-recreate-fail"
     assert audit_call["openemr_appointment_id"] == 999
-    assert audit_call["openemr_provider_id"] == 10
+    assert audit_call["openemr_user_id"] == 10
     assert audit_call["openemr_patient_id"] == 1
     assert audit_call["zoom_meeting_id"] == "meet-old"
     assert audit_call["error_message"] == "replacement create failed"
@@ -786,7 +786,7 @@ def test_openemr_webhook_delete_returns_error_when_zoom_delete_fails(client, app
     assert audit_call["success"] is False
     assert audit_call["zoom_account_id"] == "acct-delete-error"
     assert audit_call["openemr_appointment_id"] == 999
-    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_user_id"] == "10"
     assert audit_call["zoom_meeting_id"] == "meet-del-err"
     assert audit_call["error_message"] == "zoom delete failed"
     assert audit_call["detail"] == {"stage": "zoom_delete"}
@@ -918,7 +918,7 @@ def test_openemr_webhook_delete_preserves_record_when_clinical_note_present(clie
     assert audit_call["success"] is True
     assert audit_call["zoom_account_id"] == "acct-preserve"
     assert audit_call["openemr_appointment_id"] == 999
-    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_user_id"] == "10"
     assert audit_call["openemr_patient_id"] == "42"
     assert audit_call["zoom_meeting_id"] == "meet-preserve"
     assert audit_call["detail"] == {"preserved": True, "reason": "clinical_note_present"}

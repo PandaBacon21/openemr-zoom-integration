@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.models import AccountConfig, AppointmentTypeFilter, ProviderMapping, ZoomAccount
+from app.models import AccountConfig, AppointmentTypeFilter, UserMapping, ZoomAccount
 from app.services.openemr.appointments import appointment_processor
 
 
@@ -35,17 +35,17 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
     return account
 
 
-def _create_provider_mapping(
+def _create_user_mapping(
     account: ZoomAccount,
     *,
     npi: str = "1234567890",
     provider_id: str = "10",
-) -> ProviderMapping:
-    mapping = ProviderMapping(
+) -> UserMapping:
+    mapping = UserMapping(
         zoom_account_id=account.account_id,
         openemr_fhir_id="pract-1",
         openemr_provider_npi=npi,
-        openemr_provider_id=provider_id,
+        openemr_user_id=provider_id,
         openemr_provider_name="Dr Jane Doe",
         zoom_user_id="u-1",
         zoom_user_email="jane@example.com",
@@ -83,7 +83,7 @@ def test_filter_appointment_event_drops_by_provider_id(app):
 
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
-        _create_provider_mapping(account, npi="1234567890", provider_id="10")
+        _create_user_mapping(account, npi="1234567890", provider_id="10")
         matches, reason = appointment_processor.filter_appointment_event(payload)
     assert matches == []
     assert reason == "provider_unmapped"
@@ -92,7 +92,7 @@ def test_filter_appointment_event_drops_by_provider_id(app):
 def test_filter_appointment_event_matches_when_no_type_filters(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
-        mapping = _create_provider_mapping(account, npi="1234567890", provider_id="10")
+        mapping = _create_user_mapping(account, npi="1234567890", provider_id="10")
 
         payload = dict(BASE_PAYLOAD)
         payload["category_id"] = 99  # no filters configured => all types pass
@@ -108,7 +108,7 @@ def test_filter_appointment_event_matches_when_no_type_filters(app):
 def test_filter_appointment_event_drops_by_category_id(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
-        _create_provider_mapping(account, npi="1234567890", provider_id="10")
+        _create_user_mapping(account, npi="1234567890", provider_id="10")
         _create_type_filter(account, "27")
 
         payload = dict(BASE_PAYLOAD)
@@ -121,7 +121,7 @@ def test_filter_appointment_event_drops_by_category_id(app):
 def test_filter_appointment_event_matches_allowed_category(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
-        _create_provider_mapping(account, npi="1234567890", provider_id="10")
+        _create_user_mapping(account, npi="1234567890", provider_id="10")
         _create_type_filter(account, "27")
 
         payload = dict(BASE_PAYLOAD)
@@ -136,7 +136,7 @@ def test_filter_appointment_event_matches_allowed_category(app):
 def test_filter_appointment_event_skips_mapping_when_account_inactive(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=False)
-        _create_provider_mapping(account, npi="1234567890", provider_id="10")
+        _create_user_mapping(account, npi="1234567890", provider_id="10")
 
         payload = dict(BASE_PAYLOAD)
         matches, reason = appointment_processor.filter_appointment_event(payload)

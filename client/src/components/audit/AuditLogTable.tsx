@@ -192,7 +192,7 @@ const AuditLogTable: React.FC<Props> = ({ lockedAccountId }) => {
           filters.openemr_encounter_number = currentFilters.encounterId;
         }
         if (currentFilters.providerId) {
-          filters.openemr_provider_id = currentFilters.providerId;
+          filters.openemr_user_id = currentFilters.providerId;
         }
         if (currentFilters.patientId) {
           filters.openemr_patient_id = currentFilters.patientId;

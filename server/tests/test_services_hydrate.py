@@ -12,7 +12,7 @@ from app.models import (
     AppointmentTypeFilter,
     AuditLog,
     MeetingRecord,
-    ProviderMapping,
+    UserMapping,
     ZoomAccount,
 )
 from app.services import hydrate as hydrate_service
@@ -40,19 +40,19 @@ def _create_account(account_id: str = "acct-hydrate") -> ZoomAccount:
 def _create_mapping(
     account_id: str,
     *,
-    openemr_provider_id: str,
+    openemr_user_id: str,
     openemr_facility_id: int | None = 2,
     npi: str | None = None,
-) -> ProviderMapping:
-    mapping = ProviderMapping(
+) -> UserMapping:
+    mapping = UserMapping(
         zoom_account_id=account_id,
-        openemr_fhir_id=f"fhir-{openemr_provider_id}",
-        openemr_provider_npi=npi or f"npi-{openemr_provider_id}",
-        openemr_provider_id=openemr_provider_id,
-        openemr_provider_name=f"Dr {openemr_provider_id}",
-        zoom_user_id=f"user-{openemr_provider_id}",
-        zoom_user_email=f"u{openemr_provider_id}@example.com",
-        zoom_user_name=f"User {openemr_provider_id}",
+        openemr_fhir_id=f"fhir-{openemr_user_id}",
+        openemr_provider_npi=npi or f"npi-{openemr_user_id}",
+        openemr_user_id=openemr_user_id,
+        openemr_provider_name=f"Dr {openemr_user_id}",
+        zoom_user_id=f"user-{openemr_user_id}",
+        zoom_user_email=f"u{openemr_user_id}@example.com",
+        zoom_user_name=f"User {openemr_user_id}",
         zoom_user_type=2,
         openemr_facility_id=openemr_facility_id,
         openemr_facility_name="Zoomly Medical Center - MA" if openemr_facility_id else None,
@@ -146,7 +146,7 @@ def test_hydrate_all_missing_creates_four_appointments_and_meetings(app, monkeyp
     """Provider has zero appts in the window → 4 created + 4 meetings minted."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
 
         captured = _patch_all_dependencies(
             monkeypatch,
@@ -192,7 +192,7 @@ def test_hydrate_all_present_noop(app, monkeypatch):
     """Provider already has 4 appts with MeetingRecords → no work done."""
     with app.app_context():
         account = _create_account()
-        mapping = _create_mapping(account.account_id, openemr_provider_id="10")
+        mapping = _create_mapping(account.account_id, openemr_user_id="10")
 
         # Compute the same slot grid the orchestrator will compute
         slot_dates = hydrate_service._next_two_weekdays(date.today())
@@ -212,7 +212,7 @@ def test_hydrate_all_present_noop(app, monkeypatch):
                     zoom_account_id=account.account_id,
                     zoom_meeting_id=f"zm-{eid_str}",
                     openemr_appointment_id=str(eid_str),
-                    openemr_provider_id="10",
+                    openemr_user_id="10",
                     status="created",
                 ))
         db.session.commit()
@@ -238,7 +238,7 @@ def test_hydrate_backfill_when_appt_exists_without_meeting(app, monkeypatch):
     """Appointment is present at slot[0] but no MeetingRecord → backfill the meeting only."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
 
         slot_dates = hydrate_service._next_two_weekdays(date.today())
         existing_appts = [{
@@ -276,7 +276,7 @@ def test_hydrate_backfill_when_appt_exists_without_meeting(app, monkeypatch):
 def test_hydrate_skips_provider_with_unknown_specialty(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
 
         captured = _patch_all_dependencies(
             monkeypatch,
@@ -295,7 +295,7 @@ def test_hydrate_skips_provider_with_unknown_specialty(app, monkeypatch):
 def test_hydrate_skips_provider_with_no_patients(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
 
         captured = _patch_all_dependencies(
             monkeypatch,
@@ -313,7 +313,7 @@ def test_hydrate_respects_account_appointment_type_filter(app, monkeypatch):
     """Account filter excludes the BH provider's only category → provider skipped."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="12")
+        _create_mapping(account.account_id, openemr_user_id="12")
 
         # SE has filtered to PC-only categories — BH provider has no match
         db.session.add(AppointmentTypeFilter(
@@ -337,7 +337,7 @@ def test_hydrate_respects_account_appointment_type_filter(app, monkeypatch):
 def test_hydrate_emits_started_and_completed_audits(app, monkeypatch):
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         _patch_all_dependencies(
             monkeypatch,
             specialty_categories=["Zoom Chronic Care", "Zoom New Patient", "Zoom Preventive"],
@@ -363,7 +363,7 @@ def test_hydrate_records_error_when_meeting_creation_fails(app, monkeypatch):
     """create_meeting_for_appointment returns {"error": ...} → counted in summary."""
     with app.app_context():
         account = _create_account()
-        _create_mapping(account.account_id, openemr_provider_id="10")
+        _create_mapping(account.account_id, openemr_user_id="10")
         _patch_all_dependencies(
             monkeypatch,
             specialty_categories=["Zoom Chronic Care"],

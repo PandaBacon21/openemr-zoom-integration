@@ -56,7 +56,7 @@ def _create_meeting_with_note(account_id: str, *, completed: bool = False):
         zoom_account_id=account.account_id,
         zoom_meeting_id=f"meeting-{account_id}",
         openemr_appointment_id="999",
-        openemr_provider_id="10",
+        openemr_user_id="10",
     )
     db.session.add(record)
     db.session.add(
@@ -265,7 +265,7 @@ def test_complete_zoom_note_audits_success_with_encounter_context(client, app, m
     assert audit_call["zoom_note_id"] == "note-acct-complete"
     assert audit_call["openemr_appointment_id"] == "999"
     assert audit_call["openemr_encounter_number"] == "555001"
-    assert audit_call["openemr_provider_id"] == 10
+    assert audit_call["openemr_user_id"] == 10
     assert audit_call["openemr_patient_id"] == 1
     assert "detail" not in audit_call
 
@@ -303,7 +303,7 @@ def test_complete_zoom_note_audits_skip_with_encounter_context(client, app, monk
     assert audit_call["zoom_note_id"] == "note-acct-complete-skip"
     assert audit_call["openemr_appointment_id"] == "999"
     assert audit_call["openemr_encounter_number"] == "555003"
-    assert audit_call["openemr_provider_id"] == 30
+    assert audit_call["openemr_user_id"] == 30
     assert audit_call["openemr_patient_id"] == 3
 
 
@@ -337,7 +337,7 @@ def test_complete_zoom_note_audits_false_completion_result_as_error(client, app,
     assert audit_call["zoom_note_id"] == "note-acct-complete-fail"
     assert audit_call["openemr_appointment_id"] == "999"
     assert audit_call["openemr_encounter_number"] == "555002"
-    assert audit_call["openemr_provider_id"] == 20
+    assert audit_call["openemr_user_id"] == 20
     assert audit_call["openemr_patient_id"] == 2
     assert audit_call["error_message"] == "Zoom note completion failed"
 
@@ -387,7 +387,7 @@ def _create_meeting_without_note(account_id: str):
         zoom_account_id=account.account_id,
         zoom_meeting_id=f"meeting-{account_id}",
         openemr_appointment_id="999",
-        openemr_provider_id="10",
+        openemr_user_id="10",
     )
     db.session.add(record)
     db.session.commit()
@@ -491,7 +491,7 @@ def test_fetch_zoom_note_audits_malformed_external_id(client, app, monkeypatch):
     assert response.status_code == 500
     failed = next(c for c in calls if c["event_type"] == "note.manual_fetch_failed")
     assert failed["detail"] == {"reason": "malformed_external_id"}
-    assert failed["openemr_provider_id"] == "10"
+    assert failed["openemr_user_id"] == "10"
     assert failed["openemr_patient_id"] == "1"
 
 
@@ -519,7 +519,7 @@ def test_fetch_zoom_note_audits_no_meeting_record(client, app, monkeypatch):
     failed = next(c for c in calls if c["event_type"] == "note.manual_fetch_failed")
     assert failed["detail"] == {"reason": "no_meeting_record"}
     assert failed["openemr_appointment_id"] == "888"
-    assert failed["openemr_provider_id"] == "42"
+    assert failed["openemr_user_id"] == "42"
     assert failed["openemr_patient_id"] == "7"
 
 

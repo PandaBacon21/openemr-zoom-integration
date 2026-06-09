@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.extensions import db
-from app.models import ProviderMapping, ZoomAccount
+from app.models import UserMapping, ZoomAccount
 from app.services.openemr import provider as providers
 
 
@@ -70,12 +70,12 @@ def _create_account(account_id: str, *, is_active: bool = True) -> ZoomAccount:
     return account
 
 
-def _create_mapping(account: ZoomAccount, *, npi: str, is_active: bool = True) -> ProviderMapping:
-    mapping = ProviderMapping(
+def _create_mapping(account: ZoomAccount, *, npi: str, is_active: bool = True) -> UserMapping:
+    mapping = UserMapping(
         zoom_account_id=account.account_id,
         openemr_fhir_id=f"fhir-{npi}",
         openemr_provider_npi=npi,
-        openemr_provider_id=f"id-{npi}",
+        openemr_user_id=f"id-{npi}",
         openemr_provider_name=f"Provider {npi}",
         zoom_user_id=f"user-{npi}",
         zoom_user_email=f"user-{npi}@example.com",
@@ -88,14 +88,14 @@ def _create_mapping(account: ZoomAccount, *, npi: str, is_active: bool = True) -
     return mapping
 
 
-def test_create_provider_mapping_rejects_basic_zoom_license(app):
+def test_create_user_mapping_rejects_basic_zoom_license(app):
     with app.app_context():
         with pytest.raises(ValueError, match="Basic \\(free\\) license"):
-            providers._create_provider_mapping(
+            providers._create_user_mapping(
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
-                openemr_provider_id=10,
+                openemr_user_id=10,
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="u-1",
                 zoom_user_email="jane@example.com",
@@ -104,14 +104,14 @@ def test_create_provider_mapping_rejects_basic_zoom_license(app):
             )
 
 
-def test_create_provider_mapping_requires_active_registration(app):
+def test_create_user_mapping_requires_active_registration(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found for account missing"):
-            providers._create_provider_mapping(
+            providers._create_user_mapping(
                 zoom_account_id="missing",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
-                openemr_provider_id=10,
+                openemr_user_id=10,
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="u-1",
                 zoom_user_email="jane@example.com",
@@ -120,17 +120,17 @@ def test_create_provider_mapping_requires_active_registration(app):
             )
 
 
-def test_create_provider_mapping_rejects_duplicate_npi_for_account(app):
+def test_create_user_mapping_rejects_duplicate_npi_for_account(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
         _create_mapping(account, npi="1234567890", is_active=True)
 
         with pytest.raises(ValueError, match="already mapped"):
-            providers._create_provider_mapping(
+            providers._create_user_mapping(
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-2",
                 openemr_provider_npi="1234567890",
-                openemr_provider_id=10,
+                openemr_user_id=10,
                 openemr_provider_name="Dr New",
                 zoom_user_id="u-2",
                 zoom_user_email="new@example.com",
@@ -139,16 +139,16 @@ def test_create_provider_mapping_rejects_duplicate_npi_for_account(app):
             )
 
 
-def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
+def test_create_user_mapping_allows_replacing_inactive_mapping(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
         _create_mapping(account, npi="1234567890", is_active=False)
 
-        mapping = providers._create_provider_mapping(
+        mapping = providers._create_user_mapping(
             zoom_account_id="acct-1",
             openemr_fhir_id="pract-2",
             openemr_provider_npi="1234567890",
-            openemr_provider_id=10,
+            openemr_user_id=10,
             openemr_provider_name="Dr New",
             zoom_user_id="u-2",
             zoom_user_email="new@example.com",
@@ -156,25 +156,25 @@ def test_create_provider_mapping_allows_replacing_inactive_mapping(app):
             zoom_user_type=2,
         )
 
-        rows = ProviderMapping.query.filter_by(zoom_account_id=account.account_id).all()
+        rows = UserMapping.query.filter_by(zoom_account_id=account.account_id).all()
 
     assert mapping.openemr_provider_npi == "1234567890"
-    assert mapping.openemr_provider_id == "10"
+    assert mapping.openemr_user_id == "10"
     assert mapping.zoom_user_email == "new@example.com"
     assert len(rows) == 2
 
 
-def test_create_provider_mapping_persists_zoom_user_timezone(app):
+def test_create_user_mapping_persists_zoom_user_timezone(app):
     """The IANA timezone string from the picked Zoom user's profile must
-    land on ProviderMapping.zoom_user_timezone so meeting creation can use
+    land on UserMapping.zoom_user_timezone so meeting creation can use
     it instead of falling back to AccountConfig.timezone."""
     with app.app_context():
         _create_account("acct-1", is_active=True)
-        mapping = providers._create_provider_mapping(
+        mapping = providers._create_user_mapping(
             zoom_account_id="acct-1",
             openemr_fhir_id="pract-tz",
             openemr_provider_npi="9876543210",
-            openemr_provider_id=42,
+            openemr_user_id=42,
             openemr_provider_name="Dr Tz",
             zoom_user_id="u-tz",
             zoom_user_email="tz@example.com",
@@ -185,17 +185,17 @@ def test_create_provider_mapping_persists_zoom_user_timezone(app):
         assert mapping.zoom_user_timezone == "America/Los_Angeles"
 
 
-def test_create_provider_mapping_allows_null_zoom_user_timezone(app):
+def test_create_user_mapping_allows_null_zoom_user_timezone(app):
     """Mapping creation must succeed even when the picked Zoom user has no
     profile timezone — meeting creation falls back to AccountConfig.timezone
     in that case."""
     with app.app_context():
         _create_account("acct-1", is_active=True)
-        mapping = providers._create_provider_mapping(
+        mapping = providers._create_user_mapping(
             zoom_account_id="acct-1",
             openemr_fhir_id="pract-no-tz",
             openemr_provider_npi="1111111111",
-            openemr_provider_id=43,
+            openemr_user_id=43,
             openemr_provider_name="Dr No Tz",
             zoom_user_id="u-no-tz",
             zoom_user_email="notz@example.com",
@@ -205,7 +205,7 @@ def test_create_provider_mapping_allows_null_zoom_user_timezone(app):
         assert mapping.zoom_user_timezone is None
 
 
-def test_get_provider_mappings_returns_only_active_for_account(app):
+def test_get_user_mappings_returns_only_active_for_account(app):
     with app.app_context():
         account_1 = _create_account("acct-1", is_active=True)
         account_2 = _create_account("acct-2", is_active=True)
@@ -214,33 +214,33 @@ def test_get_provider_mappings_returns_only_active_for_account(app):
         _create_mapping(account_1, npi="2234567890", is_active=False)
         _create_mapping(account_2, npi="3234567890", is_active=True)
 
-        result = providers._get_provider_mappings("acct-1")
+        result = providers._get_user_mappings("acct-1")
 
     assert [m.id for m in result] == [active.id]
 
 
-def test_get_provider_mappings_requires_active_registration(app):
+def test_get_user_mappings_requires_active_registration(app):
     with app.app_context():
         with pytest.raises(ValueError, match="No active registration found for account missing"):
-            providers._get_provider_mappings("missing")
+            providers._get_user_mappings("missing")
 
 
-def test_delete_provider_mapping_deletes_matching_mapping(app):
+def test_delete_user_mapping_deletes_matching_mapping(app):
     with app.app_context():
         account = _create_account("acct-1", is_active=True)
         mapping = _create_mapping(account, npi="1234567890", is_active=True)
 
-        providers._delete_provider_mapping("acct-1", mapping.openemr_provider_id)
-        deleted = ProviderMapping.query.filter_by(id=mapping.id).first()
+        providers._delete_user_mapping("acct-1", mapping.openemr_user_id)
+        deleted = UserMapping.query.filter_by(id=mapping.id).first()
 
     assert deleted is None
 
 
-def test_delete_provider_mapping_raises_when_not_found(app):
+def test_delete_user_mapping_raises_when_not_found(app):
     with app.app_context():
         _create_account("acct-1", is_active=True)
         with pytest.raises(ValueError, match="No active mapping found with NPI 999"):
-            providers._delete_provider_mapping("acct-1", "999")
+            providers._delete_user_mapping("acct-1", "999")
 
 
 def test_get_provider_patients_returns_seeded_three(monkeypatch):

@@ -186,6 +186,88 @@ UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin'
 UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Educator',              contact_relationship='Sibling', phone_contact='816-555-0348' WHERE pid=148;
 UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Sales Representative',  contact_relationship='Parent',  phone_contact='214-555-0349' WHERE pid=149;
 UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Bilingual Teacher',     contact_relationship='Spouse',  phone_contact='312-555-0350' WHERE pid=150;
+-- Sprint 13 demo patients (PIDs 151-171) — personalized demographics.
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Accounting Manager',                 contact_relationship='Spouse',  phone_contact='617-555-0351' WHERE pid=151;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Elementary School Administrator',    contact_relationship='Spouse',  phone_contact='212-555-0352' WHERE pid=152;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Benefits Analyst',                   contact_relationship='Spouse',  phone_contact='617-555-0353' WHERE pid=153;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Product Operations Manager',         contact_relationship='Spouse',  phone_contact='415-555-0354' WHERE pid=154;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Physical Therapist',                 contact_relationship='Spouse',  phone_contact='720-555-0355' WHERE pid=155;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Clinic Office Manager',              contact_relationship='Spouse',  phone_contact='215-555-0356' WHERE pid=156;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='School Counselor',                   contact_relationship='Spouse',  phone_contact='720-555-0357' WHERE pid=157;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Finance Director',                   contact_relationship='Spouse',  phone_contact='212-555-0358' WHERE pid=158;
+UPDATE patient_data SET race='white',              ethnicity='hisp_or_latin',     occupation='Restaurant Manager',                 contact_relationship='Spouse',  phone_contact='305-555-0359' WHERE pid=159;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Human Resources Manager',            contact_relationship='Spouse',  phone_contact='704-555-0360' WHERE pid=160;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Policy Analyst',                     contact_relationship='Spouse',  phone_contact='202-555-0361' WHERE pid=161;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Legal Assistant',                    contact_relationship='Spouse',  phone_contact='212-555-0362' WHERE pid=162;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='UX Research Manager',                contact_relationship='Spouse',  phone_contact='617-555-0363' WHERE pid=163;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Project Manager',                    contact_relationship='Spouse',  phone_contact='816-555-0364' WHERE pid=164;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Senior Accountant',                  contact_relationship='Spouse',  phone_contact='404-555-0365' WHERE pid=165;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Librarian',                          contact_relationship='Spouse',  phone_contact='719-555-0366' WHERE pid=166;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Nurse',                      contact_relationship='Spouse',  phone_contact='801-555-0367' WHERE pid=167;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retail Manager',                     contact_relationship='Spouse',  phone_contact='617-555-0368' WHERE pid=168;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Community Outreach Coordinator',      contact_relationship='Sibling', phone_contact='617-555-0369' WHERE pid=169;
+UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Software Developer',                 contact_relationship='Parent',  phone_contact='617-555-0370' WHERE pid=170;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Teacher',                    contact_relationship='Spouse',  phone_contact='617-555-0371' WHERE pid=171;
+
+-- Panel expansion patients (PIDs 172-207) — one persona source row per patient.
+DROP TEMPORARY TABLE IF EXISTS zoomly_panel_expansion;
+CREATE TEMPORARY TABLE zoomly_panel_expansion (
+    pid INT PRIMARY KEY,
+    persona VARCHAR(8) NOT NULL,
+    race VARCHAR(64) NOT NULL,
+    ethnicity VARCHAR(64) NOT NULL,
+    occupation VARCHAR(128) NOT NULL,
+    contact_relationship VARCHAR(64) NOT NULL,
+    phone_contact VARCHAR(32) NOT NULL
+);
+
+INSERT INTO zoomly_panel_expansion
+    (pid, persona, race, ethnicity, occupation, contact_relationship, phone_contact)
+VALUES
+(172, 'CHR', 'white',              'not_hisp_or_latin', 'Operations Director',        'Spouse',  '617-555-0372'),
+(173, 'HYA', 'white',              'not_hisp_or_latin', 'Graduate Student',           'Parent',  '212-555-0373'),
+(174, 'CHR', 'white',              'hisp_or_latin',     'Restaurant Manager',         'Spouse',  '305-555-0374'),
+(175, 'BH',  'white',              'not_hisp_or_latin', 'Project Coordinator',        'Spouse',  '704-555-0375'),
+(176, 'BH',  'white',              'not_hisp_or_latin', 'UX Designer',                'Sibling', '617-555-0376'),
+(177, 'BH',  'white',              'hisp_or_latin',     'Warehouse Supervisor',       'Spouse',  '215-555-0377'),
+(178, 'CHR', 'Asian',              'not_hisp_or_latin', 'Retired Accountant',         'Spouse',  '415-555-0378'),
+(179, 'HYA', 'white',              'not_hisp_or_latin', 'Fitness Instructor',         'Parent',  '503-555-0379'),
+(180, 'GER', 'white',              'not_hisp_or_latin', 'Retired Librarian',          'Child',   '303-555-0380'),
+(181, 'HYA', 'white',              'not_hisp_or_latin', 'Software QA Analyst',        'Parent',  '720-555-0381'),
+(182, 'BH',  'Asian',              'not_hisp_or_latin', 'Data Analyst',               'Sibling', '617-555-0382'),
+(183, 'BH',  'white',              'not_hisp_or_latin', 'Sales Manager',              'Sibling', '212-555-0383'),
+(184, 'CHR', 'white',              'hisp_or_latin',     'Dental Office Manager',      'Spouse',  '303-555-0384'),
+(185, 'HYA', 'white',              'not_hisp_or_latin', 'Outdoor Retail Associate',   'Parent',  '720-555-0385'),
+(186, 'BH',  'white',              'not_hisp_or_latin', 'Editor',                     'Spouse',  '212-555-0386'),
+(187, 'BH',  'black_or_afri_amer', 'not_hisp_or_latin', 'Program Manager',            'Parent',  '202-555-0387'),
+(188, 'BH',  'Asian',              'not_hisp_or_latin', 'Product Designer',           'Spouse',  '617-555-0388'),
+(189, 'BH',  'white',              'not_hisp_or_latin', 'Electrician',                'Sibling', '215-555-0389'),
+(190, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'School Principal',           'Spouse',  '404-555-0390'),
+(191, 'HYA', 'white',              'hisp_or_latin',     'Personal Trainer',           'Sibling', '813-555-0391'),
+(192, 'CHR', 'white',              'not_hisp_or_latin', 'Finance Manager',            'Spouse',  '617-555-0392'),
+(193, 'HYA', 'white',              'hisp_or_latin',     'Medical Student',            'Parent',  '212-555-0393'),
+(194, 'SUD', 'white',              'not_hisp_or_latin', 'Construction Foreman',       'Sibling', '617-555-0394'),
+(195, 'SUD', 'white',              'hisp_or_latin',     'Catering Manager',           'Spouse',  '215-555-0395'),
+(196, 'CHR', 'Asian',              'not_hisp_or_latin', 'Quality Manager',            'Spouse',  '617-555-0396'),
+(197, 'NEW', 'white',              'not_hisp_or_latin', 'Consultant',                 'Parent',  '617-555-0397'),
+(198, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'Benefits Coordinator',       'Spouse',  '816-555-0398'),
+(199, 'HYA', 'Asian',              'not_hisp_or_latin', 'Graphic Designer',           'Parent',  '816-555-0399'),
+(200, 'GER', 'white',              'not_hisp_or_latin', 'Retired Attorney',           'Child',   '215-555-0400'),
+(201, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'Nonprofit Director',         'Spouse',  '404-555-0401'),
+(202, 'CHR', 'white',              'hisp_or_latin',     'HVAC Supervisor',            'Spouse',  '719-555-0402'),
+(203, 'HYA', 'white',              'not_hisp_or_latin', 'College Coach',              'Parent',  '719-555-0403'),
+(204, 'GER', 'Asian',              'not_hisp_or_latin', 'Retired Pharmacist',         'Child',   '303-555-0404'),
+(205, 'CHR', 'white',              'not_hisp_or_latin', 'City Planner',               'Spouse',  '801-555-0405'),
+(206, 'CHR', 'white',              'not_hisp_or_latin', 'Nurse Educator',             'Spouse',  '617-555-0406'),
+(207, 'BH',  'black_or_afri_amer', 'not_hisp_or_latin', 'Customer Success Manager',   'Sibling', '617-555-0407');
+
+UPDATE patient_data pd
+JOIN zoomly_panel_expansion zpe ON zpe.pid = pd.pid
+   SET pd.race = zpe.race,
+       pd.ethnicity = zpe.ethnicity,
+       pd.occupation = zpe.occupation,
+       pd.contact_relationship = zpe.contact_relationship,
+       pd.phone_contact = zpe.phone_contact;
 
 -- =============================================================================
 -- HISTORICAL TELEHEALTH ENCOUNTER SCAFFOLD  (Sprint 12 / S12-05)
@@ -898,7 +980,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2025-10-15', '140', 'Sanofi Pasteur', 'FL2025-Q4-A',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 171 AND pid NOT IN (124, 134, 147, 148);
+ WHERE pid BETWEEN 100 AND 207 AND pid NOT IN (124, 134, 147, 148, 197);
 
 -- COVID booster (everyone except NEW + HYA-young)
 INSERT INTO `immunizations`
@@ -907,7 +989,9 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2026-01-15', '208', 'Pfizer-BioNTech', 'COV2026A',
        providerID, 'Intramuscular', 'Right deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 121, 125, 128);
+ WHERE pid BETWEEN 100 AND 207
+   AND pid NOT IN (124, 134, 147, 148, 197)
+   AND DOB <= DATE_SUB(CURDATE(), INTERVAL 30 YEAR);
 
 -- Tdap (every non-skip adult, given ~4 years ago)
 INSERT INTO `immunizations`
@@ -916,7 +1000,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2022-05-15', '115', 'Sanofi Pasteur', 'TD2022B',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 171 AND pid NOT IN (124, 134, 147, 148);
+ WHERE pid BETWEEN 100 AND 207 AND pid NOT IN (124, 134, 147, 148, 197);
 
 -- Shingrix — recombinant zoster vaccine for adults 50+
 INSERT INTO `immunizations`
@@ -925,7 +1009,7 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2024-03-15', '187', 'GSK', 'SHG2024A',
        providerID, 'Intramuscular', 'Left deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 134, 147, 148) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 50 YEAR);
+ WHERE pid BETWEEN 100 AND 207 AND pid NOT IN (124, 134, 147, 148, 197) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 50 YEAR);
 
 -- Pneumovax-23 — for adults 65+
 INSERT INTO `immunizations`
@@ -934,105 +1018,115 @@ INSERT INTO `immunizations`
 SELECT UNHEX(REPLACE(UUID(),'-','')), pid, '2023-06-15', '33', 'Merck', 'PN2023A',
        providerID, 'Intramuscular', 'Right deltoid', 'Completed', 0, NOW()
   FROM patient_data
- WHERE pid BETWEEN 100 AND 129 AND pid NOT IN (124, 134, 147, 148) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR);
+ WHERE pid BETWEEN 100 AND 207 AND pid NOT IN (124, 134, 147, 148, 197) AND DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR);
 
 -- =============================================================================
 -- INSURANCE ASSIGNMENT PER PATIENT  (Sprint 12 / S12-14)
 --
--- One primary insurance_data row per patient (30 patients including PID 124),
--- FK'd to one of the S12-03 insurance_companies (id range 200–207).
--- Distribution: Medicare for 65+, Medicaid CO for the SUD patient + 2 young
--- adults, Tricare for 1 (military), commercial mix (Aetna/BCBS/UHC/Cigna/
--- Kaiser) across the rest. subscriber_* fields use 'self' relationship —
--- the patient is their own subscriber.
+-- One primary insurance_data row per patient, FK'd to one of the S12-03/S12-polish
+-- insurance_companies. Required Edit Current Insurance fields are filled from
+-- each seeded patient's demographics so the Insurance panel has a complete
+-- subscriber story. Regional payer assignment derives from the patient's current
+-- seeded state after provider/facility location corrections.
 -- =============================================================================
 
 INSERT INTO `insurance_data`
     (uuid, type, provider, plan_name, policy_number, group_number,
-     subscriber_fname, subscriber_lname, subscriber_DOB, subscriber_relationship,
-     pid, date)
+     subscriber_fname, subscriber_mname, subscriber_lname, subscriber_DOB,
+     subscriber_sex, subscriber_relationship, subscriber_ss,
+     subscriber_street, subscriber_street_line_2, subscriber_city,
+     subscriber_state, subscriber_postal_code, subscriber_country,
+     subscriber_phone, accept_assignment, pid, date)
 SELECT UNHEX(REPLACE(UUID(),'-','')), 'primary',
-       CASE pd.pid
-           WHEN 100 THEN 207 WHEN 101 THEN 200 WHEN 102 THEN 202 WHEN 103 THEN 201
-           WHEN 104 THEN 203 WHEN 105 THEN 205 WHEN 106 THEN 204 WHEN 107 THEN 200
-           WHEN 108 THEN 202 WHEN 109 THEN 201 WHEN 110 THEN 203 WHEN 111 THEN 204
-           WHEN 112 THEN 200 WHEN 113 THEN 202 WHEN 114 THEN 201 WHEN 115 THEN 203
-           WHEN 116 THEN 205 WHEN 117 THEN 204 WHEN 118 THEN 200 WHEN 119 THEN 202
-           WHEN 120 THEN 206 WHEN 121 THEN 206 WHEN 122 THEN 201 WHEN 123 THEN 203
-           WHEN 124 THEN 204 WHEN 125 THEN 206 WHEN 126 THEN 205 WHEN 127 THEN 200
-           WHEN 128 THEN 202 WHEN 129 THEN 201
-           WHEN 130 THEN 200 WHEN 131 THEN 204 WHEN 132 THEN 203 WHEN 133 THEN 202
-           WHEN 134 THEN 200 WHEN 135 THEN 201 WHEN 136 THEN 203 WHEN 137 THEN 202
-           WHEN 138 THEN 200 WHEN 139 THEN 201 WHEN 140 THEN 202 WHEN 141 THEN 203
-           WHEN 142 THEN 205 WHEN 143 THEN 200 WHEN 144 THEN 201 WHEN 145 THEN 204
-           WHEN 146 THEN 205 WHEN 147 THEN 200 WHEN 148 THEN 206 WHEN 149 THEN 202
-           WHEN 150 THEN 203
+       CASE
+           WHEN pd.DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR) THEN 205
+           WHEN pd.state = 'MA' THEN 208
+           WHEN pd.state = 'NY' THEN 209
+           WHEN pd.state = 'PA' THEN 210
+           WHEN pd.state = 'GA' THEN 211
+           WHEN pd.state = 'FL' THEN 212
+           WHEN pd.state = 'NC' THEN 213
+           WHEN pd.state IN ('CA','WA','OR') THEN 214
+           WHEN pd.state = 'CO' THEN 201
+           WHEN pd.state = 'MO' THEN 215
+           WHEN pd.state = 'TX' THEN 216
+           WHEN pd.state = 'IL' THEN 217
+           WHEN pd.state = 'UT' THEN 202
+           WHEN pd.state = 'DC' THEN 200
+           ELSE 202
        END AS provider,
-       CASE pd.pid
-           WHEN 100 THEN 'Tricare Select'             WHEN 101 THEN 'Aetna Choice POS II'
-           WHEN 102 THEN 'UHC Choice Plus'             WHEN 103 THEN 'BCBS CO Anthem PPO'
-           WHEN 104 THEN 'Cigna PPO Plus'              WHEN 105 THEN 'Medicare Part B'
-           WHEN 106 THEN 'Kaiser Permanente HMO'       WHEN 107 THEN 'Aetna Open Access'
-           WHEN 108 THEN 'UHC Choice Plus'             WHEN 109 THEN 'BCBS CO Anthem PPO'
-           WHEN 110 THEN 'Cigna LocalPlus'             WHEN 111 THEN 'Kaiser Permanente HMO'
-           WHEN 112 THEN 'Aetna Choice POS II'         WHEN 113 THEN 'UHC Navigate'
-           WHEN 114 THEN 'BCBS CO Anthem HMO'          WHEN 115 THEN 'Cigna Connect'
-           WHEN 116 THEN 'Medicare Part B + Medigap F' WHEN 117 THEN 'Kaiser Permanente HMO'
-           WHEN 118 THEN 'Aetna PPO'                   WHEN 119 THEN 'UHC Choice Plus'
-           WHEN 120 THEN 'Health First Colorado'       WHEN 121 THEN 'Health First Colorado'
-           WHEN 122 THEN 'BCBS CO Anthem PPO'          WHEN 123 THEN 'Cigna PPO Plus'
-           WHEN 124 THEN 'Kaiser Permanente HMO'       WHEN 125 THEN 'Health First Colorado'
-           WHEN 126 THEN 'Medicare Part B'             WHEN 127 THEN 'Aetna Choice POS II'
-           WHEN 128 THEN 'UHC Choice Plus'             WHEN 129 THEN 'BCBS CO Anthem HMO'
-           WHEN 130 THEN 'Aetna Choice POS II'         WHEN 131 THEN 'Kaiser Permanente HMO'
-           WHEN 132 THEN 'Cigna LocalPlus'             WHEN 133 THEN 'UHC Choice Plus'
-           WHEN 134 THEN 'Aetna PPO'                   WHEN 135 THEN 'BCBS Anthem PPO'
-           WHEN 136 THEN 'Cigna Connect'               WHEN 137 THEN 'UHC Navigate'
-           WHEN 138 THEN 'Aetna Open Access'           WHEN 139 THEN 'BCBS Federal'
-           WHEN 140 THEN 'UHC Choice Plus'             WHEN 141 THEN 'Cigna PPO Plus'
-           WHEN 142 THEN 'Medicare Part B + Medigap G' WHEN 143 THEN 'Aetna Choice POS II'
-           WHEN 144 THEN 'BCBS CO Anthem PPO'          WHEN 145 THEN 'Kaiser Permanente HMO'
-           WHEN 146 THEN 'Medicare Part B'             WHEN 147 THEN 'Aetna PPO'
-           WHEN 148 THEN 'Health First Colorado'       WHEN 149 THEN 'UHC Choice Plus'
-           WHEN 150 THEN 'Cigna LocalPlus'
+       CASE
+           WHEN pd.DOB <= DATE_SUB(CURDATE(), INTERVAL 65 YEAR) THEN 'Medicare Part B + Medigap'
+           WHEN pd.state = 'MA' THEN 'BCBS Massachusetts HMO Blue'
+           WHEN pd.state = 'NY' THEN 'Empire BCBS NY PPO'
+           WHEN pd.state = 'PA' THEN 'Highmark BCBS PA PPO'
+           WHEN pd.state = 'GA' THEN 'BCBS GA Anthem HMO'
+           WHEN pd.state = 'FL' THEN 'Florida Blue BlueCare HMO'
+           WHEN pd.state = 'NC' THEN 'BCBS NC Blue Advantage'
+           WHEN pd.state IN ('CA','WA','OR') THEN 'Anthem Blue Cross CA Pathway'
+           WHEN pd.state = 'CO' THEN 'BCBS CO Anthem HMO'
+           WHEN pd.state = 'MO' THEN 'BCBS Kansas City Preferred'
+           WHEN pd.state = 'TX' THEN 'BCBS Texas Blue Choice PPO'
+           WHEN pd.state = 'IL' THEN 'BCBS Illinois Blue Cross PPO'
+           WHEN pd.state = 'UT' THEN 'UHC Choice Plus'
+           WHEN pd.state = 'DC' THEN 'Aetna Choice POS II'
+           ELSE 'UHC Choice Plus'
        END AS plan_name,
        CONCAT('POL', LPAD(pd.pid, 7, '0')) AS policy_number,
        CONCAT('GRP-ZOOMLY-', FLOOR(100 + (pd.pid - 100) / 5)) AS group_number,
-       pd.fname, pd.lname, pd.DOB, 'self',
-       pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
+       pd.fname, NULLIF(pd.mname, ''), pd.lname, pd.DOB,
+       pd.sex, 'self', pd.ss,
+       pd.street, NULLIF(pd.street_line_2, ''), pd.city,
+       pd.state, pd.postal_code, pd.country_code,
+       pd.phone_home, 'TRUE', pd.pid, DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
   FROM patient_data pd
- WHERE pd.pid BETWEEN 100 AND 171;
+ WHERE pd.pid BETWEEN 100 AND 207;
 
 -- =============================================================================
--- REGIONAL INSURANCE REASSIGNMENT — override the per-PID CASE assignments
--- with payers that match each patient's NEW facility region.
+-- CARE TEAMS
+-- Primary provider plus the provider facility's nurse. MAs are intentionally
+-- excluded, and provider-level RN users such as Sarah Chen are not used as the
+-- nurse slot because their abook_type is still physician.
 -- =============================================================================
 
--- East coast regional BCBS
-UPDATE insurance_data SET provider=208, plan_name='BCBS Massachusetts HMO Blue'  WHERE pid IN (100, 135, 140);
-UPDATE insurance_data SET provider=209, plan_name='Empire BCBS NY PPO'           WHERE pid IN (101, 103, 130, 141);
-UPDATE insurance_data SET provider=210, plan_name='Highmark BCBS PA PPO'         WHERE pid IN (106, 109);
-UPDATE insurance_data SET provider=211, plan_name='BCBS GA Anthem HMO'           WHERE pid IN (114, 132);
-UPDATE insurance_data SET provider=212, plan_name='Florida Blue BlueCare HMO'    WHERE pid IN (118, 121, 136, 138);
-UPDATE insurance_data SET provider=213, plan_name='BCBS NC Blue Advantage'       WHERE pid IN (123, 129, 134);
+INSERT INTO `care_teams`
+    (uuid, pid, status, team_name, note, date_created, date_updated, created_by, updated_by)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pd.pid, 'active',
+       CONCAT(pd.fname, ' ', pd.lname, ' Care Team'),
+       CONCAT('Seeded ', f.name, ' care team: primary provider plus facility nurse.'),
+       NOW(), NOW(), 1, 1
+  FROM patient_data pd
+  JOIN users u ON u.id = pd.providerID
+  JOIN facility f ON f.id = u.facility_id
+ WHERE pd.pid BETWEEN 100 AND 207;
 
--- West coast regional
-UPDATE insurance_data SET provider=214, plan_name='Anthem Blue Cross CA Pathway' WHERE pid IN (102, 107, 111, 147);
+INSERT INTO `care_team_member`
+    (care_team_id, user_id, role, facility_id, provider_since, status,
+     date_created, date_updated, created_by, updated_by, note)
+SELECT ct.id, pd.providerID,
+       CASE
+           WHEN p.specialty IN ('Psychiatry','Clinical Social Work','Addiction Medicine','Psychiatric Nurse Practitioner')
+           THEN 'mental_health'
+           ELSE 'primary_care_provider'
+       END,
+       p.facility_id, CURDATE(), 'active',
+       NOW(), NOW(), 1, 1, 'Seeded primary provider'
+  FROM care_teams ct
+  JOIN patient_data pd ON pd.pid = ct.pid
+  JOIN users p ON p.id = pd.providerID
+ WHERE pd.pid BETWEEN 100 AND 207;
 
--- Central regional
-UPDATE insurance_data SET provider=216, plan_name='BCBS Texas Blue Choice PPO'   WHERE pid = 149;
-UPDATE insurance_data SET provider=217, plan_name='BCBS Illinois Blue Cross PPO' WHERE pid = 150;
-
--- Mountain (CO/UT) — BCBS CO + Kaiser CO + Medicare
-UPDATE insurance_data SET provider=201, plan_name='BCBS CO Anthem HMO'           WHERE pid IN (104, 113, 131, 144);
-UPDATE insurance_data SET provider=204, plan_name='Kaiser Permanente Colorado'   WHERE pid = 122;
-UPDATE insurance_data SET provider=205, plan_name='Medicare Part B + Medigap'    WHERE pid IN (105, 116, 126, 142, 146);
-UPDATE insurance_data SET provider=206, plan_name='Health First Colorado'        WHERE pid = 120;
-
--- National commercial (Aetna / UHC / Cigna) — DC, MO, WA, OR + a few NC/GA/FL/PA
-UPDATE insurance_data SET provider=200, plan_name='Aetna Choice POS II'          WHERE pid IN (110, 124, 137, 139, 143, 145, 148);
-UPDATE insurance_data SET provider=202, plan_name='UHC Choice Plus'              WHERE pid IN (108, 115, 119, 128, 133);
-UPDATE insurance_data SET provider=203, plan_name='Cigna LocalPlus'              WHERE pid IN (112, 117, 125, 127);
+INSERT INTO `care_team_member`
+    (care_team_id, user_id, role, facility_id, provider_since, status,
+     date_created, date_updated, created_by, updated_by, note)
+SELECT ct.id, n.id, 'nurse',
+       n.facility_id, CURDATE(), 'active',
+       NOW(), NOW(), 1, 1, 'Seeded facility nurse'
+  FROM care_teams ct
+  JOIN patient_data pd ON pd.pid = ct.pid
+  JOIN users p ON p.id = pd.providerID
+  JOIN users n ON n.facility_id = p.facility_id AND n.abook_type = 'nurse'
+ WHERE pd.pid BETWEEN 100 AND 207;
 
 -- =============================================================================
 -- CLINICAL DATA FOR NEW PATIENTS (Sprint 12 / S12-28e)
@@ -1135,6 +1229,294 @@ SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1,
 
 -- =============================================================================
 -- S12-29 — APPOINTMENT RETARGET + NEW APPOINTMENTS FOR NEW PATIENTS
+
+-- =============================================================================
+-- PANEL EXPANSION CLINICAL DATA (Sprint 14 / 100+ patient panel)
+--
+-- PIDs 172-207 extend each seeded provider panel to six patients. Clinical
+-- artifacts are persona-driven from zoomly_panel_expansion so demographics,
+-- problems, medications, vitals, labs, and provider attribution stay aligned.
+-- PID 197 (NEW persona) is intentionally sparse like the other new-patient
+-- demo targets.
+-- =============================================================================
+
+SET @panel_enc_counter := 32000;
+INSERT INTO `form_encounter`
+    (uuid, date, onset_date, pid, encounter,
+     pc_catid, provider_id, supervisor_id, facility_id, billing_facility,
+     class_code, reason, external_id,
+     pos_code, last_level_billed, last_level_closed,
+     discharge_disposition, sensitivity, in_collection)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    DATE_SUB(NOW(), INTERVAL (14 + (zpe.pid - 172)) DAY),
+    DATE_SUB(NOW(), INTERVAL (14 + (zpe.pid - 172)) DAY),
+    pd.pid,
+    (@panel_enc_counter := @panel_enc_counter + 1),
+    CASE zpe.persona
+        WHEN 'BH'  THEN @zoom_behavioral_health_catid
+        WHEN 'SUD' THEN @zoom_mat_catid
+        WHEN 'HYA' THEN @zoom_preventive_catid
+        ELSE @zoom_chronic_care_catid
+    END,
+    pd.providerID, pd.providerID,
+    u.facility_id, u.facility_id,
+    'AMB',
+    CASE zpe.persona
+        WHEN 'CHR' THEN 'Quarterly chronic care telehealth follow-up'
+        WHEN 'GER' THEN 'Geriatric medication review by video'
+        WHEN 'BH'  THEN 'Behavioral health medication follow-up'
+        WHEN 'SUD' THEN 'MAT maintenance telehealth check-in'
+        WHEN 'HYA' THEN 'Preventive telehealth visit'
+        ELSE 'Telehealth follow-up'
+    END,
+    CONCAT('zpanel_h', pd.pid),
+    10,
+    5, 5,
+    '01', '', 0
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+JOIN users u ON u.id = pd.providerID
+WHERE zpe.persona <> 'NEW'
+ORDER BY zpe.pid;
+
+UPDATE sequences SET id = GREATEST(id, (SELECT COALESCE(MAX(encounter), 1) FROM form_encounter));
+
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fe.date, fe.encounter, 'New Patient Encounter', fe.id, fe.pid,
+       u.username, 'Default', 1, 0, 'newpatient', fe.provider_id
+  FROM form_encounter fe
+  JOIN users u ON u.id = fe.provider_id
+ WHERE fe.external_id LIKE 'zpanel_h%';
+
+-- Problems for panel-expansion patients.
+INSERT INTO `lists`
+    (uuid, type, subtype, title, diagnosis, pid, date, begdate, activity, user, outcome, comments)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    'medical_problem', '',
+    prob.title, prob.diagnosis,
+    pd.pid, NOW(), DATE_SUB(CURDATE(), INTERVAL prob.years YEAR),
+    1, u.username, 0,
+    'zoomly_panel_expansion_problem'
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+JOIN users u ON u.id = pd.providerID
+JOIN (
+    SELECT 'CHR' AS persona, NULL AS pid, 'Type 2 diabetes mellitus' AS title, 'ICD10:E11.9' AS diagnosis, 5 AS years UNION ALL
+    SELECT 'CHR', NULL, 'Essential hypertension', 'ICD10:I10', 8 UNION ALL
+    SELECT 'CHR', NULL, 'Hyperlipidemia', 'ICD10:E78.5', 6 UNION ALL
+    SELECT 'GER', NULL, 'Essential hypertension', 'ICD10:I10', 15 UNION ALL
+    SELECT 'GER', NULL, 'Osteoarthritis', 'ICD10:M19.90', 10 UNION ALL
+    SELECT 'GER', NULL, 'Age-related osteoporosis', 'ICD10:M81.0', 5 UNION ALL
+    SELECT 'BH', NULL, 'Generalized anxiety disorder', 'ICD10:F41.1', 3 UNION ALL
+    SELECT 'BH', NULL, 'Major depressive disorder, recurrent, moderate', 'ICD10:F33.1', 2 UNION ALL
+    SELECT 'SUD', 194, 'Opioid dependence, in remission', 'ICD10:F11.21', 3 UNION ALL
+    SELECT 'SUD', 194, 'Long-term opiate analgesic management', 'ICD10:Z79.891', 3 UNION ALL
+    SELECT 'SUD', 195, 'Alcohol dependence, in remission', 'ICD10:F10.21', 4
+) prob ON prob.persona = zpe.persona AND (prob.pid IS NULL OR prob.pid = zpe.pid)
+WHERE zpe.persona NOT IN ('HYA', 'NEW')
+ORDER BY pd.pid, prob.title;
+
+DROP TEMPORARY TABLE IF EXISTS zoomly_panel_expansion_meds;
+CREATE TEMPORARY TABLE zoomly_panel_expansion_meds (
+    persona VARCHAR(8) NOT NULL,
+    pid INT NULL,
+    title VARCHAR(255) NOT NULL,
+    rxnorm VARCHAR(32) NOT NULL,
+    dosage VARCHAR(255) NOT NULL,
+    quantity VARCHAR(32) NOT NULL,
+    route VARCHAR(255) NOT NULL,
+    refills INT NOT NULL,
+    years INT NOT NULL,
+    note VARCHAR(255) NOT NULL
+);
+
+INSERT INTO zoomly_panel_expansion_meds
+    (persona, pid, title, rxnorm, dosage, quantity, route, refills, years, note)
+VALUES
+('CHR', NULL, 'Metformin 1000mg tab', '860975', '1000mg', '60', 'PO twice daily with meals', 5, 5, 'T2DM'),
+('CHR', NULL, 'Lisinopril 20mg tab',  '314077', '20mg',   '30', 'PO daily',                  5, 8, 'HTN'),
+('CHR', NULL, 'Atorvastatin 20mg tab','617314', '20mg',   '30', 'PO at bedtime',             5, 6, 'HLD'),
+('GER', NULL, 'Lisinopril 10mg tab',  '314076', '10mg',   '30', 'PO daily',                  5, 15, 'HTN'),
+('GER', NULL, 'Alendronate 70mg tab', '197910', '70mg',   '4',  'PO weekly',                 5, 5, 'osteoporosis'),
+('GER', NULL, 'Acetaminophen 500mg tab', '198440', '500mg', '60', 'PO every 6 hours PRN',     2, 10, 'OA'),
+('BH',  NULL, 'Sertraline 50mg tab',  '313989', '50mg',   '30', 'PO daily',                  5, 2, 'GAD/MDD'),
+('SUD', 194,  'Buprenorphine/Naloxone 8mg/2mg SL film', '1010600', '8/2mg', '30', 'SL daily', 0, 3, 'OUD MAT'),
+('SUD', 195,  'Naltrexone 50mg tab',  '798832', '50mg',   '30', 'PO daily',                  2, 4, 'AUD MAT');
+
+INSERT INTO `lists`
+    (uuid, type, subtype, title, pid, date, begdate, activity, user, comments)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    'medication', '',
+    med.title, pd.pid, NOW(), DATE_SUB(CURDATE(), INTERVAL med.years YEAR),
+    1, u.username,
+    CONCAT('rxnorm:', med.rxnorm, ' - ', med.route, ' (', med.note, ') [zoomly_panel_expansion_medication]')
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+JOIN users u ON u.id = pd.providerID
+JOIN zoomly_panel_expansion_meds med
+  ON med.persona = zpe.persona AND (med.pid IS NULL OR med.pid = zpe.pid)
+WHERE zpe.persona NOT IN ('HYA', 'NEW')
+ORDER BY pd.pid, med.title;
+
+INSERT INTO `lists_medication`
+    (list_id, usage_category, usage_category_title, request_intent, request_intent_title, is_primary_record)
+SELECT l.id, 'outpatient', 'Outpatient', 'order', 'Order', 1
+  FROM `lists` l
+ WHERE l.type = 'medication'
+   AND l.pid BETWEEN 172 AND 207
+   AND l.comments LIKE '%zoomly_panel_expansion_medication%';
+
+INSERT INTO `prescriptions`
+    (uuid, patient_id, provider_id, start_date, drug, drug_id, rxnorm_drugcode,
+     dosage, quantity, route, refills, active, datetime, user, txDate,
+     usage_category, usage_category_title, request_intent, request_intent_title)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    pd.pid, pd.providerID,
+    DATE_SUB(CURDATE(), INTERVAL med.years YEAR),
+    med.title, 0, med.rxnorm,
+    med.dosage, med.quantity, med.route, med.refills, 1,
+    NOW(), u.username, CURDATE(),
+    'outpatient', 'Outpatient', 'order', 'Order'
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+JOIN users u ON u.id = pd.providerID
+JOIN zoomly_panel_expansion_meds med
+  ON med.persona = zpe.persona AND (med.pid IS NULL OR med.pid = zpe.pid)
+WHERE zpe.persona NOT IN ('HYA', 'NEW')
+ORDER BY pd.pid, med.title;
+
+INSERT INTO `form_vitals`
+    (uuid, date, pid, user, groupname, authorized, activity,
+     bps, bpd, weight, height, BMI, temperature, pulse, respiration, oxygen_saturation)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    fe.date,
+    pd.pid, u.username, 'Default', 1, 1,
+    CASE zpe.persona WHEN 'CHR' THEN '138' WHEN 'GER' THEN '146' WHEN 'SUD' THEN '122' WHEN 'HYA' THEN '114' ELSE '120' END,
+    CASE zpe.persona WHEN 'CHR' THEN '88'  WHEN 'GER' THEN '84'  WHEN 'SUD' THEN '78'  WHEN 'HYA' THEN '72'  ELSE '76'  END,
+    CASE zpe.persona WHEN 'CHR' THEN 198.0 WHEN 'GER' THEN 156.0 WHEN 'SUD' THEN 170.0 WHEN 'HYA' THEN 145.0 ELSE 162.0 END,
+    CASE zpe.persona WHEN 'CHR' THEN 68.0  WHEN 'GER' THEN 64.0  WHEN 'SUD' THEN 69.0  WHEN 'HYA' THEN 67.0  ELSE 66.0  END,
+    CASE zpe.persona WHEN 'CHR' THEN 30.1  WHEN 'GER' THEN 26.8  WHEN 'SUD' THEN 25.1  WHEN 'HYA' THEN 22.7  ELSE 26.1  END,
+    98.4,
+    CASE zpe.persona WHEN 'SUD' THEN 78 WHEN 'HYA' THEN 68 ELSE 74 END,
+    16,
+    CASE zpe.persona WHEN 'GER' THEN 96.00 ELSE 98.00 END
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+JOIN users u ON u.id = pd.providerID
+JOIN form_encounter fe ON fe.pid = pd.pid AND fe.external_id = CONCAT('zpanel_h', pd.pid)
+WHERE zpe.persona <> 'NEW'
+ORDER BY pd.pid;
+
+INSERT INTO `forms`
+    (date, encounter, form_name, form_id, pid, user, groupname, authorized, deleted, formdir, provider_id)
+SELECT fv.date, fe.encounter, 'Vitals', fv.id, fv.pid, u.username, 'Default', 1, 0, 'vitals', fe.provider_id
+  FROM form_vitals fv
+  JOIN form_encounter fe ON fe.pid = fv.pid AND fe.external_id LIKE 'zpanel_h%'
+  JOIN users u ON u.id = fe.provider_id
+ WHERE fv.pid BETWEEN 172 AND 207;
+
+INSERT INTO `history_data`
+    (uuid, pid, date, tobacco, alcohol, exercise_patterns, sleep_patterns, coffee, seatbelt_use,
+     history_mother, history_father,
+     relatives_cancer, relatives_diabetes, relatives_high_blood_pressure, relatives_heart_problems, relatives_stroke, relatives_mental_illness)
+SELECT
+    UNHEX(REPLACE(UUID(),'-','')),
+    pd.pid, NOW(),
+    CASE zpe.persona
+        WHEN 'SUD' THEN 'Current Every Day Smoker (0.5 ppd)'
+        WHEN 'HYA' THEN 'Never smoker'
+        WHEN 'GER' THEN 'Former smoker'
+        ELSE 'Former smoker'
+    END,
+    CASE zpe.persona
+        WHEN 'SUD' THEN 'Non-drinker (in recovery)'
+        WHEN 'GER' THEN 'Light drinker'
+        ELSE 'Light drinker (1-2/wk)'
+    END,
+    CASE zpe.persona WHEN 'CHR' THEN 'Moderate' WHEN 'GER' THEN 'Light' WHEN 'HYA' THEN 'Vigorous' ELSE 'Light' END,
+    CASE zpe.persona WHEN 'BH' THEN '6 hrs/night' ELSE '7 hrs/night' END,
+    CASE zpe.persona WHEN 'BH' THEN '2 cups/day' ELSE '1 cup/day' END,
+    'Always',
+    CASE zpe.persona WHEN 'BH' THEN 'Anxiety, depression' WHEN 'CHR' THEN 'T2DM, HTN' WHEN 'GER' THEN 'HTN, osteoporosis' ELSE 'Healthy' END,
+    CASE zpe.persona WHEN 'SUD' THEN 'OUD, ETOH' WHEN 'CHR' THEN 'CAD, HTN' WHEN 'GER' THEN 'CAD' ELSE 'Healthy' END,
+    'NO',
+    CASE WHEN zpe.persona IN ('CHR') THEN 'YES' ELSE 'NO' END,
+    CASE WHEN zpe.persona IN ('CHR','GER') THEN 'YES' ELSE 'NO' END,
+    CASE WHEN zpe.persona IN ('CHR','GER') THEN 'YES' ELSE 'NO' END,
+    'NO',
+    CASE WHEN zpe.persona IN ('BH','SUD') THEN 'YES' ELSE 'NO' END
+FROM zoomly_panel_expansion zpe
+JOIN patient_data pd ON pd.pid = zpe.pid
+WHERE zpe.persona <> 'NEW'
+ORDER BY pd.pid;
+
+SET @panel_order_counter := 42000;
+SET @panel_report_counter := 52000;
+
+INSERT INTO `procedure_order`
+    (procedure_order_id, uuid, provider_id, patient_id, encounter_id,
+     date_collected, date_ordered, order_status, activity, procedure_order_type, order_intent, lab_id)
+SELECT
+    (@panel_order_counter := @panel_order_counter + 1),
+    UNHEX(REPLACE(UUID(),'-','')),
+    fe.provider_id, fe.pid, fe.id,
+    fe.date,
+    fe.date,
+    'completed', 1, 'laboratory_test', 'order', 0
+FROM form_encounter fe
+JOIN zoomly_panel_expansion zpe ON zpe.pid = fe.pid
+WHERE fe.external_id LIKE 'zpanel_h%'
+  AND zpe.persona = 'CHR'
+ORDER BY fe.pid;
+
+INSERT INTO `procedure_order_code`
+    (procedure_order_id, procedure_order_seq, procedure_code, procedure_name, procedure_source, procedure_order_title)
+SELECT po.procedure_order_id, 1, '83036', 'Hemoglobin A1c', '1', 'HbA1c'
+  FROM procedure_order po
+  JOIN zoomly_panel_expansion zpe ON zpe.pid = po.patient_id
+ WHERE po.procedure_order_id BETWEEN 42001 AND 42036
+   AND zpe.persona = 'CHR';
+
+INSERT INTO `procedure_report`
+    (procedure_report_id, uuid, procedure_order_id, procedure_order_seq,
+     date_collected, date_report, source, specimen_num, report_status, review_status)
+SELECT
+    (@panel_report_counter := @panel_report_counter + 1),
+    UNHEX(REPLACE(UUID(),'-','')),
+    po.procedure_order_id, 1,
+    po.date_collected,
+    po.date_collected + INTERVAL 1 DAY,
+    1, CONCAT('PANEL-A1C-', po.patient_id), 'final', 'reviewed'
+FROM procedure_order po
+JOIN zoomly_panel_expansion zpe ON zpe.pid = po.patient_id
+WHERE po.procedure_order_id BETWEEN 42001 AND 42036
+  AND zpe.persona = 'CHR'
+ORDER BY po.patient_id;
+
+INSERT INTO `procedure_result`
+    (uuid, procedure_report_id, result_data_type, result_code, result_text, date, units, result, `range`, abnormal, result_status)
+SELECT UNHEX(REPLACE(UUID(),'-','')), pr.procedure_report_id, 'N',
+       '4548-4', 'Hemoglobin A1c',
+       pr.date_report,
+       '%',
+       CASE MOD(po.patient_id, 4)
+           WHEN 0 THEN '7.2'
+           WHEN 1 THEN '6.8'
+           WHEN 2 THEN '7.6'
+           ELSE '6.4'
+       END,
+       '<7.0',
+       CASE WHEN MOD(po.patient_id, 4) IN (0, 2) THEN 'H' ELSE '' END,
+       'final'
+  FROM procedure_report pr
+  JOIN procedure_order po ON po.procedure_order_id = pr.procedure_order_id
+ WHERE pr.procedure_report_id BETWEEN 52001 AND 52036;
 
 -- =============================================================================
 -- DEMO PAST-ENCOUNTER PATIENTS — CLINICAL DATA (Sprint 13 / S13-05)
@@ -1373,15 +1755,23 @@ SET FOREIGN_KEY_CHECKS = 1;
 SELECT 'Seed complete.' AS status;
 
 SELECT CONCAT(fname, ' ', lname) AS provider, id, abook_type
-FROM users WHERE id IN (10,11,12,13,20,21,30,31) ORDER BY id;
+FROM users WHERE id BETWEEN 10 AND 37 ORDER BY id;
 
 SELECT c.pc_catname AS appt_category, COUNT(*) AS count
 FROM openemr_postcalendar_events e
 JOIN openemr_postcalendar_categories c ON e.pc_catid = c.pc_catid
-WHERE e.pc_aid IN ('10','11','12','13')
+WHERE e.pc_pid REGEXP '^[0-9]+$'
+  AND CAST(e.pc_pid AS UNSIGNED) BETWEEN 100 AND 207
 GROUP BY c.pc_catname ORDER BY c.pc_catname;
 
-SELECT COUNT(*) AS total_appointments FROM openemr_postcalendar_events WHERE pc_aid IN ('10','11','12','13');
-SELECT COUNT(*) AS patient_count FROM patient_data WHERE pid BETWEEN 100 AND 129;
-SELECT name, id FROM facility WHERE id = 1;
-SELECT name AS insurance_company FROM insurance_companies WHERE id BETWEEN 200 AND 207 ORDER BY id;
+SELECT COUNT(*) AS total_appointments FROM openemr_postcalendar_events
+ WHERE pc_pid REGEXP '^[0-9]+$' AND CAST(pc_pid AS UNSIGNED) BETWEEN 100 AND 207;
+SELECT COUNT(*) AS patient_count FROM patient_data WHERE pid BETWEEN 100 AND 207;
+SELECT COUNT(*) AS insurance_policy_count FROM insurance_data WHERE pid BETWEEN 100 AND 207;
+SELECT COUNT(*) AS care_team_count FROM care_teams WHERE pid BETWEEN 100 AND 207;
+SELECT COUNT(*) AS care_team_member_count
+  FROM care_team_member ctm
+  JOIN care_teams ct ON ct.id = ctm.care_team_id
+ WHERE ct.pid BETWEEN 100 AND 207;
+SELECT name, id FROM facility WHERE id BETWEEN 1 AND 4 ORDER BY id;
+SELECT name AS insurance_company FROM insurance_companies WHERE id BETWEEN 200 AND 217 ORDER BY id;

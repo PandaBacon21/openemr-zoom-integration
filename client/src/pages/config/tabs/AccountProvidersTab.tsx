@@ -27,24 +27,34 @@ import PersonIcon from "@mui/icons-material/Person";
 import EKGLoader from "../../../components/EKGLoader";
 import type {
   Registration,
-  ProviderMapping,
+  UserMapping,
   OpenEMRProvider,
   ZoomUser,
+  ZccUser,
   HydrateSummary,
 } from "../../../api/config";
 import {
-  getProviderMappings,
+  getUserMappings,
   getOpenEMRProviders,
   getZoomUsers,
-  createProviderMapping,
-  deleteProviderMapping,
+  getZccUsers,
+  createUserMapping,
+  deleteUserMapping,
   hydrateDemoData,
 } from "../../../api/config";
 
+const AGENT_ROLE_OPTIONS = [
+  "billing",
+  "intake",
+  "scheduling",
+  "rx_refill",
+  "triage",
+] as const;
+
 interface Props {
   account: Registration;
-  mappings: ProviderMapping[];
-  onMappingsChanged: (mappings: ProviderMapping[]) => void;
+  mappings: UserMapping[];
+  onMappingsChanged: (mappings: UserMapping[]) => void;
 }
 
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
@@ -77,11 +87,18 @@ const AccountProvidersTab: React.FC<Props> = ({
   );
   const [zoomUsers, setZoomUsers] = useState<ZoomUser[]>([]);
   const [loadingZoomUsers, setLoadingZoomUsers] = useState(false);
+  const [zccUsersByEmail, setZccUsersByEmail] = useState<Map<string, ZccUser>>(
+    new Map(),
+  );
+  // Roles config (revealed once a Zoom user is selected)
+  const [isProvider, setIsProvider] = useState(true);
+  const [isZccAgent, setIsZccAgent] = useState(false);
+  const [agentRole, setAgentRole] = useState<string>("");
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [editingMapping, setEditingMapping] = useState<ProviderMapping | null>(
+  const [editingMapping, setEditingMapping] = useState<UserMapping | null>(
     null,
   );
   const [hydrating, setHydrating] = useState(false);
@@ -124,14 +141,43 @@ const AccountProvidersTab: React.FC<Props> = ({
     [account.zoom_account_id],
   );
 
-  // Fetch Zoom users on mount
+  // Fetch Zoom users + ZCC users in parallel on mount.
+  // ZCC users are merged into a lookup by email — that's what tells the form
+  // whether a selected Zoom user can also be assigned the ZCC Agent role.
   useEffect(() => {
     setLoadingZoomUsers(true);
-    getZoomUsers(account.zoom_account_id)
-      .then((res) => setZoomUsers(res.data.users))
+    Promise.all([
+      getZoomUsers(account.zoom_account_id),
+      getZccUsers(account.zoom_account_id).catch(() => ({
+        data: { count: 0, users: [] as ZccUser[] },
+      })),
+    ])
+      .then(([usersRes, zccRes]) => {
+        setZoomUsers(usersRes.data.users);
+        const byEmail = new Map<string, ZccUser>();
+        for (const u of zccRes.data.users) {
+          if (u.email) byEmail.set(u.email.toLowerCase(), u);
+        }
+        setZccUsersByEmail(byEmail);
+      })
       .catch(() => setError("Failed to load Zoom users"))
       .finally(() => setLoadingZoomUsers(false));
   }, [account.zoom_account_id]);
+
+  // Reset role config whenever the selected Zoom user changes.
+  // Provider stays default-on; ZCC Agent default-off until the user opts in.
+  useEffect(() => {
+    setIsProvider(true);
+    setIsZccAgent(false);
+    setAgentRole("");
+  }, [selectedZoomUser?.zoom_user_id]);
+
+  // Resolve the ZCC user (if any) for the currently-selected Zoom user.
+  // Match by email — most reliable identifier across the two endpoints.
+  const matchedZccUser = selectedZoomUser
+    ? zccUsersByEmail.get(selectedZoomUser.email.toLowerCase()) ?? null
+    : null;
+  const canBeZccAgent = matchedZccUser !== null;
 
   // Fetch providers on first keystroke
   useEffect(() => {
@@ -143,7 +189,7 @@ const AccountProvidersTab: React.FC<Props> = ({
     mappings.map((m) => m.openemr_provider_npi),
   );
 
-  // Already mapped Zoom user IDs (for allow_shared_zoom_user check)
+  // Already mapped Zoom user IDs (TD-03: strict 1:1, no sharing across providers)
   const mappedZoomUserIds = new Set(mappings.map((m) => m.zoom_user_id));
 
   // Filter providers by search input, exclude already mapped
@@ -156,13 +202,17 @@ const AccountProvidersTab: React.FC<Props> = ({
     );
   });
 
-  // Filter Zoom users if shared not allowed
-  const availableZoomUsers = account.allow_shared_zoom_user
-    ? zoomUsers
-    : zoomUsers.filter((u) => !mappedZoomUserIds.has(u.zoom_user_id));
+  // Filter out already-claimed Zoom users (1:1 strictly enforced post-TD-03)
+  const availableZoomUsers = zoomUsers.filter(
+    (u) => !mappedZoomUserIds.has(u.zoom_user_id),
+  );
 
   const handleAdd = async () => {
     if (!selectedProvider || !selectedZoomUser) return;
+    if (!isProvider && !isZccAgent) {
+      setError("Pick at least one role: Provider or ZCC Agent.");
+      return;
+    }
     setAdding(true);
     setError(null);
     setSuccess(null);
@@ -170,29 +220,36 @@ const AccountProvidersTab: React.FC<Props> = ({
     try {
       // If editing, delete old mapping first
       if (editingMapping) {
-        await deleteProviderMapping(
-          editingMapping.openemr_provider_id,
+        await deleteUserMapping(
+          editingMapping.openemr_user_id,
           account.zoom_account_id,
         );
       }
 
-      await createProviderMapping({
+      await createUserMapping({
         zoom_account_id: account.zoom_account_id,
-        openemr_fhir_id: selectedProvider.fhir_id,
-        openemr_provider_npi: selectedProvider.npi ?? "",
-        openemr_provider_id: String(selectedProvider.user_id),
+        is_provider: isProvider,
+        is_zcc_agent: isZccAgent,
+        // Provider-role fields (Flask validates these are present when is_provider)
+        openemr_fhir_id: isProvider ? selectedProvider.fhir_id : null,
+        openemr_provider_npi: isProvider ? (selectedProvider.npi ?? null) : null,
         openemr_provider_name: selectedProvider.full_name,
         openemr_facility_id: selectedProvider.facility_id,
         openemr_facility_name: selectedProvider.facility_name,
-        zoom_user_id: selectedZoomUser.zoom_user_id,
+        zoom_user_id: isProvider ? selectedZoomUser.zoom_user_id : null,
+        zoom_user_type: isProvider ? selectedZoomUser.type : null,
+        zoom_user_timezone: selectedZoomUser.timezone,
+        // Always populated — identifies the OpenEMR user + Zoom identity
+        openemr_user_id: String(selectedProvider.user_id),
         zoom_user_email: selectedZoomUser.email,
         zoom_user_name: selectedZoomUser.display_name,
-        zoom_user_type: String(selectedZoomUser.type),
-        zoom_user_timezone: selectedZoomUser.timezone,
+        // ZCC-agent-role fields
+        zcc_user_id: isZccAgent ? matchedZccUser?.zcc_user_id ?? null : null,
+        agent_role: isZccAgent && agentRole ? agentRole : null,
       });
 
       // Refresh mappings
-      const updated = await getProviderMappings(account.zoom_account_id);
+      const updated = await getUserMappings(account.zoom_account_id);
       onMappingsChanged(updated.data.providers);
 
       setSuccess(
@@ -213,18 +270,13 @@ const AccountProvidersTab: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async (mapping: ProviderMapping) => {
-    setDeletingId(mapping.openemr_provider_id);
+  const handleDelete = async (mapping: UserMapping) => {
+    setDeletingId(mapping.openemr_user_id);
     setError(null);
     try {
-      await deleteProviderMapping(
-        mapping.openemr_provider_id,
-        account.zoom_account_id,
-      );
+      await deleteUserMapping(mapping.openemr_user_id, account.zoom_account_id);
       onMappingsChanged(
-        mappings.filter(
-          (m) => m.openemr_provider_id !== mapping.openemr_provider_id,
-        ),
+        mappings.filter((m) => m.openemr_user_id !== mapping.openemr_user_id),
       );
     } catch {
       setError("Failed to delete mapping");
@@ -233,17 +285,17 @@ const AccountProvidersTab: React.FC<Props> = ({
     }
   };
 
-  const handleEdit = (mapping: ProviderMapping) => {
+  const handleEdit = (mapping: UserMapping) => {
     setEditingMapping(mapping);
     setSearchInput(mapping.openemr_provider_name ?? "");
     setSelectedProvider({
-      fhir_id: mapping.openemr_fhir_id,
-      npi: mapping.openemr_provider_npi,
+      fhir_id: mapping.openemr_fhir_id ?? "",
+      npi: mapping.openemr_provider_npi ?? "",
       name: mapping.openemr_provider_name ?? "",
       full_name: mapping.openemr_provider_name ?? "",
       first_name: "",
       last_name: mapping.openemr_provider_name ?? "",
-      user_id: parseInt(mapping.openemr_provider_id) || 0,
+      user_id: parseInt(mapping.openemr_user_id) || 0,
       active: true,
       email: null,
       facility_id: mapping.openemr_facility_id,
@@ -252,6 +304,13 @@ const AccountProvidersTab: React.FC<Props> = ({
     const zoomUser =
       zoomUsers.find((u) => u.zoom_user_id === mapping.zoom_user_id) ?? null;
     setSelectedZoomUser(zoomUser);
+    // The selectedZoomUser reset effect fires AFTER state settles, so set role
+    // state on the next microtask to avoid the reset clobbering our values.
+    queueMicrotask(() => {
+      setIsProvider(mapping.is_provider);
+      setIsZccAgent(mapping.is_zcc_agent);
+      setAgentRole(mapping.agent_role ?? "");
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -286,7 +345,9 @@ const AccountProvidersTab: React.FC<Props> = ({
       {/* Hydrate Demo Data — small card, top-right */}
       <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
         <Card variant="outlined" sx={{ maxWidth: 460, width: "100%" }}>
-          <CardContent sx={{ p: 2, position: "relative", "&:last-child": { pb: 2 } }}>
+          <CardContent
+            sx={{ p: 2, position: "relative", "&:last-child": { pb: 2 } }}
+          >
             {hydrating && <EKGLoader text="Hydrating..." />}
             <Box
               sx={{
@@ -371,7 +432,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                           component="li"
                           variant="caption"
                         >
-                          Provider {s.openemr_provider_id} skipped —{" "}
+                          Provider {s.openemr_user_id} skipped —{" "}
                           {labelForSkipReason(s.reason)}
                         </Typography>
                       ))}
@@ -381,7 +442,7 @@ const AccountProvidersTab: React.FC<Props> = ({
                           component="li"
                           variant="caption"
                         >
-                          Provider {e.openemr_provider_id} failed at {e.stage} —{" "}
+                          Provider {e.openemr_user_id} failed at {e.stage} —{" "}
                           {e.error}
                         </Typography>
                       ))}
@@ -434,7 +495,7 @@ const AccountProvidersTab: React.FC<Props> = ({
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label="Search by last name or provider ID"
+                  label="Search by last name or OpenEMR User ID"
                   size="small"
                 />
               )}
@@ -505,7 +566,11 @@ const AccountProvidersTab: React.FC<Props> = ({
                   <Button
                     variant="contained"
                     onClick={handleAdd}
-                    disabled={!selectedZoomUser || adding}
+                    disabled={
+                      !selectedZoomUser ||
+                      adding ||
+                      (!isProvider && !isZccAgent)
+                    }
                     size="small"
                     sx={{ mt: 0.5, whiteSpace: "nowrap" }}
                   >
@@ -518,6 +583,143 @@ const AccountProvidersTab: React.FC<Props> = ({
                     )}
                   </Button>
                 </Box>
+
+                {/* Role config card — pops once a Zoom user is selected. */}
+                {selectedZoomUser && (
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      mt: 2,
+                      bgcolor: "rgba(11, 92, 255, 0.04)",
+                      borderColor: "primary.light",
+                    }}
+                  >
+                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          display: "block",
+                          mb: 1,
+                        }}
+                      >
+                        Roles
+                      </Typography>
+
+                      <Box
+                        sx={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 0.5,
+                        }}
+                      >
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        >
+                          <input
+                            type="checkbox"
+                            id="role-provider"
+                            checked={isProvider}
+                            onChange={(e) => setIsProvider(e.target.checked)}
+                            style={{ cursor: "pointer" }}
+                          />
+                          <label
+                            htmlFor="role-provider"
+                            style={{ cursor: "pointer" }}
+                          >
+                            <Typography variant="body2">
+                              <strong>Provider</strong> — clinical role; hosts
+                              telehealth meetings, signs notes
+                            </Typography>
+                          </label>
+                        </Box>
+
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        >
+                          <input
+                            type="checkbox"
+                            id="role-zcc-agent"
+                            checked={isZccAgent}
+                            disabled={!canBeZccAgent}
+                            onChange={(e) => setIsZccAgent(e.target.checked)}
+                            style={{
+                              cursor: canBeZccAgent ? "pointer" : "not-allowed",
+                            }}
+                          />
+                          <label
+                            htmlFor="role-zcc-agent"
+                            style={{
+                              cursor: canBeZccAgent ? "pointer" : "not-allowed",
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              color={canBeZccAgent ? "inherit" : "text.disabled"}
+                            >
+                              <strong>ZCC Agent</strong> — receives call-center
+                              screen pops in OpenEMR
+                            </Typography>
+                          </label>
+                          {!canBeZccAgent && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontStyle: "italic", ml: 1 }}
+                            >
+                              (no ZCC entitlement found for{" "}
+                              {selectedZoomUser.email} — assign a Zoom Contact
+                              Center license to enable)
+                            </Typography>
+                          )}
+                          {canBeZccAgent && matchedZccUser && (
+                            <Chip
+                              label={`ZCC ID: ${matchedZccUser.zcc_user_id}`}
+                              size="small"
+                              variant="outlined"
+                              color="secondary"
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
+                      </Box>
+
+                      {isZccAgent && (
+                        <Box sx={{ mt: 2 }}>
+                          <Autocomplete
+                            freeSolo
+                            options={[...AGENT_ROLE_OPTIONS]}
+                            value={agentRole}
+                            onChange={(_, val) => setAgentRole(val ?? "")}
+                            onInputChange={(_, val) => setAgentRole(val)}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Agent role descriptor (optional)"
+                                size="small"
+                                helperText="e.g. billing, intake, scheduling, rx_refill, triage — free-text accepted"
+                              />
+                            )}
+                            sx={{ maxWidth: 400 }}
+                          />
+                        </Box>
+                      )}
+
+                      {!isProvider && !isZccAgent && (
+                        <Typography
+                          variant="caption"
+                          color="error"
+                          sx={{ display: "block", mt: 1 }}
+                        >
+                          Pick at least one role to save.
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </CardContent>
             </Card>
           )}
@@ -540,18 +742,20 @@ const AccountProvidersTab: React.FC<Props> = ({
               color="text.secondary"
               sx={{ fontStyle: "italic" }}
             >
-              No provider mappings configured yet.
+              No user mappings configured yet.
             </Typography>
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: "background.default" }}>
-                    <TableCell sx={{ fontWeight: 600 }}>Provider</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Provider ID</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>NPI</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Roles</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>OpenEMR User ID</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Provider NPI</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Facility</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Zoom ID</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Zoom User ID</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>ZCC User ID</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Zoom User</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Time Zone</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
@@ -562,33 +766,74 @@ const AccountProvidersTab: React.FC<Props> = ({
                 <TableBody>
                   {mappings.map((mapping) => (
                     <TableRow
-                      key={mapping.openemr_provider_id}
+                      key={mapping.openemr_user_id}
                       sx={{
                         bgcolor:
-                          editingMapping?.openemr_provider_id ===
-                          mapping.openemr_provider_id
+                          editingMapping?.openemr_user_id ===
+                          mapping.openemr_user_id
                             ? "rgba(11, 92, 255, 0.04)"
                             : "inherit",
                       }}
                     >
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {mapping.openemr_provider_name}
+                          {mapping.openemr_provider_name ?? mapping.zoom_user_name ?? "—"}
                         </Typography>
                       </TableCell>
                       <TableCell>
+                        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                          {mapping.is_provider && (
+                            <Chip
+                              label="Provider"
+                              size="small"
+                              color="primary"
+                              variant="filled"
+                              sx={{ fontWeight: 500 }}
+                            />
+                          )}
+                          {mapping.is_zcc_agent && (
+                            <Chip
+                              label="ZCC Agent"
+                              size="small"
+                              color="secondary"
+                              variant="filled"
+                              sx={{ fontWeight: 500 }}
+                            />
+                          )}
+                          {!mapping.is_provider && !mapping.is_zcc_agent && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontStyle: "italic" }}
+                            >
+                              —
+                            </Typography>
+                          )}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
                         <Chip
-                          label={mapping.openemr_provider_id}
+                          label={mapping.openemr_user_id}
                           size="small"
                           variant="outlined"
                         />
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={mapping.openemr_provider_npi}
-                          size="small"
-                          variant="outlined"
-                        />
+                        {mapping.openemr_provider_npi ? (
+                          <Chip
+                            label={mapping.openemr_provider_npi}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         {mapping.openemr_facility_name ? (
@@ -606,11 +851,39 @@ const AccountProvidersTab: React.FC<Props> = ({
                         )}
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={mapping.zoom_user_id}
-                          size="small"
-                          variant="outlined"
-                        />
+                        {mapping.zoom_user_id ? (
+                          <Chip
+                            label={mapping.zoom_user_id}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {mapping.zcc_user_id ? (
+                          <Chip
+                            label={mapping.zcc_user_id}
+                            size="small"
+                            variant="outlined"
+                            color="secondary"
+                          />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ fontStyle: "italic" }}
+                          >
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
@@ -647,9 +920,9 @@ const AccountProvidersTab: React.FC<Props> = ({
                           size="small"
                           color="error"
                           onClick={() => handleDelete(mapping)}
-                          disabled={deletingId === mapping.openemr_provider_id}
+                          disabled={deletingId === mapping.openemr_user_id}
                         >
-                          {deletingId === mapping.openemr_provider_id ? (
+                          {deletingId === mapping.openemr_user_id ? (
                             <CircularProgress size={16} />
                           ) : (
                             <DeleteIcon fontSize="small" />

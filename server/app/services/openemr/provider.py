@@ -5,7 +5,7 @@ import requests
 from sqlalchemy import text
 from flask import current_app
 from app.auth.jwt_assertion import get_openemr_token
-from app.models import ZoomAccount, ProviderMapping
+from app.models import ZoomAccount, UserMapping
 from app.extensions import db, get_openemr_db_engine
 
 logger = logging.getLogger(__name__)
@@ -231,7 +231,7 @@ def _normalize_practitioner(resource: dict) -> dict:
 
     # Look up users.id, facility_id, and facility name from OpenEMR DB by NPI.
     # users.id is the integer used as pc_aid / form_provider in appointment
-    # events and needs to be stored on ProviderMapping for the webhook hot
+    # events and needs to be stored on UserMapping for the webhook hot
     # path. facility_id + facility_name are captured at mapping creation time
     # for surface in the provider mappings table (S7-14) and future filtering.
     user_id = None
@@ -277,58 +277,115 @@ def _normalize_practitioner(resource: dict) -> dict:
     }
 
 
-def _create_provider_mapping(
+def _create_user_mapping(
     zoom_account_id: str,
-    openemr_fhir_id: str,
-    openemr_provider_npi: str,
-    openemr_provider_id: int | None,
-    openemr_provider_name: str | None,
-    zoom_user_id: str,
     zoom_user_email: str,
-    zoom_user_name: str | None,
-    zoom_user_type: int | None,
-    zoom_user_timezone: str | None = None,
+    *,
+    is_provider: bool = True,
+    is_zcc_agent: bool = False,
+    # Provider-role fields — required when is_provider=True
+    openemr_fhir_id: str | None = None,
+    openemr_provider_npi: str | None = None,
+    openemr_provider_name: str | None = None,
     openemr_facility_id: int | None = None,
     openemr_facility_name: str | None = None,
-) -> ProviderMapping:
+    zoom_user_id: str | None = None,
+    zoom_user_name: str | None = None,
+    zoom_user_type: int | None = None,
+    zoom_user_timezone: str | None = None,
+    # OpenEMR user (any role)
+    openemr_user_id: str | None = None,
+    # ZCC-agent-role fields — required when is_zcc_agent=True
+    zcc_user_id: str | None = None,
+    agent_role: str | None = None,
+) -> UserMapping:
     """
-    Create a new provider mapping linking an OpenEMR provider to a Zoom user.
+    Create a new user mapping linking an OpenEMR user to their Zoom platform
+    and/or ZCC identities. One row can hold either or both roles via
+    is_provider / is_zcc_agent. At least one role must be true.
 
     Raises:
-        ValueError: If account not found, mapping already exists, or the provider
-        doesn't have a paid Zoom license - basic is not accepted
+        ValueError: account not found, role invariants violated, duplicate
+        mapping, or the user has a Basic (free) Zoom license when assigning
+        provider role.
     """
-    # Validate Zoom license type
-    if zoom_user_type == 1:
+    # 1. Role invariant: at least one must be true
+    if not is_provider and not is_zcc_agent:
+        raise ValueError(
+            "A user mapping must have at least one role: is_provider or is_zcc_agent."
+        )
+
+    # 2. Per-role field requirements
+    if is_provider:
+        missing_provider_fields = [
+            name for name, value in [
+                ("openemr_fhir_id", openemr_fhir_id),
+                ("openemr_provider_npi", openemr_provider_npi),
+                ("zoom_user_id", zoom_user_id),
+            ]
+            if not value
+        ]
+        if missing_provider_fields:
+            raise ValueError(
+                f"Provider role requires: {', '.join(missing_provider_fields)}"
+            )
+
+    if is_zcc_agent:
+        if not zcc_user_id:
+            raise ValueError("ZCC Agent role requires zcc_user_id.")
+        if not openemr_user_id:
+            raise ValueError(
+                "ZCC Agent role requires openemr_user_id (the OpenEMR users.id "
+                "this agent maps to for screen-pop dispatch)."
+            )
+
+    # 3. Validate Zoom license type for provider role (basic licenses can't host)
+    if is_provider and zoom_user_type == 1:
         raise ValueError(
             f"Zoom user {zoom_user_email} has a Basic (free) license. "
             "A paid Zoom license is required for telehealth features. "
             "Please assign a Licensed seat to this user in the Zoom admin portal."
         )
-    
+
     account = ZoomAccount.query.filter_by(
         account_id=zoom_account_id, is_active=True
     ).first()
     if not account:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
-    # Check for duplicate — same NPI already mapped for this account
-    existing = ProviderMapping.query.filter_by(
-        zoom_account_id=zoom_account_id,
-        openemr_provider_npi=openemr_provider_npi,
-        is_active=True
-    ).first()
-    if existing:
-        raise ValueError(
-            f"Provider NPI {openemr_provider_npi} is already mapped to "
-            f"{existing.zoom_user_email} for this account"
-        )
+    # 4. Duplicate checks per role (DB partial-unique indices will also enforce these,
+    #    but raising up-front gives a friendlier error than a constraint violation).
+    if is_provider and openemr_provider_npi:
+        existing_npi = UserMapping.query.filter_by(
+            openemr_provider_npi=openemr_provider_npi,
+            is_provider=True,
+            is_active=True,
+        ).first()
+        if existing_npi:
+            raise ValueError(
+                f"Provider NPI {openemr_provider_npi} is already mapped to "
+                f"{existing_npi.zoom_user_email} (account {existing_npi.zoom_account_id})."
+            )
 
-    mapping = ProviderMapping(
+    if is_zcc_agent and zcc_user_id:
+        existing_zcc = UserMapping.query.filter_by(
+            zcc_user_id=zcc_user_id,
+            is_zcc_agent=True,
+            is_active=True,
+        ).first()
+        if existing_zcc:
+            raise ValueError(
+                f"ZCC user {zcc_user_id} is already mapped to an OpenEMR user "
+                f"(mapping id {existing_zcc.id})."
+            )
+
+    mapping = UserMapping(
         zoom_account_id=zoom_account_id,
+        is_provider=is_provider,
+        is_zcc_agent=is_zcc_agent,
         openemr_fhir_id=openemr_fhir_id,
         openemr_provider_npi=openemr_provider_npi,
-        openemr_provider_id=openemr_provider_id,
+        openemr_user_id=openemr_user_id,
         openemr_provider_name=openemr_provider_name,
         openemr_facility_id=openemr_facility_id,
         openemr_facility_name=openemr_facility_name,
@@ -337,20 +394,23 @@ def _create_provider_mapping(
         zoom_user_name=zoom_user_name,
         zoom_user_type=zoom_user_type,
         zoom_user_timezone=zoom_user_timezone,
-        is_active=True
+        zcc_user_id=zcc_user_id,
+        agent_role=agent_role,
+        is_active=True,
     )
 
     db.session.add(mapping)
     db.session.commit()
 
+    roles_str = "+".join(r for r, on in [("provider", is_provider), ("zcc_agent", is_zcc_agent)] if on)
     logger.info(
-        f"Provider mapping created: NPI {openemr_provider_npi} "
-        f"→ Zoom user {zoom_user_email} (tz={zoom_user_timezone or 'none'})"
+        f"User mapping created: openemr_user_id={openemr_user_id} "
+        f"roles={roles_str} zoom={zoom_user_email} zcc_user_id={zcc_user_id or 'n/a'}"
     )
     return mapping
 
 
-def _get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
+def _get_user_mappings(zoom_account_id: str) -> list[UserMapping]:
     """
     Get all active provider mappings for a Zoom account.
     """
@@ -360,13 +420,13 @@ def _get_provider_mappings(zoom_account_id: str) -> list[ProviderMapping]:
     if not account:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
-    return ProviderMapping.query.filter_by(
+    return UserMapping.query.filter_by(
         zoom_account_id=zoom_account_id,
         is_active=True
     ).all()
 
 
-def _delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> None:
+def _delete_user_mapping(zoom_account_id: str, openemr_user_id: str) -> None:
     """
     Delete a provider mapping by npi.
     """
@@ -376,14 +436,14 @@ def _delete_provider_mapping(zoom_account_id: str, openemr_provider_id: str) -> 
     if not account:
         raise ValueError(f"No active registration found for account {zoom_account_id}")
 
-    mapping = ProviderMapping.query.filter_by(
-        openemr_provider_id=openemr_provider_id,
+    mapping = UserMapping.query.filter_by(
+        openemr_user_id=openemr_user_id,
         zoom_account_id=zoom_account_id,
         is_active=True
     ).first()
     if not mapping:
-        raise ValueError(f"No active mapping found with NPI {openemr_provider_id}")
+        raise ValueError(f"No active mapping found with NPI {openemr_user_id}")
 
     db.session.delete(mapping)
     db.session.commit()
-    logger.info(f"Provider mapping for NPI {openemr_provider_id} deleted")
+    logger.info(f"Provider mapping for NPI {openemr_user_id} deleted")

@@ -34,7 +34,6 @@ def _create_account(account_id: str, *, is_active: bool = True, **overrides) -> 
                 "demo_patient_phone_override_enabled", False
             ),
             demo_patient_phone_override=overrides.get("demo_patient_phone_override"),
-            allow_shared_zoom_user=overrides.get("allow_shared_zoom_user", False),
             note_writeback_mode=overrides.get("note_writeback_mode", "both"),
         )
     )
@@ -358,7 +357,6 @@ def test_update_zoom_account_updates_editable_fields(app):
             demo_patient_email_override="demo-patient@example.com",
             demo_patient_phone_override_enabled=True,
             demo_patient_phone_override="+13035550199",
-            allow_shared_zoom_user=True,
             note_writeback_mode="clinical_note_only",
         )
 
@@ -369,7 +367,6 @@ def test_update_zoom_account_updates_editable_fields(app):
             "demo_patient_email_override": config.demo_patient_email_override,
             "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
             "demo_patient_phone_override": config.demo_patient_phone_override,
-            "allow_shared_zoom_user": config.allow_shared_zoom_user,
             "note_writeback_mode": config.note_writeback_mode,
         }
 
@@ -383,7 +380,6 @@ def test_update_zoom_account_updates_editable_fields(app):
     assert config_values["demo_patient_email_override"] == "demo-patient@example.com"
     assert config_values["demo_patient_phone_override_enabled"] is True
     assert config_values["demo_patient_phone_override"] == "+13035550199"
-    assert config_values["allow_shared_zoom_user"] is True
     assert config_values["note_writeback_mode"] == "clinical_note_only"
 
 

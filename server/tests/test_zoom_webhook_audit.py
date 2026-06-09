@@ -32,7 +32,7 @@ def _create_meeting(
         zoom_start_url=f"https://zoom.example/start/{meeting_id}",
         zoom_join_url=f"https://zoom.example/join/{meeting_id}",
         openemr_appointment_id=appointment_id,
-        openemr_provider_id=provider_id,
+        openemr_user_id=provider_id,
         status="created",
     )
     db.session.add(record)
@@ -82,7 +82,7 @@ def test_note_processing_audits_missing_patient_context(app, monkeypatch):
     assert audit_call["zoom_meeting_id"] == "meet-context-missing"
     assert audit_call["zoom_note_id"] == "note-context-missing"
     assert audit_call["openemr_appointment_id"] == "999"
-    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_user_id"] == "10"
     assert audit_call["openemr_patient_id"] is None
     assert audit_call["error_message"] == "missing patient or provider"
     assert audit_call["detail"] == {"ehr_context": False}
@@ -138,13 +138,13 @@ def test_note_processing_audits_write_failure_with_context(app, monkeypatch):
         "zoom_meeting_id": "meet-note-write",
     }
     retrieved_call = next(call for call in calls if call["event_type"] == "note.retrieved")
-    assert retrieved_call["openemr_provider_id"] == "10"
+    assert retrieved_call["openemr_user_id"] == "10"
     assert retrieved_call["openemr_patient_id"] == "1"
     write_call = next(call for call in calls if call["event_type"] == "note.write_failed")
     assert write_call["success"] is False
     assert write_call["openemr_appointment_id"] == "999"
     assert write_call["openemr_encounter_number"] == "555001"
-    assert write_call["openemr_provider_id"] == "10"
+    assert write_call["openemr_user_id"] == "10"
     assert write_call["openemr_patient_id"] == "1"
     assert write_call["error_message"] == "OpenEMR note write failed"
     assert write_call["detail"] == {"ehr_context": False, "content_blank": False}
@@ -190,7 +190,7 @@ def test_note_processing_audits_encounter_failure_with_context(app, monkeypatch)
     audit_call = next(call for call in calls if call["event_type"] == "note.encounter_failed")
     assert audit_call["success"] is False
     assert audit_call["openemr_appointment_id"] == "999"
-    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_user_id"] == "10"
     assert audit_call["openemr_patient_id"] == "1"
     assert audit_call["error_message"] == "could not find or create encounter"
 
@@ -301,7 +301,7 @@ def test_waiting_room_arrival_audits_status_update_failure_with_context(app, mon
     audit_call = next(call for call in calls if call["event_type"] == "appointment.patient_arrived")
     assert audit_call["zoom_account_id"] == "acct-waiting-room"
     assert audit_call["openemr_appointment_id"] == "999"
-    assert audit_call["openemr_provider_id"] == "10"
+    assert audit_call["openemr_user_id"] == "10"
     assert audit_call["openemr_patient_id"] == "1"
     assert audit_call["zoom_meeting_id"] == "meet-waiting-room"
     assert audit_call["detail"] == {
@@ -435,7 +435,7 @@ def test_waiting_room_audits_encounter_create_failed(app, monkeypatch):
     assert encounter_fail["success"] is False
     assert encounter_fail["zoom_account_id"] == "acct-encounter-create-fail"
     assert encounter_fail["openemr_appointment_id"] == "999"
-    assert encounter_fail["openemr_provider_id"] == "10"
+    assert encounter_fail["openemr_user_id"] == "10"
     assert encounter_fail["openemr_patient_id"] == "1"
     assert encounter_fail["zoom_meeting_id"] == "meet-encounter-create-fail"
     assert encounter_fail["error_message"] == "ensure_encounter_for_appointment returned None"
@@ -688,7 +688,7 @@ def test_waiting_room_audits_encounter_created_on_success(app, monkeypatch):
     assert created["success"] is True
     assert created["zoom_account_id"] == "acct-wr-created"
     assert created["openemr_appointment_id"] == "999"
-    assert created["openemr_provider_id"] == "10"
+    assert created["openemr_user_id"] == "10"
     assert created["openemr_patient_id"] == "1"
     assert created["zoom_meeting_id"] == "meet-wr-created"
     assert created["openemr_encounter_number"] == "777003"
@@ -757,7 +757,7 @@ def test_meeting_ended_marks_checked_out_and_updates_record(app, monkeypatch):
     assert ended_audit["zoom_account_id"] == "acct-ended"
     assert ended_audit["zoom_meeting_id"] == "meet-ended-1"
     assert ended_audit["openemr_appointment_id"] == "999"
-    assert ended_audit["openemr_provider_id"] == "10"
+    assert ended_audit["openemr_user_id"] == "10"
 
 
 def test_meeting_ended_no_record_returns_200(app, monkeypatch):

@@ -178,6 +178,7 @@ services:
       OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
       FLASK_ENV: production
       ENABLE_DBGATE: ${ENABLE_DBGATE:-false}
+      ENABLE_EPIC_ZCC: ${ENABLE_EPIC_ZCC:-false}
     volumes:
       # migrations/ + alembic.ini are baked into the image by server/Dockerfile
       # (COPY server/ .). Dev re-introduces them as bind mounts via

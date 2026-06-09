@@ -357,7 +357,7 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
             openemr_appointment_id=str(record.openemr_appointment_id),
-            openemr_provider_id=record.openemr_provider_id,
+            openemr_user_id=record.openemr_user_id,
             openemr_patient_id=record_patient_id,
             error_message="note not found in Zoom API",
         )
@@ -379,13 +379,13 @@ def _validate_and_process_note(
     else:
         # Fall back to MeetingRecord + MeetingPatient
         eid = int(record.openemr_appointment_id)
-        provider_id = int(record.openemr_provider_id) if record.openemr_provider_id else None
+        provider_id = int(record.openemr_user_id) if record.openemr_user_id else None
         pid = int(record_patient_id) if record_patient_id else None
         current_app.logger.info(
             f"zoom_webhook | No EHR context — using MeetingRecord: eid={eid} pid={pid} provider_id={provider_id}"
         )
 
-    openemr_provider_id = str(provider_id) if provider_id is not None else None
+    openemr_user_id = str(provider_id) if provider_id is not None else None
     openemr_patient_id = str(pid) if pid is not None else None
  
     write_audit_log(
@@ -395,7 +395,7 @@ def _validate_and_process_note(
         zoom_meeting_id=meeting_number,
         zoom_note_id=note_id,
         openemr_appointment_id=str(eid),
-        openemr_provider_id=openemr_provider_id,
+        openemr_user_id=openemr_user_id,
         openemr_patient_id=openemr_patient_id,
         detail={
             "note_title": note_data.get("note_title"),
@@ -415,7 +415,7 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
             openemr_appointment_id=str(eid),
-            openemr_provider_id=openemr_provider_id,
+            openemr_user_id=openemr_user_id,
             openemr_patient_id=openemr_patient_id,
             error_message="missing patient or provider",
             detail={"ehr_context": bool(ehr_context)},
@@ -456,7 +456,7 @@ def _validate_and_process_note(
             zoom_note_id=note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=openemr_provider_id,
+            openemr_user_id=openemr_user_id,
             openemr_patient_id=openemr_patient_id,
             detail={"reason": "manual_fallback"},
         )
@@ -471,7 +471,7 @@ def _validate_and_process_note(
             zoom_note_id=note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=openemr_provider_id,
+            openemr_user_id=openemr_user_id,
             openemr_patient_id=openemr_patient_id,
             detail={"trigger": "note_processing"},
         )
@@ -487,7 +487,7 @@ def _validate_and_process_note(
             zoom_meeting_id=meeting_number,
             zoom_note_id=note_id,
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(provider_id),
+            openemr_user_id=str(provider_id),
             openemr_patient_id=str(pid),
             error_message="could not find or create encounter",
         )
@@ -534,7 +534,7 @@ def _validate_and_process_note(
         zoom_note_id=note_id,
         openemr_appointment_id=str(eid),
         openemr_encounter_number=str(encounter_number),
-        openemr_provider_id=str(provider_id),
+        openemr_user_id=str(provider_id),
         openemr_patient_id=str(pid),
         error_message=None if success else "OpenEMR note write failed",
         detail={"ehr_context": bool(ehr_context), "content_blank": async_content_blank}
@@ -595,7 +595,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
         success=True,
         zoom_account_id=account.account_id,
         openemr_appointment_id=eid,
-        openemr_provider_id=record.openemr_provider_id,
+        openemr_user_id=record.openemr_user_id,
         openemr_patient_id=patient_id,
         zoom_meeting_id=meeting_id,
         detail={
@@ -629,7 +629,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
                 success=False,
                 zoom_account_id=account.account_id,
                 openemr_appointment_id=eid,
-                openemr_provider_id=str(appt["provider_id"]),
+                openemr_user_id=str(appt["provider_id"]),
                 openemr_patient_id=str(appt["pid"]),
                 zoom_meeting_id=meeting_id,
                 error_message="ensure_encounter_for_appointment returned None",
@@ -641,7 +641,7 @@ def _handle_waiting_room_joined(payload: dict, account: ZoomAccount):
                 success=True,
                 zoom_account_id=account.account_id,
                 openemr_appointment_id=eid,
-                openemr_provider_id=str(appt["provider_id"]),
+                openemr_user_id=str(appt["provider_id"]),
                 openemr_patient_id=str(appt["pid"]),
                 zoom_meeting_id=meeting_id,
                 openemr_encounter_number=str(encounter_number),
@@ -696,7 +696,7 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
         zoom_account_id=account.account_id,
         zoom_meeting_id=meeting_id,
         openemr_appointment_id=record.openemr_appointment_id,
-        openemr_provider_id=record.openemr_provider_id,
+        openemr_user_id=record.openemr_user_id,
     )
 
     # Provider-join lifecycle — Arrived → encounter → In Exam Room. Each
@@ -728,7 +728,7 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
                     zoom_account_id=account.account_id,
                     zoom_meeting_id=meeting_id,
                     openemr_appointment_id=eid,
-                    openemr_provider_id=str(appt["provider_id"]),
+                    openemr_user_id=str(appt["provider_id"]),
                     openemr_patient_id=str(appt["pid"]),
                     error_message="ensure_encounter_for_appointment returned None",
                     detail={"trigger": "meeting_started"},
@@ -740,7 +740,7 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
                     zoom_account_id=account.account_id,
                     zoom_meeting_id=meeting_id,
                     openemr_appointment_id=eid,
-                    openemr_provider_id=str(appt["provider_id"]),
+                    openemr_user_id=str(appt["provider_id"]),
                     openemr_patient_id=str(appt["pid"]),
                     openemr_encounter_number=str(encounter_number),
                     detail={"trigger": "meeting_started"},
@@ -750,7 +750,7 @@ def _handle_meeting_started(payload: dict, account: ZoomAccount):
 
     current_app.logger.info(
         f"zoom_webhook | meeting.started | meeting_id={meeting_id} "
-        f"provider_id={record.openemr_provider_id} status=started"
+        f"provider_id={record.openemr_user_id} status=started"
     )
 
     return {"status": "ok"}, 200
@@ -798,7 +798,7 @@ def _handle_meeting_ended(payload: dict, account: ZoomAccount):
         zoom_account_id=account.account_id,
         zoom_meeting_id=meeting_id,
         openemr_appointment_id=record.openemr_appointment_id,
-        openemr_provider_id=record.openemr_provider_id,
+        openemr_user_id=record.openemr_user_id,
     )
 
     eid = record.openemr_appointment_id
@@ -807,7 +807,7 @@ def _handle_meeting_ended(payload: dict, account: ZoomAccount):
 
     current_app.logger.info(
         f"zoom_webhook | meeting.ended | meeting_id={meeting_id} "
-        f"provider_id={record.openemr_provider_id} status=ended"
+        f"provider_id={record.openemr_user_id} status=ended"
     )
 
     return {"status": "ok"}, 200

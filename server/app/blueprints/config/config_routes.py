@@ -4,7 +4,7 @@ from flask import request, jsonify, current_app
 from app.models import ZoomAccount
 from app.services.registration import (register_zoom_account, update_zoom_account_credentials, update_account_config,
                                        deregister_zoom_account, verify_openemr_token_for_account)
-from app.services.openemr import _create_provider_mapping, _get_provider_mappings, _delete_provider_mapping
+from app.services.openemr import _create_user_mapping, _get_user_mappings, _delete_user_mapping
 from app.services.ehr_context import set_ehr_context_credentials
 from app.services.openemr.appointments import _create_appointment_filter, _get_appointment_filters, _delete_appointment_filter
 from app.services.audit import write_audit_log
@@ -34,7 +34,6 @@ UPDATE_CREDENTIAL_FIELDS = {
 }
 CONFIG_FIELDS = {
     "timezone",
-    "allow_shared_zoom_user",
     "demo_patient_email_override_enabled",
     "demo_patient_phone_override_enabled",
     "demo_patient_email_override",
@@ -164,7 +163,6 @@ def update_registration(zoom_account_id: str):
             update_account_config(
                 zoom_account_id=zoom_account_id,
                 timezone=data.get("timezone"),
-                allow_shared_zoom_user=data.get("allow_shared_zoom_user"),
                 demo_patient_email_override_enabled=data.get("demo_patient_email_override_enabled"),
                 demo_patient_email_override=data.get("demo_patient_email_override"),
                 demo_patient_phone_override_enabled=data.get("demo_patient_phone_override_enabled"),
@@ -195,7 +193,6 @@ def update_registration(zoom_account_id: str):
             "nickname": account.nickname,
             "timezone": config.timezone,
             "ehr_context_username": account.ehr_context_username,
-            "allow_shared_zoom_user": config.allow_shared_zoom_user,
             "demo_patient_email_override_enabled": config.demo_patient_email_override_enabled,
             "demo_patient_email_override": config.demo_patient_email_override,
             "demo_patient_phone_override_enabled": config.demo_patient_phone_override_enabled,
@@ -274,7 +271,6 @@ def list_registrations():
                 "demo_patient_email_override": a.config.demo_patient_email_override if a.config else None,
                 "demo_patient_phone_override_enabled": a.config.demo_patient_phone_override_enabled if a.config else False,
                 "demo_patient_phone_override": a.config.demo_patient_phone_override if a.config else None,
-                "allow_shared_zoom_user": a.config.allow_shared_zoom_user if a.config else False,
                 "note_writeback_mode": a.config.note_writeback_mode if a.config else "both",
                 "created_at": a.created_at.isoformat(),
                 "updated_at": a.updated_at.isoformat(),
@@ -326,40 +322,58 @@ def verify_registration(zoom_account_id: str):
 
 @config_bp.route("/providers", methods=["POST"])
 def create_provider_mapping():
+    """Create a user mapping with one or both roles (is_provider, is_zcc_agent).
+
+    The role-specific field requirements are enforced in `_create_user_mapping`;
+    this route just validates the always-required envelope (zoom_account_id +
+    zoom_user_email) and passes everything else through.
+    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "Request body is required"}), 400
 
-    required = ["zoom_account_id", "openemr_fhir_id", "openemr_provider_npi",
-                "zoom_user_id", "zoom_user_email", "zoom_user_type"]
-    missing = [f for f in required if not data.get(f)]
+    envelope_required = ["zoom_account_id", "zoom_user_email"]
+    missing = [f for f in envelope_required if not data.get(f)]
     if missing:
         return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
 
     try:
-        mapping = _create_provider_mapping(
+        mapping = _create_user_mapping(
             zoom_account_id=data["zoom_account_id"],
-            openemr_fhir_id=data["openemr_fhir_id"],
-            openemr_provider_npi=data["openemr_provider_npi"],
-            openemr_provider_id=data.get("openemr_provider_id"),
+            zoom_user_email=data["zoom_user_email"],
+            is_provider=bool(data.get("is_provider", True)),
+            is_zcc_agent=bool(data.get("is_zcc_agent", False)),
+            # Provider-role fields
+            openemr_fhir_id=data.get("openemr_fhir_id"),
+            openemr_provider_npi=data.get("openemr_provider_npi"),
             openemr_provider_name=data.get("openemr_provider_name"),
             openemr_facility_id=data.get("openemr_facility_id"),
             openemr_facility_name=data.get("openemr_facility_name"),
-            zoom_user_id=data["zoom_user_id"],
-            zoom_user_email=data["zoom_user_email"],
+            zoom_user_id=data.get("zoom_user_id"),
             zoom_user_name=data.get("zoom_user_name"),
             zoom_user_type=data.get("zoom_user_type"),
             zoom_user_timezone=data.get("zoom_user_timezone"),
+            # OpenEMR user (any role)
+            openemr_user_id=data.get("openemr_user_id"),
+            # ZCC-agent-role fields
+            zcc_user_id=data.get("zcc_user_id"),
+            agent_role=data.get("agent_role"),
         )
         return jsonify({
             "id": mapping.id,
+            "is_provider": mapping.is_provider,
+            "is_zcc_agent": mapping.is_zcc_agent,
+            "openemr_user_id": mapping.openemr_user_id,
             "openemr_provider_npi": mapping.openemr_provider_npi,
             "openemr_provider_name": mapping.openemr_provider_name,
             "openemr_facility_id": mapping.openemr_facility_id,
             "openemr_facility_name": mapping.openemr_facility_name,
+            "zoom_user_id": mapping.zoom_user_id,
             "zoom_user_email": mapping.zoom_user_email,
             "zoom_user_name": mapping.zoom_user_name,
             "zoom_user_timezone": mapping.zoom_user_timezone,
+            "zcc_user_id": mapping.zcc_user_id,
+            "agent_role": mapping.agent_role,
             "created_at": mapping.created_at.isoformat()
         }), 201
     except ValueError as e:
@@ -369,13 +383,13 @@ def create_provider_mapping():
 
 
 @config_bp.route("/providers", methods=["GET"])
-def list_provider_mappings():
+def list_user_mappings():
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
     try:
-        mappings = _get_provider_mappings(zoom_account_id)
+        mappings = _get_user_mappings(zoom_account_id)
         return jsonify({
             "count": len(mappings),
             "providers": [
@@ -383,7 +397,7 @@ def list_provider_mappings():
                     "id": m.id,
                     "openemr_fhir_id": m.openemr_fhir_id,
                     "openemr_provider_npi": m.openemr_provider_npi,
-                    "openemr_provider_id": m.openemr_provider_id,
+                    "openemr_user_id": m.openemr_user_id,
                     "openemr_provider_name": m.openemr_provider_name,
                     "openemr_facility_id": m.openemr_facility_id,
                     "openemr_facility_name": m.openemr_facility_name,
@@ -391,6 +405,10 @@ def list_provider_mappings():
                     "zoom_user_email": m.zoom_user_email,
                     "zoom_user_name": m.zoom_user_name,
                     "zoom_user_timezone": m.zoom_user_timezone,
+                    "is_provider": m.is_provider,
+                    "is_zcc_agent": m.is_zcc_agent,
+                    "zcc_user_id": m.zcc_user_id,
+                    "agent_role": m.agent_role,
                     "created_at": m.created_at.isoformat()
                 }
                 for m in mappings
@@ -402,17 +420,17 @@ def list_provider_mappings():
         return jsonify({"error": str(e)}), 500
 
 
-@config_bp.route("/providers/<string:openemr_provider_id>", methods=["DELETE"])
-def delete_provider_mapping(openemr_provider_id: str):
+@config_bp.route("/providers/<string:openemr_user_id>", methods=["DELETE"])
+def delete_provider_mapping(openemr_user_id: str):
     zoom_account_id = request.args.get("zoom_account_id")
     if not zoom_account_id:
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
     try:
-        _delete_provider_mapping(zoom_account_id, openemr_provider_id)
+        _delete_user_mapping(zoom_account_id, openemr_user_id)
         return jsonify({
             "status": "deleted",
-            "openemr_provider_id": openemr_provider_id
+            "openemr_user_id": openemr_user_id
         }), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404

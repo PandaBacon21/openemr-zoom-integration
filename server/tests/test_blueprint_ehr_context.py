@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import jwt
 
 from app.extensions import db
-from app.models import AccountConfig, ProviderMapping, ZoomAccount
+from app.models import AccountConfig, UserMapping, ZoomAccount
 from app.services.ehr_context import set_ehr_context_credentials
 
 
@@ -83,11 +83,11 @@ def test_get_appointments_returns_mapped_provider_appointments(client, app, monk
     _create_ehr_account(app)
     with app.app_context():
         db.session.add(
-            ProviderMapping(
+            UserMapping(
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
-                openemr_provider_id="10",
+                openemr_user_id="10",
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="zoom-user-1",
                 zoom_user_email="jane@example.com",
@@ -195,11 +195,11 @@ def test_get_appointments_uses_provider_timezone_when_set(client, app, monkeypat
     _create_ehr_account(app)
     with app.app_context():
         db.session.add(
-            ProviderMapping(
+            UserMapping(
                 zoom_account_id="acct-1",
                 openemr_fhir_id="pract-1",
                 openemr_provider_npi="1234567890",
-                openemr_provider_id="10",
+                openemr_user_id="10",
                 openemr_provider_name="Dr Jane Doe",
                 zoom_user_id="zoom-user-1",
                 zoom_user_email="jane@example.com",

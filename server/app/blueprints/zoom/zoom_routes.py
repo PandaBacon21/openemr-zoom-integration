@@ -5,7 +5,7 @@ from flask import jsonify, request
 from app.models import ZoomAccount, MeetingRecord
 from app.extensions import db, get_openemr_db_engine
 from app.services.audit import write_audit_log
-from app.services.zoom import get_zoom_users, get_zoom_clinical_note, mark_zoom_note_completed
+from app.services.zoom import get_zoom_users, get_zcc_users, get_zoom_clinical_note, mark_zoom_note_completed
 from app.services.openemr import write_note_to_encounter, get_provider_username
 from app.services.openemr.note import encounter_lock_target
 
@@ -38,7 +38,30 @@ def get_users():
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+
+@zoom_bp.route("/zcc/users", methods=["GET"])
+def get_zcc_users_route():
+    """List ZCC users for the account. Powers the ZCC Agent dropdown in the
+    user-mapping form. Distinct from /users because ZCC has its own user
+    identifier space (used in ReceiveCommunication3's RecipientID)."""
+    zoom_account_id = request.args.get("zoom_account_id")
+    if not zoom_account_id:
+        return jsonify({"error": "zoom_account_id query parameter is required"}), 400
+
+    account = ZoomAccount.query.filter_by(
+        account_id=zoom_account_id, is_active=True
+    ).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+
+    try:
+        users = get_zcc_users(account)
+        return jsonify({"count": len(users), "users": users}), 200
+    except Exception as e:
+        logger.error(f"Failed to fetch ZCC users for {zoom_account_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @zoom_bp.route("/encounter/<int:encounter_number>/fetch_zoom_note", methods=["POST"])
 @verify_openemr_signature
@@ -126,7 +149,7 @@ def fetch_zoom_note(encounter_number: int):
             reason="encounter_locked",
             error_message=f"encounter locked ({lock_target})",
             encounter_number=encounter_number,
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
         )
         return jsonify({
@@ -142,7 +165,7 @@ def fetch_zoom_note(encounter_number: int):
             reason="malformed_external_id",
             error_message=f"malformed external_id: {external_id}",
             encounter_number=encounter_number,
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
         )
         return jsonify({"error": f"Malformed external_id: {external_id}"}), 500
@@ -161,7 +184,7 @@ def fetch_zoom_note(encounter_number: int):
             error_message="no meeting record",
             encounter_number=encounter_number,
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
         )
         return jsonify({
@@ -176,7 +199,7 @@ def fetch_zoom_note(encounter_number: int):
             encounter_number=encounter_number,
             zoom_account_id=record.zoom_account_id,
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
             zoom_meeting_id=record.zoom_meeting_id,
         )
@@ -199,7 +222,7 @@ def fetch_zoom_note(encounter_number: int):
             encounter_number=encounter_number,
             zoom_account_id=record.zoom_account_id,
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
             zoom_meeting_id=record.zoom_meeting_id,
             zoom_note_id=record.clinical_note.zoom_note_id,
@@ -219,7 +242,7 @@ def fetch_zoom_note(encounter_number: int):
             zoom_account_id=account.account_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
             zoom_meeting_id=record.zoom_meeting_id,
             zoom_note_id=note_id,
@@ -248,7 +271,7 @@ def fetch_zoom_note(encounter_number: int):
             zoom_account_id=account.account_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=str(provider_id) if provider_id is not None else None,
+            openemr_user_id=str(provider_id) if provider_id is not None else None,
             openemr_patient_id=str(pid) if pid is not None else None,
             zoom_meeting_id=record.zoom_meeting_id,
             zoom_note_id=note_id,
@@ -285,7 +308,7 @@ def fetch_zoom_note(encounter_number: int):
         zoom_account_id=account.account_id,
         openemr_appointment_id=str(eid),
         openemr_encounter_number=str(encounter_number),
-        openemr_provider_id=str(provider_id) if provider_id is not None else None,
+        openemr_user_id=str(provider_id) if provider_id is not None else None,
         openemr_patient_id=str(pid) if pid is not None else None,
         zoom_meeting_id=record.zoom_meeting_id,
         zoom_note_id=note_id,
@@ -378,7 +401,7 @@ def complete_zoom_note(encounter_number: int):
             event_type="zoom.completion_error",
             success=False,
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_user_id=str(row.provider_id) if row.provider_id is not None else None,
             openemr_patient_id=str(row.pid) if row.pid is not None else None,
             error_message=f"malformed external_id: {external_id}",
             detail={"reason": "malformed_external_id", "external_id": external_id},
@@ -397,7 +420,7 @@ def complete_zoom_note(encounter_number: int):
             success=True,
             openemr_encounter_number=str(encounter_number),
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_user_id=str(row.provider_id) if row.provider_id is not None else None,
             openemr_patient_id=str(row.pid) if row.pid is not None else None,
             detail={"reason": "no_meeting_record"},
         )
@@ -412,7 +435,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_meeting_id=record.zoom_meeting_id,
             openemr_encounter_number=str(encounter_number),
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_user_id=str(row.provider_id) if row.provider_id is not None else None,
             openemr_patient_id=str(row.pid) if row.pid is not None else None,
             detail={"reason": "no_note_on_record"},
         )
@@ -431,7 +454,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=row.provider_id,
+            openemr_user_id=row.provider_id,
             openemr_patient_id=row.pid,
             detail={"reason": "already_completed"},
         )
@@ -452,7 +475,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_encounter_number=str(encounter_number),
             openemr_appointment_id=str(eid),
-            openemr_provider_id=str(row.provider_id) if row.provider_id is not None else None,
+            openemr_user_id=str(row.provider_id) if row.provider_id is not None else None,
             openemr_patient_id=str(row.pid) if row.pid is not None else None,
             error_message="no active ZoomAccount",
             detail={"reason": "no_active_account"},
@@ -471,7 +494,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=row.provider_id,
+            openemr_user_id=row.provider_id,
             openemr_patient_id=row.pid,
             error_message=str(e),
         )
@@ -485,7 +508,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=row.provider_id,
+            openemr_user_id=row.provider_id,
             openemr_patient_id=row.pid,
             error_message="Zoom note completion failed",
         )
@@ -504,7 +527,7 @@ def complete_zoom_note(encounter_number: int):
             zoom_note_id=clinical_note.zoom_note_id,
             openemr_appointment_id=str(eid),
             openemr_encounter_number=str(encounter_number),
-            openemr_provider_id=row.provider_id,
+            openemr_user_id=row.provider_id,
             openemr_patient_id=row.pid,
         )
     except Exception as e:

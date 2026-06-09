@@ -46,6 +46,10 @@ class ZoomAccount(db.Model):
     private_key_path = db.Column(db.String(512), nullable=True)
     kid = db.Column(db.String(256), nullable=True)
 
+    # Epic-ZCC CTI middleware credentials
+    epic_zcc_client_id = db.Column(db.String(64), nullable=True)
+    epic_kid = db.Column(db.String(64), nullable=True)
+
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -56,10 +60,10 @@ class ZoomAccount(db.Model):
         lazy=True, uselist=False, cascade="all, delete-orphan",
         foreign_keys="AccountConfig.account_id"
     )
-    provider_mappings = db.relationship(
-        "ProviderMapping", backref="zoom_account",
+    user_mappings = db.relationship(
+        "UserMapping", backref="zoom_account",
         lazy=True, cascade="all, delete-orphan",
-        foreign_keys="ProviderMapping.zoom_account_id"
+        foreign_keys="UserMapping.zoom_account_id"
     )
     appointment_type_filters = db.relationship(
         "AppointmentTypeFilter", backref="zoom_account",
@@ -90,6 +94,8 @@ class ZoomAccount(db.Model):
             openemr_registration_client_uri: str | None = ...,
             private_key_path: str | None = ...,
             kid: str | None = ...,
+            epic_zcc_client_id: str | None = ...,
+            epic_kid: str | None = ...,
             key_version: int | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
@@ -111,9 +117,6 @@ class AccountConfig(db.Model):
     # Scheduling
     timezone = db.Column(db.String(64), nullable=False, default="America/New_York", server_default="America/New_York")
 
-    # Provider mapping behavior
-    allow_shared_zoom_user = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
-
     # Demo patient contact overrides
     # Email override
     demo_patient_email_override_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
@@ -124,6 +127,16 @@ class AccountConfig(db.Model):
 
     note_writeback_mode = db.Column(db.String(32), nullable=False, default="both", server_default="both")
 
+    # Epic-ZCC CTI per-account configuration. SE pastes these into Zoom's admin portal.
+    epic_zcc_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    epic_zcc_connection_name = db.Column(db.String(256), nullable=True)
+    epic_zcc_backend_url = db.Column(db.String(256), nullable=True)
+    epic_zcc_background_user_id = db.Column(db.String(128), nullable=True)
+    epic_zcc_background_user_id_type = db.Column(db.String(64), nullable=True)
+    epic_zcc_phone_system_id = db.Column(db.String(128), nullable=True)
+    epic_zcc_phone_system_id_type = db.Column(db.String(64), nullable=True)
+    epic_zcc_recipient_id_type = db.Column(db.String(64), nullable=False, default="Phone", server_default="Phone")
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -133,58 +146,97 @@ class AccountConfig(db.Model):
             *,
             account_id: str | None = ...,
             timezone: str | None = ...,
-            allow_shared_zoom_user: bool | None = ...,
             demo_patient_email_override_enabled: bool | None = ...,
             demo_patient_email_override: str | None = ...,
             demo_patient_phone_override_enabled: bool | None = ...,
             demo_patient_phone_override: str | None = ...,
+            note_writeback_mode: str | None = ...,
+            epic_zcc_enabled: bool | None = ...,
+            epic_zcc_connection_name: str | None = ...,
+            epic_zcc_backend_url: str | None = ...,
+            epic_zcc_background_user_id: str | None = ...,
+            epic_zcc_background_user_id_type: str | None = ...,
+            epic_zcc_phone_system_id: str | None = ...,
+            epic_zcc_phone_system_id_type: str | None = ...,
+            epic_zcc_recipient_id_type: str | None = ...,
         ) -> None: ...
 
     def __repr__(self):
         return f"<AccountConfig {self.account_id}>"
 
 
-class ProviderMapping(db.Model):
-    __tablename__ = "provider_mappings"
- 
+class UserMapping(db.Model):
+    """Maps an OpenEMR user to their Zoom platform / ZCC identities.
+
+    A single row supports one or both roles per OpenEMR user:
+      - is_provider=True: clinical provider (telehealth host, signs notes).
+        Requires openemr_fhir_id, openemr_provider_npi, zoom_user_id, zoom_user_email.
+      - is_zcc_agent=True: call-center agent (handles ZCC calls). Requires zcc_user_id.
+
+    The same Zoom user identity (email/name) backs both roles when present, so the
+    Zoom-side fields stay shared. ZCC issues a distinct identifier (zcc_user_id)
+    for routing inbound calls — that's the only ZCC-specific column.
+
+    Role-invariant validation lives in the service layer (see registration.py and
+    the user-mapping CRUD routes) so callers get explicit errors instead of relying
+    on DB constraints to surface bad combinations.
+    """
+
+    __tablename__ = "user_mappings"
+
     id = db.Column(db.Integer, primary_key=True)
     zoom_account_id = db.Column(
         db.String(128), db.ForeignKey("zoom_accounts.account_id"), nullable=False, index=True
     )
- 
-    # OpenEMR side
-    openemr_fhir_id = db.Column(db.String(128), nullable=False)
-    openemr_provider_npi = db.Column(db.String(10), nullable=False)
-    openemr_provider_id = db.Column(db.String(128), nullable=True)
+
+    # Role flags — at least one must be True (enforced in the service layer).
+    # Provider defaults to True so the common-case (creating a clinical provider)
+    # works without explicit flag setting; agent paths must set is_zcc_agent=True
+    # explicitly and may unset is_provider when creating an agent-only mapping.
+    is_provider = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    is_zcc_agent = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+
+    # OpenEMR user identity (held by any role)
+    openemr_user_id = db.Column(db.String(128), nullable=True)
+
+    # Provider-role OpenEMR fields (required when is_provider=True)
+    openemr_fhir_id = db.Column(db.String(128), nullable=True)
+    openemr_provider_npi = db.Column(db.String(10), nullable=True)
     openemr_provider_name = db.Column(db.String(256), nullable=True)
     openemr_facility_id = db.Column(db.Integer, nullable=True)
     openemr_facility_name = db.Column(db.String(255), nullable=True)
- 
-    # Zoom side
+
+    # Zoom platform user (shared across both roles; agents log into ZCC via this Zoom identity)
     zoom_user_email = db.Column(db.String(256), nullable=False)
     zoom_user_name = db.Column(db.String(256), nullable=True)
     zoom_user_id = db.Column(db.String(128), nullable=True)
     zoom_user_type = db.Column(db.Integer, nullable=True)
     zoom_user_timezone = db.Column(db.String(64), nullable=True)
- 
+
     # Default alternative host for meetings created for this provider.
     # Nullable — (not yet built).
     default_alternative_host_email = db.Column(db.String(256), nullable=True)
- 
+
+    # ZCC-agent-role fields (required when is_zcc_agent=True)
+    zcc_user_id = db.Column(db.String(128), nullable=True)
+    agent_role = db.Column(db.String(64), nullable=True)  # billing/intake/scheduling/rx_refill/triage
+
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
     )
- 
+
     if TYPE_CHECKING:
         def __init__(
             self,
             *,
             zoom_account_id: str | None = ...,
+            is_provider: bool | None = ...,
+            is_zcc_agent: bool | None = ...,
+            openemr_user_id: str | None = ...,
             openemr_fhir_id: str | None = ...,
             openemr_provider_npi: str | None = ...,
-            openemr_provider_id: int | None = ...,
             openemr_provider_name: str | None = ...,
             openemr_facility_id: int | None = ...,
             openemr_facility_name: str | None = ...,
@@ -194,12 +246,19 @@ class ProviderMapping(db.Model):
             zoom_user_type: int | None = ...,
             zoom_user_timezone: str | None = ...,
             default_alternative_host_email: str | None = ...,
+            zcc_user_id: str | None = ...,
+            agent_role: str | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
 
     def __repr__(self):
-        return f"<ProviderMapping {self.openemr_provider_npi} → {self.zoom_user_email}>"
- 
+        roles = []
+        if self.is_provider:
+            roles.append("provider")
+        if self.is_zcc_agent:
+            roles.append("agent")
+        return f"<UserMapping openemr_user_id={self.openemr_user_id} roles={'+'.join(roles) or 'none'} zoom={self.zoom_user_email}>"
+
 
 class AppointmentTypeFilter(db.Model):
     __tablename__ = "appointment_type_filters"
@@ -245,13 +304,13 @@ class MeetingRecord(db.Model):
     zoom_join_url = db.Column(db.String(1024), nullable=True)
  
     # Alternative host — nullable until config UI is built
-    # Populated from ProviderMapping.default_alternative_host_email at creation
+    # Populated from UserMapping.default_alternative_host_email at creation
     # time once that flow is implemented
     alternative_host_email = db.Column(db.String(256), nullable=True)
  
     # OpenEMR side
     openemr_appointment_id = db.Column(db.String(128), nullable=False)
-    openemr_provider_id = db.Column(db.String(128), nullable=False)
+    openemr_user_id = db.Column(db.String(128), nullable=False)
  
     # Mirrors the OpenEMR apptstat option_id (e.g. '^' pending, '@' arrived,
     # 'x' canceled). Updated when OpenEMR fires subsequent appointment events.
@@ -300,7 +359,7 @@ class MeetingRecord(db.Model):
             zoom_join_url: str | None = ...,
             alternative_host_email: str | None = ...,
             openemr_appointment_id: str | None = ...,
-            openemr_provider_id: str | None = ...,
+            openemr_user_id: str | None = ...,
             openemr_appt_status: str | None = ...,
             status: str | None = ...,
         ) -> None: ...
@@ -395,7 +454,7 @@ class AuditLog(db.Model):
     zoom_account_id = db.Column(db.String(128), nullable=True)
     openemr_appointment_id = db.Column(db.String(128), nullable=True)
     openemr_encounter_number = db.Column(db.String(128), nullable=True)
-    openemr_provider_id = db.Column(db.String(128), nullable=True)
+    openemr_user_id = db.Column(db.String(128), nullable=True)
     openemr_patient_id = db.Column(db.String(128), nullable=True)
     zoom_meeting_id = db.Column(db.String(128), nullable=True)
     zoom_note_id = db.Column(db.String(128), nullable=True)
@@ -418,7 +477,7 @@ class AuditLog(db.Model):
             zoom_account_id: str | None = ...,
             openemr_appointment_id: str | None = ...,
             openemr_encounter_number: str | None = ...,
-            openemr_provider_id: str | None = ...,
+            openemr_user_id: str | None = ...,
             openemr_patient_id: str | None = ...,
             zoom_meeting_id: str | None = ...,
             zoom_note_id: str | None = ...,

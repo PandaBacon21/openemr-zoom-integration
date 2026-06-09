@@ -13,7 +13,7 @@ def write_audit_log(
     zoom_account_id: str | None = None,
     openemr_appointment_id: str | None = None,
     openemr_encounter_number: str | None = None,
-    openemr_provider_id: str | None = None,
+    openemr_user_id: str | None = None,
     openemr_patient_id: str | None = None,
     zoom_meeting_id: str | None = None,
     zoom_note_id: str | None = None,
@@ -128,6 +128,23 @@ def write_audit_log(
                                             token_refresh_failed is the low-level
                                             HTTP failure.
 
+    Event types for Epic-ZCC CTI middleware (Sprint 11):
+      epic_zcc.token_issued         — POST /oauth2/token minted an opaque
+                                       access token. detail.iss, detail.jti,
+                                       detail.expires_in
+      epic_zcc.token_request_failed — token issuance refused. detail.reason:
+                                       'bad_request' | 'kid_missing' |
+                                       'alg_unsupported' | 'jku_untrusted' |
+                                       'jwks_fetch_failed' | 'bad_signature' |
+                                       'expired' | 'replay' | 'aud_mismatch' |
+                                       'iss_sub_mismatch'
+      epic_zcc.bearer_token_invalid — protected endpoint (PatientLookUp /
+                                       Practitioner / ReceiveCommunication3)
+                                       rejected a bearer token. detail.reason:
+                                       'missing_header' | 'expired_or_unknown' |
+                                       'account_mismatch' (with
+                                       detail.path_account_id)
+
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started
                                        for an account
@@ -147,7 +164,7 @@ def write_audit_log(
                                                 (detail.slot, detail.category_id)
       demo.future_appointment_create_failed — appointment insert failed
                                                 (detail.stage,
-                                                detail.openemr_provider_id)
+                                                detail.openemr_user_id)
       demo.future_meeting_created    — Zoom meeting created for a newly-
                                         generated future appointment
       demo.future_meeting_backfilled — Zoom meeting added to an existing
@@ -155,7 +172,7 @@ def write_audit_log(
                                         scenario)
       demo.past_encounter_seeded    — historical locked encounter + sample
                                        note seeded for a provider's patient
-                                       (detail.openemr_provider_id,
+                                       (detail.openemr_user_id,
                                        detail.openemr_patient_id, detail.eid)
       demo.past_encounter_skipped   — past-encounter seed skipped.
                                        detail.reason: 'unknown_specialty' |
@@ -170,7 +187,7 @@ def write_audit_log(
         success:                  Whether the operation succeeded
         zoom_account_id:          Zoom account ID string (not internal PK)
         openemr_appointment_id:   OpenEMR appointment eid
-        openemr_provider_id:      OpenEMR provider users.id
+        openemr_user_id:      OpenEMR provider users.id
         openemr_patient_id:       OpenEMR patient pid
         zoom_meeting_id:          Zoom meeting ID string
         zoom_note_id:             Zoom clinical note ID string
@@ -184,7 +201,7 @@ def write_audit_log(
             zoom_account_id=zoom_account_id,
             openemr_appointment_id=str(openemr_appointment_id) if openemr_appointment_id is not None else None,
             openemr_encounter_number=str(openemr_encounter_number) if openemr_encounter_number is not None else None,
-            openemr_provider_id=str(openemr_provider_id) if openemr_provider_id is not None else None,
+            openemr_user_id=str(openemr_user_id) if openemr_user_id is not None else None,
             openemr_patient_id=str(openemr_patient_id) if openemr_patient_id is not None else None,
             zoom_meeting_id=str(zoom_meeting_id) if zoom_meeting_id is not None else None,
             zoom_note_id=str(zoom_note_id) if zoom_note_id is not None else None,

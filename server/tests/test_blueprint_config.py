@@ -310,7 +310,6 @@ def test_update_registration_success(client, app):
             "ehr_context_username": "ehr-user",
             "ehr_context_password": "ehr-pass",
             "timezone": "America/Denver",
-            "allow_shared_zoom_user": True,
             "demo_patient_email_override_enabled": True,
             "demo_patient_email_override": "demo-patient@example.com",
             "demo_patient_phone_override_enabled": True,
@@ -326,7 +325,6 @@ def test_update_registration_success(client, app):
     assert body["nickname"] == "South Clinic"
     assert body["timezone"] == "America/Denver"
     assert body["ehr_context_username"] == "ehr-user"
-    assert body["allow_shared_zoom_user"] is True
     assert body["demo_patient_email_override_enabled"] is True
     assert body["demo_patient_email_override"] == "demo-patient@example.com"
     assert body["demo_patient_phone_override_enabled"] is True
@@ -350,7 +348,6 @@ def test_update_registration_audits_changed_fields_without_secret_values(client,
             "ehr_context_username": "ehr-user",
             "ehr_context_password": "new-ehr-password-value",
             "timezone": "America/Denver",
-            "allow_shared_zoom_user": True,
             "note_writeback_mode": "clinical_note_only",
         },
     )
@@ -368,7 +365,7 @@ def test_update_registration_audits_changed_fields_without_secret_values(client,
             "zoom_client_secret",
             "zoom_webhook_secret",
         ],
-        "config_fields": ["allow_shared_zoom_user", "note_writeback_mode", "timezone"],
+        "config_fields": ["note_writeback_mode", "timezone"],
     }
     detail_text = str(audit_call["detail"])
     assert "new-client-secret-value" not in detail_text
@@ -477,7 +474,6 @@ def test_list_registrations_returns_summary(client, app):
                 demo_patient_email_override="demo-patient+acct1@example.com",
                 demo_patient_phone_override_enabled=True,
                 demo_patient_phone_override="+13035550111",
-                allow_shared_zoom_user=True,
                 note_writeback_mode="soap_only",
             )
         )
@@ -518,7 +514,6 @@ def test_list_registrations_returns_summary(client, app):
     assert acct1["demo_patient_email_override"] == "demo-patient+acct1@example.com"
     assert acct1["demo_patient_phone_override_enabled"] is True
     assert acct1["demo_patient_phone_override"] == "+13035550111"
-    assert acct1["allow_shared_zoom_user"] is True
     assert acct1["note_writeback_mode"] == "soap_only"
     assert isinstance(acct1["created_at"], str)
     assert isinstance(acct1["updated_at"], str)
@@ -532,7 +527,6 @@ def test_list_registrations_returns_summary(client, app):
     assert acct2["demo_patient_email_override"] is None
     assert acct2["demo_patient_phone_override_enabled"] is False
     assert acct2["demo_patient_phone_override"] is None
-    assert acct2["allow_shared_zoom_user"] is False
     assert acct2["note_writeback_mode"] == "both"  # fallback when no AccountConfig
 
 
@@ -583,50 +577,62 @@ def test_verify_registration_returns_success_false(client, app, monkeypatch):
     assert "OpenEMR token verification failed" in body["message"]
 
 
-def test_create_provider_mapping_requires_body(client):
+def test_create_user_mapping_requires_body(client):
     response = client.post("/config/providers", headers=AUTH_HEADERS, json={})
     assert response.status_code == 400
     assert response.get_json() == {"error": "Request body is required"}
 
 
-def test_create_provider_mapping_requires_fields(client):
+def test_create_user_mapping_requires_envelope_fields(client):
+    """The route validates only the always-required envelope; per-role field
+    requirements are enforced in the service layer (raised as ValueError → 400).
+    """
     response = client.post(
         "/config/providers",
         headers=AUTH_HEADERS,
-        json={"zoom_account_id": "acct-1", "openemr_fhir_id": "pract-1"},
+        json={"openemr_fhir_id": "pract-1"},  # missing zoom_account_id + zoom_user_email
     )
 
     assert response.status_code == 400
     assert response.get_json() == {
-        "error": "Missing required fields: openemr_provider_npi, zoom_user_id, zoom_user_email, zoom_user_type"
+        "error": "Missing required fields: zoom_account_id, zoom_user_email"
     }
 
 
-def test_create_provider_mapping_success(client, monkeypatch):
+def test_create_user_mapping_success(client, monkeypatch):
     fake_mapping = SimpleNamespace(
         id=12,
+        is_provider=True,
+        is_zcc_agent=False,
+        openemr_user_id="10",
         openemr_provider_npi="1234567890",
         openemr_provider_name="Dr Jane Doe",
         openemr_facility_id=1,
         openemr_facility_name="Zoomly Medical Center",
+        zoom_user_id="u-1",
         zoom_user_email="jane@example.com",
         zoom_user_name="Dr Jane Doe",
         zoom_user_timezone="America/Los_Angeles",
+        zcc_user_id=None,
+        agent_role=None,
         created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
     captured = {}
     def _capture_create(**kwargs):
         captured.update(kwargs)
         return fake_mapping
-    monkeypatch.setattr("app.blueprints.config.config_routes._create_provider_mapping", _capture_create)
+    monkeypatch.setattr("app.blueprints.config.config_routes._create_user_mapping", _capture_create)
 
     response = client.post(
         "/config/providers",
         headers=AUTH_HEADERS,
         json={
             "zoom_account_id": "acct-1",
+            "is_provider": True,
+            "is_zcc_agent": False,
             "openemr_fhir_id": "pract-1",
             "openemr_provider_npi": "1234567890",
+            "openemr_user_id": "10",
             "openemr_facility_id": 1,
             "openemr_facility_name": "Zoomly Medical Center",
             "zoom_user_id": "u-1",
@@ -639,25 +645,33 @@ def test_create_provider_mapping_success(client, monkeypatch):
     assert response.status_code == 201
     assert response.get_json() == {
         "id": 12,
+        "is_provider": True,
+        "is_zcc_agent": False,
+        "openemr_user_id": "10",
         "openemr_provider_npi": "1234567890",
         "openemr_provider_name": "Dr Jane Doe",
         "openemr_facility_id": 1,
         "openemr_facility_name": "Zoomly Medical Center",
+        "zoom_user_id": "u-1",
         "zoom_user_email": "jane@example.com",
         "zoom_user_name": "Dr Jane Doe",
         "zoom_user_timezone": "America/Los_Angeles",
+        "zcc_user_id": None,
+        "agent_role": None,
         "created_at": "2026-01-02T00:00:00+00:00",
     }
-    # Facility + provider TZ are threaded through to the service-layer call
-    # so they actually land on the new ProviderMapping row.
+    # Facility + provider TZ + role flags are threaded through to the service-layer
+    # call so they actually land on the new UserMapping row.
+    assert captured["is_provider"] is True
+    assert captured["is_zcc_agent"] is False
     assert captured["openemr_facility_id"] == 1
     assert captured["openemr_facility_name"] == "Zoomly Medical Center"
     assert captured["zoom_user_timezone"] == "America/Los_Angeles"
 
 
-def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
+def test_create_user_mapping_maps_value_error_to_400(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._create_provider_mapping",
+        "app.blueprints.config.config_routes._create_user_mapping",
         lambda **kwargs: (_ for _ in ()).throw(ValueError("duplicate mapping")),
     )
 
@@ -678,9 +692,9 @@ def test_create_provider_mapping_maps_value_error_to_400(client, monkeypatch):
     assert response.get_json() == {"error": "duplicate mapping"}
 
 
-def test_create_provider_mapping_maps_unexpected_error_to_500(client, monkeypatch):
+def test_create_user_mapping_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._create_provider_mapping",
+        "app.blueprints.config.config_routes._create_user_mapping",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -701,19 +715,19 @@ def test_create_provider_mapping_maps_unexpected_error_to_500(client, monkeypatc
     assert response.get_json() == {"error": "db down"}
 
 
-def test_list_provider_mappings_requires_zoom_account_id(client):
+def test_list_user_mappings_requires_zoom_account_id(client):
     response = client.get("/config/providers", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
 
-def test_list_provider_mappings_success(client, monkeypatch):
+def test_list_user_mappings_success(client, monkeypatch):
     fake_mappings = [
         SimpleNamespace(
             id=21,
             openemr_fhir_id="pract-1",
             openemr_provider_npi="1234567890",
-            openemr_provider_id="10",
+            openemr_user_id="10",
             openemr_provider_name="Dr Jane Doe",
             openemr_facility_id=1,
             openemr_facility_name="Zoomly Medical Center",
@@ -721,10 +735,14 @@ def test_list_provider_mappings_success(client, monkeypatch):
             zoom_user_email="jane@example.com",
             zoom_user_name="Dr Jane Doe",
             zoom_user_timezone="America/Denver",
+            is_provider=True,
+            is_zcc_agent=False,
+            zcc_user_id=None,
+            agent_role=None,
             created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
         )
     ]
-    monkeypatch.setattr("app.blueprints.config.config_routes._get_provider_mappings", lambda account_id: fake_mappings)
+    monkeypatch.setattr("app.blueprints.config.config_routes._get_user_mappings", lambda account_id: fake_mappings)
 
     response = client.get(
         "/config/providers",
@@ -740,7 +758,7 @@ def test_list_provider_mappings_success(client, monkeypatch):
                 "id": 21,
                 "openemr_fhir_id": "pract-1",
                 "openemr_provider_npi": "1234567890",
-                "openemr_provider_id": "10",
+                "openemr_user_id": "10",
                 "openemr_provider_name": "Dr Jane Doe",
                 "openemr_facility_id": 1,
                 "openemr_facility_name": "Zoomly Medical Center",
@@ -748,15 +766,19 @@ def test_list_provider_mappings_success(client, monkeypatch):
                 "zoom_user_email": "jane@example.com",
                 "zoom_user_name": "Dr Jane Doe",
                 "zoom_user_timezone": "America/Denver",
+                "is_provider": True,
+                "is_zcc_agent": False,
+                "zcc_user_id": None,
+                "agent_role": None,
                 "created_at": "2026-01-03T00:00:00+00:00",
             }
         ],
     }
 
 
-def test_list_provider_mappings_maps_value_error_to_404(client, monkeypatch):
+def test_list_user_mappings_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._get_provider_mappings",
+        "app.blueprints.config.config_routes._get_user_mappings",
         lambda account_id: (_ for _ in ()).throw(ValueError("not found")),
     )
 
@@ -770,9 +792,9 @@ def test_list_provider_mappings_maps_value_error_to_404(client, monkeypatch):
     assert response.get_json() == {"error": "not found"}
 
 
-def test_list_provider_mappings_maps_unexpected_error_to_500(client, monkeypatch):
+def test_list_user_mappings_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._get_provider_mappings",
+        "app.blueprints.config.config_routes._get_user_mappings",
         lambda account_id: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -786,14 +808,14 @@ def test_list_provider_mappings_maps_unexpected_error_to_500(client, monkeypatch
     assert response.get_json() == {"error": "db down"}
 
 
-def test_delete_provider_mapping_requires_zoom_account_id(client):
+def test_delete_user_mapping_requires_zoom_account_id(client):
     response = client.delete("/config/providers/10", headers=AUTH_HEADERS)
     assert response.status_code == 400
     assert response.get_json() == {"error": "zoom_account_id query parameter is required"}
 
 
-def test_delete_provider_mapping_success(client, monkeypatch):
-    monkeypatch.setattr("app.blueprints.config.config_routes._delete_provider_mapping", lambda account_id, npi: None)
+def test_delete_user_mapping_success(client, monkeypatch):
+    monkeypatch.setattr("app.blueprints.config.config_routes._delete_user_mapping", lambda account_id, npi: None)
 
     response = client.delete(
         "/config/providers/10",
@@ -802,12 +824,12 @@ def test_delete_provider_mapping_success(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "deleted", "openemr_provider_id": "10"}
+    assert response.get_json() == {"status": "deleted", "openemr_user_id": "10"}
 
 
-def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
+def test_delete_user_mapping_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._delete_provider_mapping",
+        "app.blueprints.config.config_routes._delete_user_mapping",
         lambda account_id, npi: (_ for _ in ()).throw(ValueError("not found")),
     )
 
@@ -821,9 +843,9 @@ def test_delete_provider_mapping_maps_value_error_to_404(client, monkeypatch):
     assert response.get_json() == {"error": "not found"}
 
 
-def test_delete_provider_mapping_maps_unexpected_error_to_500(client, monkeypatch):
+def test_delete_user_mapping_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
-        "app.blueprints.config.config_routes._delete_provider_mapping",
+        "app.blueprints.config.config_routes._delete_user_mapping",
         lambda account_id, npi: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 

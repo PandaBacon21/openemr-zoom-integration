@@ -246,7 +246,7 @@ def test_meeting_record_clinical_note_returns_most_recent(app):
             zoom_meeting_id="zm-abc-123",
             zoom_account_id="acct-1",
             openemr_appointment_id="500",
-            openemr_provider_id="20",
+            openemr_user_id="20",
             status="started",
         )
         db.session.add(meeting)

@@ -65,6 +65,47 @@ def get_zoom_users(
     ]
 
 
+def get_zcc_users(zoom_account: ZoomAccount) -> list[dict]:
+    """Fetch the ZCC user profiles for the account.
+
+    ZCC's user identifier space is distinct from Zoom platform users
+    We need the ZCC ID specifically — that's what ZCC sends as `RecipientID`
+    in `ReceiveCommunication3` after the agent picks up a call, so it's what
+    `UserMapping.zcc_user_id` must store to resolve incoming-call screen pops
+    back to an OpenEMR user.
+
+    Requires the `contact_center_user:read:list:admin` scope on the Zoom S2S
+    OAuth app.
+
+    Returns a list of dicts shaped for the React agent-mapping dropdown.
+    """
+    token = get_zoom_token(zoom_account)
+
+    response = requests.get(
+        f"{ZOOM_API_BASE_URL}/contact_center/users",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        params={"page_size": 100},
+        timeout=10,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    return [
+        {
+            "zcc_user_id": user.get("user_id"),
+            "zoom_user_id": user.get("user_id"),  # alias for convenience; same value as Zoom platform user
+            "email": user.get("user_email"),
+            "display_name": user.get("display_name") or user.get("user_email"),
+            "status": user.get("status"),
+            "role_name": user.get("role_name"),
+        }
+        for user in data.get("users", [])
+    ]
+
+
 def create_zoom_meeting(match: AppointmentMatch) -> dict:
     """
     Create a scheduled Zoom meeting for a matched appointment event.
@@ -123,7 +164,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
     # Format: "Telehealth: {provider_name} | {patient_last_name} | {title}"
     # Falls back gracefully if any component is missing.
     #
-    # Provider name comes from ProviderMapping.openemr_provider_name.
+    # Provider name comes from UserMapping.openemr_provider_name.
     # Patient last name requires a FHIR lookup using pid from the payload.
     # Title comes from payload['title'] (form_title from OpenEMR).
  
@@ -170,7 +211,7 @@ def create_zoom_meeting(match: AppointmentMatch) -> dict:
 
     # --- Build Zoom API payload ---
     # Provider TZ wins: each Zoom user has a profile timezone, cached on
-    # ProviderMapping.zoom_user_timezone at mapping creation. AccountConfig
+    # UserMapping.zoom_user_timezone at mapping creation. AccountConfig
     # remains as a fallback for mappings created before that field existed
     # or for Zoom users with no profile TZ set.
     meeting_timezone = mapping.zoom_user_timezone or account.config.timezone

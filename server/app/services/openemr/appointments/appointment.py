@@ -249,7 +249,7 @@ def generate_future_appointment(
             event_type="demo.future_appointment_create_failed",
             success=False,
             zoom_account_id=zoom_account_id,
-            openemr_provider_id=str(provider_user_id),
+            openemr_user_id=str(provider_user_id),
             openemr_patient_id=str(patient_pid),
             error_message=str(e),
             detail=audit_detail,
@@ -278,7 +278,7 @@ def generate_future_appointment(
         success=True,
         zoom_account_id=zoom_account_id,
         openemr_appointment_id=str(eid) if eid else None,
-        openemr_provider_id=str(provider_user_id),
+        openemr_user_id=str(provider_user_id),
         openemr_patient_id=str(patient_pid),
         detail=audit_detail,
     )

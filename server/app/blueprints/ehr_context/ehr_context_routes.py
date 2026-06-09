@@ -7,7 +7,7 @@ from sqlalchemy import text
 from app.services.ehr_context import _get_account_by_tenant, _verify_basic_auth, _verify_bearer_jwt
 from app.blueprints.ehr_context import ehr_context_bp
 from app.extensions import get_openemr_db_engine
-from app.models import ProviderMapping, MeetingRecord
+from app.models import UserMapping, MeetingRecord
 
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def get_appointments():
         return jsonify({"error": f"Invalid dateTime format: {date_time_str}"}), 400
 
     # --- 4. Resolve zoomUserId → OpenEMR provider_id ---
-    mappings = ProviderMapping.query.filter_by(
+    mappings = UserMapping.query.filter_by(
         zoom_account_id=account.account_id,
         zoom_user_id=zoom_user_id,
         is_active=True,
@@ -184,32 +184,32 @@ def get_appointments():
 
     if len(mappings) == 1:
         chosen_mapping = mappings[0]
-        provider_id = chosen_mapping.openemr_provider_id
+        provider_id = chosen_mapping.openemr_user_id
     else:
         # Multiple providers share this Zoom user — find the active meeting
-        mapped_provider_ids = [m.openemr_provider_id for m in mappings]
+        mapped_provider_ids = [m.openemr_user_id for m in mappings]
 
         active_record = MeetingRecord.query.filter(
             MeetingRecord.zoom_account_id == account.account_id,
-            MeetingRecord.openemr_provider_id.in_(mapped_provider_ids),
+            MeetingRecord.openemr_user_id.in_(mapped_provider_ids),
             MeetingRecord.status == "started",
             MeetingRecord.meeting_started_at.isnot(None),
         ).order_by(MeetingRecord.meeting_started_at.desc()).first()
 
         if active_record:
-            provider_id = active_record.openemr_provider_id
+            provider_id = active_record.openemr_user_id
             logger.info(
                 f"ehr_context.getAppointments | Multiple mappings resolved to "
                 f"provider_id={provider_id} via meeting_id={active_record.zoom_meeting_id}"
             )
         else:
-            provider_id = mappings[0].openemr_provider_id
+            provider_id = mappings[0].openemr_user_id
             logger.warning(
                 f"ehr_context.getAppointments | Multiple mappings for zoom_user_id={zoom_user_id} "
                 f"but no started MeetingRecord found, falling back to provider_id={provider_id}"
             )
         chosen_mapping = next(
-            (m for m in mappings if m.openemr_provider_id == provider_id),
+            (m for m in mappings if m.openemr_user_id == provider_id),
             mappings[0],
         )
 

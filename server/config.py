@@ -84,6 +84,12 @@ class Config:
     # Default off so a prod deploy without the flag never exposes the browser.
     ENABLE_DBGATE = os.environ.get("ENABLE_DBGATE", "false").lower() in ("true", "1")
 
+    # Epic-ZCC CTI middleware. When off the `/zoomly/<id>/interconnect-amcurprd-oauth/*`
+    # blueprint is not registered, so every Epic-shaped endpoint returns 404.
+    # Default off so deployments that don't run the CTI integration leave no
+    # surface area exposed.
+    ENABLE_EPIC_ZCC = os.environ.get("ENABLE_EPIC_ZCC", "false").lower() in ("true", "1")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
