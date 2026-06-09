@@ -10,7 +10,7 @@
 --   ID  21: Amy Martin (promoted RN → Family NP, S12-22)
 --   ID  37: Sarah Chen (provider-level RN panel owner)
 --
--- Facility distribution by current facility_id: CO=4, MA=12, CA=1, MO=1.
+-- Facility distribution by current facility_id: CO=4, MA=11, CA=1, MO=2.
 -- The facility_id value on each row is the source of truth for region/panel mapping.
 -- =============================================================================
 
@@ -50,7 +50,7 @@ INSERT INTO `users` (
  2, 1, 'physician', '207RA0401X', 'standard', 'standard', 'MD', '1234567900'),
 (25, UNHEX(REPLACE(UUID(), '-', '')), 'bwilliams',    '', 1, 1,
  'Ben',      'Williams',  'Dr.',  'Internal Medicine',    'ben.williams@example.org',     'ben.williams@example.org',
- 2, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567903'),
+ 4, 1, 'physician', '207R00000X', 'standard', 'standard', 'MD', '1234567903'),
 (37, UNHEX(REPLACE(UUID(), '-', '')), 'schen',      '', 1, 1,
  'Sarah',    'Chen',      'RN',   'Charge Nursing',       'sarah.chen@example.org',       'sarah.chen@example.org',
  2, 1, 'physician', '163WC1500X', 'standard', 'standard', 'RN', '1234567907'),
@@ -262,7 +262,7 @@ UPDATE users SET federaltaxid='84-1000021', federaldrugid='MM1234567', upin='A10
 UPDATE users SET federaltaxid='84-1000022', federaldrugid='FJ1234567', upin='A10022', state_license_number='MA-15822', weno_prov_id='W10022', billing_facility_id=2, valedictory='Warmly',     info='Board-certified Addiction Medicine. X-DEA waiver for buprenorphine.' WHERE id=22;
 UPDATE users SET federaltaxid='84-1000023', federaldrugid='AA1234567', upin='A10023', state_license_number='MA-15623', weno_prov_id='W10023', billing_facility_id=2, valedictory='Sincerely',  info='Board-certified Family Medicine. Rural telehealth focus.' WHERE id=23;
 UPDATE users SET federaltaxid='84-1000024', federaldrugid='AS1234567', upin='A10024', state_license_number='MO-29001', weno_prov_id='W10024', billing_facility_id=4, valedictory='Best regards', info='Board-certified Family Medicine. Sole provider at Central facility.' WHERE id=24;
-UPDATE users SET federaltaxid='84-1000025', federaldrugid='AP1234567', upin='A10025', state_license_number='MA-15225', weno_prov_id='W10025', billing_facility_id=2, valedictory='Warmly',     info='Board-certified Internal Medicine. Geriatrics and complex care.' WHERE id=25;
+UPDATE users SET federaltaxid='84-1000025', federaldrugid='AP1234567', upin='A10025', state_license_number='MO-29025', weno_prov_id='W10025', billing_facility_id=4, valedictory='Warmly',     info='Board-certified Internal Medicine. Geriatrics and complex care for Central region.' WHERE id=25;
 UPDATE users SET federaltaxid='84-1000026', federaldrugid='AT2234567', upin='A10026', state_license_number='CO-DR-22126', weno_prov_id='W10026', billing_facility_id=1, valedictory='Sincerely', info='Board-certified Family Medicine. Adolescent and adult care.' WHERE id=26;
 UPDATE users SET federaltaxid='84-1000027', federaldrugid='AT3234567', upin='A10027', state_license_number='CO-DR-22227', weno_prov_id='W10027', billing_facility_id=1, valedictory='Best regards', info='Board-certified Internal Medicine. Cardiometabolic disease.' WHERE id=27;
 UPDATE users SET federaltaxid='84-1000037',                            upin='A10037', state_license_number='MA-RN-44237', weno_prov_id='W10037', billing_facility_id=2, supervisor_id=10, valedictory='Warmly',    info='Charge Nurse — Boston facility lead. RN with med management + care coordination focus.' WHERE id=37;

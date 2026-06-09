@@ -674,15 +674,15 @@ INSERT INTO `openemr_postcalendar_events` (
 (@preventive_catid, 0, '21', '140', 'Preventive Care', NOW(), 'Annual well-woman visit', @day2, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@preventive_catid, 0, '21', '140', 'Preventive Care', NOW(), 'MH screening', @day8, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@preventive_catid, 0, '21', '140', 'Preventive Care', NOW(), 'Contraception counseling', @day13, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
--- PID 141 Frank Burke (CHR, Lisa Patel 25)
+-- PID 141 Frank Burke (CHR, Ben Williams 25)
 (@established_catid, 0, '25', '141', 'Established Patient', NOW(), 'HTN + HLD med review', @day3, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '09:00:00', '09:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@established_catid, 0, '25', '141', 'Established Patient', NOW(), 'Quarterly follow-up', @day9, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@established_catid, 0, '25', '141', 'Established Patient', NOW(), 'BP check + statin review', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '14:00:00', '14:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
--- PID 142 Margaret Sullivan (GER, Lisa Patel 25)
+-- PID 142 Margaret Sullivan (GER, Ben Williams 25)
 (@established_catid, 0, '25', '142', 'Established Patient', NOW(), 'Geriatric polypharmacy review', @day4, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@established_catid, 0, '25', '142', 'Established Patient', NOW(), 'OA pain management', @day10, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '10:00:00', '10:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@established_catid, 0, '25', '142', 'Established Patient', NOW(), 'Osteoporosis follow-up', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '15:00:00', '15:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
--- PID 143 Devon Banks (HYA, Lisa Patel 25)
+-- PID 143 Devon Banks (HYA, Ben Williams 25)
 (@preventive_catid, 0, '25', '143', 'Preventive Care', NOW(), 'Annual preventive visit', @day5, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@preventive_catid, 0, '25', '143', 'Preventive Care', NOW(), 'MH screening', @day11, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '13:00:00', '13:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
 (@preventive_catid, 0, '25', '143', 'Preventive Care', NOW(), 'Lifestyle counseling', @day14, '0000-00-00', 1800, 0, 0, @recurrspec, @location, '11:00:00', '11:30:00', 0, '-', 1, 1, 1, 1, 1, 'NO', 'NO', UNHEX(REPLACE(UUID(), '-', ''))),
