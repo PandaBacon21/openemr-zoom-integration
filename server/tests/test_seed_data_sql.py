@@ -96,6 +96,15 @@ def test_seed_data_uses_reserved_patient_email_addresses():
     assert all(email.endswith("@example.org") for email in emails)
 
 
+def test_seed_data_assigns_synthetic_ssns_to_seeded_patients():
+    text = _demo_sql_text()
+
+    assert (
+        "UPDATE patient_data SET ss = CONCAT('90010', LPAD(pid, 4, '0')) "
+        "WHERE pid BETWEEN 100 AND 171;"
+    ) in text
+
+
 def test_seed_data_uses_only_reserved_example_email_addresses():
     text = _demo_sql_text()
     emails = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+", text)

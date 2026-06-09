@@ -358,3 +358,6 @@ INSERT INTO `patient_data` (
  '1969-07-19', 'Female', 'married', '88 Atlantic Avenue',     'Boston',       'MA', '02110', 'USA',
  '617-555-0171', 'margaret.walsh@example.org',            37, '171', 'YES','YES','YES','portal','YES','YES','English','', NOW(), 'Zoomly Demo Past Encounter');
 
+-- Synthetic SSNs for all seeded demo patients. The 900 prefix keeps these out
+-- of the issued SSN range while still giving each seeded patient a unique value.
+UPDATE patient_data SET ss = CONCAT('90010', LPAD(pid, 4, '0')) WHERE pid BETWEEN 100 AND 171;

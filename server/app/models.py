@@ -46,6 +46,10 @@ class ZoomAccount(db.Model):
     private_key_path = db.Column(db.String(512), nullable=True)
     kid = db.Column(db.String(256), nullable=True)
 
+    # Epic-ZCC CTI middleware credentials
+    epic_zcc_client_id = db.Column(db.String(64), nullable=True)
+    epic_kid = db.Column(db.String(64), nullable=True)
+
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -90,6 +94,8 @@ class ZoomAccount(db.Model):
             openemr_registration_client_uri: str | None = ...,
             private_key_path: str | None = ...,
             kid: str | None = ...,
+            epic_zcc_client_id: str | None = ...,
+            epic_kid: str | None = ...,
             key_version: int | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...
@@ -121,6 +127,16 @@ class AccountConfig(db.Model):
 
     note_writeback_mode = db.Column(db.String(32), nullable=False, default="both", server_default="both")
 
+    # Epic-ZCC CTI per-account configuration. SE pastes these into Zoom's admin portal.
+    epic_zcc_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    epic_zcc_connection_name = db.Column(db.String(256), nullable=True)
+    epic_zcc_backend_url = db.Column(db.String(256), nullable=True)
+    epic_zcc_background_user_id = db.Column(db.String(128), nullable=True)
+    epic_zcc_background_user_id_type = db.Column(db.String(64), nullable=True)
+    epic_zcc_phone_system_id = db.Column(db.String(128), nullable=True)
+    epic_zcc_phone_system_id_type = db.Column(db.String(64), nullable=True)
+    epic_zcc_recipient_id_type = db.Column(db.String(64), nullable=False, default="Phone", server_default="Phone")
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -134,6 +150,15 @@ class AccountConfig(db.Model):
             demo_patient_email_override: str | None = ...,
             demo_patient_phone_override_enabled: bool | None = ...,
             demo_patient_phone_override: str | None = ...,
+            note_writeback_mode: str | None = ...,
+            epic_zcc_enabled: bool | None = ...,
+            epic_zcc_connection_name: str | None = ...,
+            epic_zcc_backend_url: str | None = ...,
+            epic_zcc_background_user_id: str | None = ...,
+            epic_zcc_background_user_id_type: str | None = ...,
+            epic_zcc_phone_system_id: str | None = ...,
+            epic_zcc_phone_system_id_type: str | None = ...,
+            epic_zcc_recipient_id_type: str | None = ...,
         ) -> None: ...
 
     def __repr__(self):
