@@ -176,9 +176,9 @@ UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin'
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Personal Trainer',      contact_relationship='Sibling', phone_contact='813-555-0338' WHERE pid=138;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Marketing Director',    contact_relationship='Spouse',  phone_contact='202-555-0339' WHERE pid=139;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Graduate Student',      contact_relationship='Parent',  phone_contact='617-555-0340' WHERE pid=140;
-UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Attorney',              contact_relationship='Spouse',  phone_contact='212-555-0341' WHERE pid=141;
-UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Teacher',       contact_relationship='Child',   phone_contact='215-555-0342' WHERE pid=142;
-UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Graphic Designer',      contact_relationship='Parent',  phone_contact='404-555-0343' WHERE pid=143;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Attorney',              contact_relationship='Spouse',  phone_contact='816-555-0341' WHERE pid=141;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Teacher',       contact_relationship='Child',   phone_contact='816-555-0342' WHERE pid=142;
+UPDATE patient_data SET race='black_or_afri_amer', ethnicity='not_hisp_or_latin', occupation='Graphic Designer',      contact_relationship='Parent',  phone_contact='816-555-0343' WHERE pid=143;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='UX Designer',           contact_relationship='Parent',  phone_contact='720-555-0344' WHERE pid=144;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Mountaineering Guide',  contact_relationship='Parent',  phone_contact='719-555-0345' WHERE pid=145;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Nurse',         contact_relationship='Child',   phone_contact='801-555-0346' WHERE pid=146;
@@ -201,7 +201,7 @@ UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin'
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Legal Assistant',                    contact_relationship='Spouse',  phone_contact='212-555-0362' WHERE pid=162;
 UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='UX Research Manager',                contact_relationship='Spouse',  phone_contact='617-555-0363' WHERE pid=163;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Project Manager',                    contact_relationship='Spouse',  phone_contact='816-555-0364' WHERE pid=164;
-UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Senior Accountant',                  contact_relationship='Spouse',  phone_contact='404-555-0365' WHERE pid=165;
+UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Senior Accountant',                  contact_relationship='Spouse',  phone_contact='816-555-0365' WHERE pid=165;
 UPDATE patient_data SET race='Asian',              ethnicity='not_hisp_or_latin', occupation='Librarian',                          contact_relationship='Spouse',  phone_contact='719-555-0366' WHERE pid=166;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retired Nurse',                      contact_relationship='Spouse',  phone_contact='801-555-0367' WHERE pid=167;
 UPDATE patient_data SET race='white',              ethnicity='not_hisp_or_latin', occupation='Retail Manager',                     contact_relationship='Spouse',  phone_contact='617-555-0368' WHERE pid=168;
@@ -252,8 +252,8 @@ VALUES
 (197, 'NEW', 'white',              'not_hisp_or_latin', 'Consultant',                 'Parent',  '617-555-0397'),
 (198, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'Benefits Coordinator',       'Spouse',  '816-555-0398'),
 (199, 'HYA', 'Asian',              'not_hisp_or_latin', 'Graphic Designer',           'Parent',  '816-555-0399'),
-(200, 'GER', 'white',              'not_hisp_or_latin', 'Retired Attorney',           'Child',   '215-555-0400'),
-(201, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'Nonprofit Director',         'Spouse',  '404-555-0401'),
+(200, 'GER', 'white',              'not_hisp_or_latin', 'Retired Attorney',           'Child',   '816-555-0400'),
+(201, 'CHR', 'black_or_afri_amer', 'not_hisp_or_latin', 'Nonprofit Director',         'Spouse',  '816-555-0401'),
 (202, 'CHR', 'white',              'hisp_or_latin',     'HVAC Supervisor',            'Spouse',  '719-555-0402'),
 (203, 'HYA', 'white',              'not_hisp_or_latin', 'College Coach',              'Parent',  '719-555-0403'),
 (204, 'GER', 'Asian',              'not_hisp_or_latin', 'Retired Pharmacist',         'Child',   '303-555-0404'),
@@ -330,9 +330,9 @@ VALUES
 (30037, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 28 DAY), 138, 21, @zoom_preventive_catid,         1, 'Sports physical + cholesterol screen',               10, 'AMB', 'VR', 'virtual'),
 (30038, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 29 DAY), 139, 21, @zoom_behavioral_health_catid,  1, 'Postpartum anxiety follow-up — escitalopram',        10, 'AMB', 'VR', 'virtual'),
 (30039, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 140, 21, @zoom_preventive_catid,         1, 'Annual well-woman visit + MH screening',             10, 'AMB', 'VR', 'virtual'),
-(30040, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 25, @zoom_chronic_care_catid,       1, 'HTN + HLD med review',                               10, 'AMB', 'VR', 'virtual'),
-(30041, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 25, @zoom_chronic_care_catid,       1, 'Geriatric polypharmacy review',                      10, 'AMB', 'VR', 'virtual'),
-(30042, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 25, @zoom_preventive_catid,         1, 'Annual preventive video visit',                      10, 'AMB', 'VR', 'virtual'),
+(30040, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 25, @zoom_chronic_care_catid,       4, 'HTN + HLD med review',                               10, 'AMB', 'VR', 'virtual'),
+(30041, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 25, @zoom_chronic_care_catid,       4, 'Geriatric polypharmacy review',                      10, 'AMB', 'VR', 'virtual'),
+(30042, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 25, @zoom_preventive_catid,         4, 'Annual preventive video visit',                      10, 'AMB', 'VR', 'virtual'),
 (30043, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 14, @zoom_behavioral_health_catid,  1, 'GAD med management — escitalopram check',            10, 'AMB', 'VR', 'virtual'),
 (30044, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 26, @zoom_preventive_catid,         1, 'Annual preventive + outdoor injury follow-up',       10, 'AMB', 'VR', 'virtual'),
 (30045, UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 26, @zoom_chronic_care_catid,       1, 'Geriatric polypharmacy review + memory screen',      10, 'AMB', 'VR', 'virtual'),
@@ -1148,11 +1148,11 @@ VALUES
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'egarcia',     0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Major depressive disorder, single episode, mild', 'ICD10:F32.0', 139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR), 1, 'amartin', 0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lpatel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lpatel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lpatel',       0),
-(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',              'ICD10:M81.0',  142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'bwilliams',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hyperlipidemia',                        'ICD10:E78.5',  141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'bwilliams',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'bwilliams',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Osteoarthritis',                        'ICD10:M19.90', 142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'bwilliams',   0),
+(UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Age-related osteoporosis',              'ICD10:M81.0',  142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'bwilliams',   0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Generalized anxiety disorder',          'ICD10:F41.1',  144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jnelson',  0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Essential hypertension',                'ICD10:I10',    146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'htanaka',   0),
 (UNHEX(REPLACE(UUID(),'-','')), 'medical_problem', '', 'Hypothyroidism',                        'ICD10:E03.9',  146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'htanaka',   0),
@@ -1175,11 +1175,11 @@ VALUES
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 20mg tab',           136, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'egarcia',     'rxnorm:314077 — 1 tab PO daily'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         136, NOW(), DATE_SUB(NOW(), INTERVAL 8 YEAR),  1, 'egarcia',     'rxnorm:617314 — 1 tab PO at bedtime'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         139, NOW(), DATE_SUB(NOW(), INTERVAL 1 YEAR),  1, 'amartin',          'rxnorm:321988 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       'rxnorm:314076 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'lpatel',       'rxnorm:617314 — 1 tab PO at bedtime'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'lpatel',       'rxnorm:314076 — 1 tab PO daily'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'lpatel',       'rxnorm:197910 — 1 tab PO weekly'),
-(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'lpatel',       'rxnorm:198440 — 1-2 tabs PO every 6 hours PRN for OA'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           141, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'bwilliams',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Atorvastatin 20mg tab',         141, NOW(), DATE_SUB(NOW(), INTERVAL 5 YEAR),  1, 'bwilliams',   'rxnorm:617314 — 1 tab PO at bedtime'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           142, NOW(), DATE_SUB(NOW(), INTERVAL 20 YEAR), 1, 'bwilliams',   'rxnorm:314076 — 1 tab PO daily'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Alendronate 70mg tab',          142, NOW(), DATE_SUB(NOW(), INTERVAL 6 YEAR),  1, 'bwilliams',   'rxnorm:197910 — 1 tab PO weekly'),
+(UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Acetaminophen 500mg tab',       142, NOW(), DATE_SUB(NOW(), INTERVAL 12 YEAR), 1, 'bwilliams',   'rxnorm:198440 — 1-2 tabs PO every 6 hours PRN for OA'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Escitalopram 10mg tab',         144, NOW(), DATE_SUB(NOW(), INTERVAL 3 YEAR),  1, 'jnelson',  'rxnorm:321988 — 1 tab PO daily'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Lisinopril 10mg tab',           146, NOW(), DATE_SUB(NOW(), INTERVAL 18 YEAR), 1, 'htanaka',   'rxnorm:314076 — 1 tab PO daily'),
 (UNHEX(REPLACE(UUID(),'-','')), 'medication', '', 'Levothyroxine 75mcg tab',       146, NOW(), DATE_SUB(NOW(), INTERVAL 10 YEAR), 1, 'htanaka',   'rxnorm:966222 — 1 tab PO daily on empty stomach'),
@@ -1209,9 +1209,9 @@ VALUES
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 28 DAY), 138, 'amartin',          'Default', 1, 1, '118', '74', 175.0, 72.0, 23.8, 98.6, 70, 14, 100.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 29 DAY), 139, 'amartin',          'Default', 1, 1, '120', '76', 142.0, 65.0, 23.6, 98.6, 74, 16, 99.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 30 DAY), 140, 'amartin',          'Default', 1, 1, '110', '70', 130.0, 65.0, 21.6, 98.6, 68, 14, 100.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 'lpatel',       'Default', 1, 1, '136', '86', 190.0, 71.0, 26.5, 98.4, 74, 16, 98.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 'lpatel',       'Default', 1, 1, '142', '84', 145.0, 62.0, 26.5, 98.2, 70, 16, 96.00),
-(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 'lpatel',       'Default', 1, 1, '118', '76', 165.0, 70.0, 23.7, 98.6, 72, 14, 100.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 31 DAY), 141, 'bwilliams',   'Default', 1, 1, '136', '86', 190.0, 71.0, 26.5, 98.4, 74, 16, 98.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 32 DAY), 142, 'bwilliams',   'Default', 1, 1, '142', '84', 145.0, 62.0, 26.5, 98.2, 70, 16, 96.00),
+(UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 33 DAY), 143, 'bwilliams',   'Default', 1, 1, '118', '76', 165.0, 70.0, 23.7, 98.6, 72, 14, 100.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 34 DAY), 144, 'jnelson',  'Default', 1, 1, '116', '74', 138.0, 65.0, 23.0, 98.6, 76, 16, 99.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 35 DAY), 145, 'htanaka',   'Default', 1, 1, '114', '72', 175.0, 72.0, 23.7, 98.6, 64, 14, 100.00),
 (UNHEX(REPLACE(UUID(),'-','')), DATE_SUB(NOW(), INTERVAL 36 DAY), 146, 'htanaka',   'Default', 1, 1, '148', '84', 152.0, 63.0, 26.9, 98.0, 68, 16, 96.00),
