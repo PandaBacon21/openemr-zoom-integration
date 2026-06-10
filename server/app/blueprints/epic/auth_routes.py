@@ -39,8 +39,9 @@ def _oauth_error(error: str, reason: str, account_id: str | None, message: str =
 
 @epic_bp.route("/oauth2/token", methods=["POST"])
 def token(zoom_account_id: str):
-    # zoom_account_id arrives as a path-arg kwarg; the account itself is
-    # already resolved + attached to g by the blueprint's before_request.
+    # Flask passes zoom_account_id from the blueprint URL prefix; before_request
+    # already resolved it onto g.zoom_account.
+    _ = zoom_account_id
     account = g.zoom_account
     grant_type = request.form.get("grant_type")
     assertion_type = request.form.get("client_assertion_type")
@@ -101,6 +102,9 @@ def jwks(zoom_account_id: str, version: str, kid: str):
     exactly — that way the endpoint can't be used to enumerate other
     accounts' kids via guessing.
     """
+    # Flask passes zoom_account_id from the blueprint URL prefix; before_request
+    # already resolved it onto g.zoom_account.
+    _ = zoom_account_id
     account = g.zoom_account
 
     if version != EPIC_KEY_VERSION:

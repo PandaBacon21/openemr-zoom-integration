@@ -52,3 +52,4 @@ def resolve_account():
 
 from app.blueprints.epic import auth_routes 
 from app.blueprints.epic import patient_routes  
+from app.blueprints.epic import practitioner_routes

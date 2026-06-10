@@ -163,6 +163,21 @@ def write_audit_log(
                                            'missing_user' | 'insufficient_criteria' |
                                            'db_error'. detail.fault_code carries
                                            the Epic-shaped fault code returned to ZCC.
+      epic_zcc.practitioner_lookup_received — GET Practitioner.Search parsed.
+                                                detail.search_type:
+                                                'identifier' | '_id' | 'name' |
+                                                'family'; detail.query_fields
+                                                lists the request parameters used.
+      epic_zcc.practitioner_lookup_resolved — OpenEMR provider search completed.
+                                                detail.match_count.
+      epic_zcc.practitioner_lookup_failed   — request refused or search failed.
+                                                detail.reason:
+                                                'missing_search_parameters' |
+                                                'invalid_identifier' |
+                                                'given_without_family' |
+                                                'invalid_count' | 'db_error'.
+                                                detail.fhir_error_code carries
+                                                the FHIR error code returned.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started

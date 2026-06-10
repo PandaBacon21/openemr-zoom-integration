@@ -46,7 +46,9 @@ def _fault_response(code: str, message: str, *, account_id: str | None, reason: 
     methods=["POST"],
 )
 def patient_lookup(zoom_account_id: str):
-    # before_request resolved the account onto g.zoom_account; bearer guard
+    # Flask passes zoom_account_id from the blueprint URL prefix; before_request
+    # already resolved it onto g.zoom_account and the bearer guard checks it.
+    _ = zoom_account_id
     # below double-checks the token also belongs to this account.
     bearer_failure = verify_bearer_token_in_store()
     if bearer_failure is not None:
