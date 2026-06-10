@@ -203,6 +203,24 @@ def write_audit_log(
                                                  'patient_not_in_cache' |
                                                  'no_subscribers' | 'db_error' |
                                                  'handler_error'.
+      epic_zcc.screenpop_subscribed           — OpenEMR browser SSE stream
+                                                 connected. detail.expires_at,
+                                                 detail.client_ip.
+      epic_zcc.screenpop_unsubscribed         — OpenEMR browser SSE stream
+                                                 disconnected. detail.client_ip.
+      epic_zcc.screenpop_subscribe_failed     — OpenEMR screen-pop bootstrap or
+                                                 SSE stream refused. detail.reason:
+                                                 'missing_secret' |
+                                                 'missing_signature' |
+                                                 'invalid_signature' |
+                                                 'malformed_body' |
+                                                 'missing_openemr_user' |
+                                                 'missing_expires' |
+                                                 'invalid_expires' |
+                                                 'missing_token' |
+                                                 'expired_token' |
+                                                 'invalid_token' |
+                                                 'mapping_not_active'.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started

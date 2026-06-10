@@ -17,10 +17,13 @@ FROM openemr/openemr:8.0.0
 # Two destinations don't exist in the stock image — create them with apache
 # ownership so the parent dirs match upstream perms before files land in them.
 RUN mkdir -p /var/www/localhost/htdocs/openemr/library/zoomly \
+             /var/www/localhost/htdocs/openemr/interface/epic_cti \
              /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener \
  && chown apache:apache /var/www/localhost/htdocs/openemr/library/zoomly \
+                        /var/www/localhost/htdocs/openemr/interface/epic_cti \
                         /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener \
  && chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly \
+              /var/www/localhost/htdocs/openemr/interface/epic_cti \
               /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
 
 # ─── OAuth2 / SMART patches ──────────────────────────────────────────────────
@@ -63,6 +66,14 @@ COPY --chown=apache:apache --chmod=644 \
 COPY --chown=apache:apache --chmod=644 \
      openemr/patches/main.php \
      /var/www/localhost/htdocs/openemr/interface/main/tabs/main.php
+
+# ─── Epic-ZCC CTI screen-pop subscriber + top-nav iframe shell ───────────────
+COPY --chown=apache:apache --chmod=644 \
+     openemr/patches/epic_cti/cti_panel.php \
+     openemr/patches/epic_cti/cti_panel.css \
+     openemr/patches/epic_cti/cti_subscriber.js \
+     openemr/patches/epic_cti/cti_subscriber_inject.php \
+     /var/www/localhost/htdocs/openemr/interface/epic_cti/
 
 # ─── Patient Flow Board patches (Telehealth column + Zoom button) ────────────
 COPY --chown=apache:apache --chmod=644 \

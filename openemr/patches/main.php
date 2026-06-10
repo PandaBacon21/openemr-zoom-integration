@@ -296,6 +296,7 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
     </script>
 
     <?php Header::setupHeader(['knockout', 'tabs-theme', 'i18next', 'hotkeys', 'i18formatting']); ?>
+    <link rel="stylesheet" href="<?php echo attr($webroot); ?>/interface/epic_cti/cti_panel.css?v=<?php echo attr($v_js_includes); ?>">
     <script>
         // set up global translations for js
         function setupI18n(lang_id) {
@@ -351,6 +352,8 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
     <script src="js/frame_proxies.js?v=<?php echo $v_js_includes; ?>"></script>
     <script src="js/dialog_utils.js?v=<?php echo $v_js_includes; ?>"></script>
     <script src="js/shortcuts.js?v=<?php echo $v_js_includes; ?>"></script>
+    <?php require_once(__DIR__ . "/../../epic_cti/cti_subscriber_inject.php"); ?>
+    <script src="<?php echo attr($webroot); ?>/interface/epic_cti/cti_subscriber.js?v=<?php echo attr($v_js_includes); ?>"></script>
 
     <?php
     // Below code block is to prepare certain elements for deciding what links to show on the menu
@@ -478,6 +481,7 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
                     </div>
                 </form>
             <?php endif; ?>
+            <?php require_once(__DIR__ . "/../../epic_cti/cti_panel.php"); ?>
             <!--Below is the user data section that contains the user information and the attendant data-->
             <span id="userData" data-bind="template: {name: 'user-data-template', data: application_data}"></span>
             <?php

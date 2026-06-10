@@ -118,7 +118,8 @@ def _audit_details(app, event_type) -> list[dict]:
 def test_receive_communication_pushes_cached_match_to_subscriber(app, client):
     _seed_account(app)
     _cache_rows([_row()])
-    q = screenpop_dispatch.subscribe(TEST_OPENEMR_USER_ID)
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+    other_account_q = screenpop_dispatch.subscribe("other-account", TEST_OPENEMR_USER_ID)
 
     resp = _post(client, _payload(), token=_mint_token())
 
@@ -137,6 +138,7 @@ def test_receive_communication_pushes_cached_match_to_subscriber(app, client):
     pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
     assert pushed[-1]["recipient_id"] == TEST_ZCC_USER_ID
     assert pushed[-1]["subscriber_count"] == 1
+    assert other_account_q.empty()
 
 
 def test_receive_communication_selects_patient_from_multi_match_cache(app, client):
@@ -145,7 +147,7 @@ def test_receive_communication_selects_patient_from_multi_match_cache(app, clien
         _row(pid=100, pubpid="100"),
         _row(pid=151, pubpid="151", uuid_hex="f" * 32, _matched_on=["mrn"]),
     ])
-    q = screenpop_dispatch.subscribe(TEST_OPENEMR_USER_ID)
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
     resp = _post(
         client,
@@ -173,7 +175,7 @@ def test_receive_communication_unknown_agent_returns_ack_and_audit(app, client):
 
 def test_receive_communication_no_cached_lookup_returns_ack_and_audit(app, client):
     _seed_account(app)
-    q = screenpop_dispatch.subscribe(TEST_OPENEMR_USER_ID)
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
     resp = _post(client, _payload(), token=_mint_token())
 
@@ -186,7 +188,7 @@ def test_receive_communication_no_cached_lookup_returns_ack_and_audit(app, clien
 def test_receive_communication_patient_not_in_cache_returns_ack_and_audit(app, client):
     _seed_account(app)
     _cache_rows([_row(pid=100, pubpid="100")])
-    q = screenpop_dispatch.subscribe(TEST_OPENEMR_USER_ID)
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
     resp = _post(
         client,

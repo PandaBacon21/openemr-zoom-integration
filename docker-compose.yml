@@ -59,6 +59,8 @@ services:
       OPENEMR_SETTING_site_addr_oath: ${OPENEMR_PUBLIC_URL}
       # Secret for OpenEMR -> Flask App
       OPENEMR_FLASK_SECRET: ${OPENEMR_FLASK_SECRET}
+      # Optional Zoom Contact Center iframe URL for the Epic-ZCC top-nav panel
+      ZOOMLY_EPIC_ZCC_CLIENT_URL: ${ZOOMLY_EPIC_ZCC_CLIENT_URL:-}
     volumes:
       # Persist site data — includes SMART app registrations, uploaded files.
       # Backup this volume before any OpenEMR upgrade.

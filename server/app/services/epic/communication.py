@@ -95,7 +95,7 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
         "matched_on": _matched_on(row, patient_id_type),
         "caller_number": payload.get("caller_number"),
     }
-    subscriber_count = dispatch(openemr_user_id, event)
+    subscriber_count = dispatch(account.account_id, openemr_user_id, event)
     if subscriber_count < 1:
         return _failed(
             account.account_id,
