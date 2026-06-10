@@ -161,6 +161,34 @@ def build_fault_xml(code: str, message: str) -> bytes:
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
+def build_receive_communication_ack_json(call_id: str | None = None) -> bytes:
+    """Build the JSON ReceiveCommunication3 success ack documented by Epic."""
+    return _json_bytes({"EpicCallID": call_id or ""})
+
+
+def build_receive_communication_fault_json(code: str, message: str) -> bytes:
+    """Build a compact JSON fault for malformed ReceiveCommunication3 requests."""
+    return _json_bytes({
+        "ErrorCode": code,
+        "Message": message,
+    })
+
+
+def build_receive_communication_ack_xml(call_id: str | None = None) -> bytes:
+    """Build a best-effort XML ReceiveCommunication3 success ack for fallback callers."""
+    root = ET.Element("ReceiveCommunication3Result")
+    ET.SubElement(root, "EpicCallID").text = call_id or ""
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def build_receive_communication_fault_xml(code: str, message: str) -> bytes:
+    """Build a best-effort XML fault for malformed ReceiveCommunication3 requests."""
+    root = ET.Element("Fault")
+    ET.SubElement(root, "Code").text = code
+    ET.SubElement(root, "Message").text = message
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
 def build_practitioner_bundle_fhir(
     practitioners: list[dict],
     *,

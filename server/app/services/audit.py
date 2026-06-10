@@ -178,6 +178,31 @@ def write_audit_log(
                                                 'invalid_count' | 'db_error'.
                                                 detail.fhir_error_code carries
                                                 the FHIR error code returned.
+      epic_zcc.receive_communication_received — POST ReceiveCommunication3 parsed.
+                                                 detail.recipient_id,
+                                                 detail.patient_id_type,
+                                                 detail.has_patient_id,
+                                                 detail.communication_type,
+                                                 detail.call_id.
+      epic_zcc.receive_communication_pushed   — cached PatientLookUp row matched
+                                                 and an SSE event was pushed to at
+                                                 least one OpenEMR subscriber.
+                                                 detail.recipient_id,
+                                                 detail.subscriber_count,
+                                                 detail.matched_on.
+      epic_zcc.receive_communication_failed   — screen-pop dispatch refused or
+                                                 skipped. Routes still ack ZCC for
+                                                 business misses so the connected
+                                                 call is not retried. detail.reason:
+                                                 'malformed_body' |
+                                                 'missing_recipient' |
+                                                 'unknown_agent' |
+                                                 'mapping_missing_openemr_user' |
+                                                 'no_cached_lookup' |
+                                                 'missing_patient_id' |
+                                                 'patient_not_in_cache' |
+                                                 'no_subscribers' | 'db_error' |
+                                                 'handler_error'.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started
