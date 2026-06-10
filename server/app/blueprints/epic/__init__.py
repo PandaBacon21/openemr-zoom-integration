@@ -50,4 +50,5 @@ def resolve_account():
     return None
 
 
-from app.blueprints.epic import auth_routes  # noqa: F401, E402
+from app.blueprints.epic import auth_routes 
+from app.blueprints.epic import patient_routes  

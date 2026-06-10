@@ -147,6 +147,22 @@ def write_audit_log(
                                        'missing_header' | 'expired_or_unknown' |
                                        'account_mismatch' (with
                                        detail.path_account_id)
+      epic_zcc.patient_lookup_received  — POST PatientLookUp(2012) parsed.
+                                           openemr_user_id = <UserID>;
+                                           detail.criteria_fields lists which
+                                           inputs were present;
+                                           detail.patient_id_type set when
+                                           PatientID is in play.
+      epic_zcc.patient_lookup_resolved  — OR-search completed.
+                                           detail.match_count,
+                                           detail.queried_fields (which criterion
+                                           keys actually generated SQL; not a
+                                           confidence ranking — Zoom decides order).
+      epic_zcc.patient_lookup_failed    — request refused. detail.reason:
+                                           'empty_body' | 'malformed_xml' |
+                                           'missing_user' | 'insufficient_criteria' |
+                                           'db_error'. detail.fault_code carries
+                                           the Epic-shaped fault code returned to ZCC.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started

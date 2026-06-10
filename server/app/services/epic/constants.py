@@ -19,3 +19,14 @@ EPIC_JWKS_CACHE_TTL_SECONDS = 600
 EPIC_INBOUND_JWT_ALGS = ("RS384", "ES384")
 
 EPIC_JKU_HOST_ALLOWLIST = ("zoom.us", "zoom.com")
+
+# How long the result of a PatientLookUp is kept in the per-agent cache so
+# the subsequent ReceiveCommunication3 (S11-07) can resolve the screen pop
+# without re-querying OpenEMR. ZCC's IVR-to-agent handoff is usually
+# seconds, so 2 minutes is well above what ZCC needs while still bounding
+# memory.
+EPIC_LOOKUP_CACHE_TTL_SECONDS = 120
+
+# Epic SOAP-style namespace used by every PatientLookUp / ReceiveCommunication
+# element. Hardcoded here so request parser and response builder agree.
+EPIC_XML_NAMESPACE = "urn:Epic-com:EMPI.2012.Services.Patient"
