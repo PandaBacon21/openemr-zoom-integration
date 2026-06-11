@@ -15,11 +15,17 @@ def build_client_assertion(
     client_id: str,
     audience: str,
     key_path: str,
-    key_id: str 
+    key_id: str,
+    jku: str | None = None,
 ) -> str:
     """
     Build and sign a JWT client assertion for SMART Backend Services.
     This is what we POST to OpenEMR's token endpoint to prove our identity.
+
+    jku: optional URL of the JWKS where the verifier can fetch our public key.
+    Used by the Epic-ZCC outbound flow (S11-09) so Zoom can resolve the kid
+    against our per-account JWKS endpoint. Defaults to None for the existing
+    OpenEMR SMART call sites that pre-register their JWKS URI out-of-band.
     """
     private_key = load_private_key(key_path)
     assert isinstance(private_key, RSAPrivateKey)
@@ -30,16 +36,20 @@ def build_client_assertion(
         "iss": client_id,           # Issuer — client ID in OpenEMR
         "sub": client_id,           # Subject — same as issuer for backend services
         "aud": audience,            # Audience — the token endpoint we're calling
-        "jti": str(uuid.uuid4()),   # Unique ID 
+        "jti": str(uuid.uuid4()),   # Unique ID
         "iat": now,                 # Issued at
         "exp": now + 300,           # Expires in 5 minutes
     }
+
+    headers = {"kid": key_id}
+    if jku:
+        headers["jku"] = jku
 
     token = jwt.encode(
         payload,
         private_key,
         algorithm="RS384",
-        headers={"kid": key_id} 
+        headers=headers,
     )
 
     return token

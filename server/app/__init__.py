@@ -89,8 +89,9 @@ def _register_blueprints(app: Flask) -> None:
     # blueprint isn't registered, so the `/zoomly/<id>/interconnect-amcurprd-oauth/*`
     # surface is entirely absent — Zoom and any prober gets 404.
     if app.config.get("ENABLE_EPIC_ZCC"):
-        from .blueprints.epic import epic_bp
+        from .blueprints.epic import epic_bp, epic_openemr_bp
         app.register_blueprint(epic_bp)
+        app.register_blueprint(epic_openemr_bp)
 
 def _register_app_routes(app: Flask) -> None:
 

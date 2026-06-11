@@ -39,6 +39,8 @@ services:
       - ./openemr/patches/post_calendar/month/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html:ro
       # Main nav (navbar logo link/height/title)
       - ./openemr/patches/main.php:/var/www/localhost/htdocs/openemr/interface/main/tabs/main.php:ro
+      # Epic-ZCC CTI screen-pop subscriber + top-nav iframe shell
+      - ./openemr/patches/epic_cti:/var/www/localhost/htdocs/openemr/interface/epic_cti:ro
       # Patient Flow Board patches
       - ./openemr/patches/patient_tracker.inc.php:/var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php:ro
       - ./openemr/patches/patient_tracker.php:/var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php:ro

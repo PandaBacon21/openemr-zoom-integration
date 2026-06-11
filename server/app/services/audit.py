@@ -129,6 +129,9 @@ def write_audit_log(
                                             HTTP failure.
 
     Event types for Epic-ZCC CTI middleware (Sprint 11):
+      epic_zcc.jwks_fetched         — GET /oauth2/keys/<version>/<kid> served
+                                       a single-key JWKS to Zoom.
+                                       detail.client_ip, detail.kid, detail.version
       epic_zcc.token_issued         — POST /oauth2/token minted an opaque
                                        access token. detail.iss, detail.jti,
                                        detail.expires_in
@@ -144,6 +147,80 @@ def write_audit_log(
                                        'missing_header' | 'expired_or_unknown' |
                                        'account_mismatch' (with
                                        detail.path_account_id)
+      epic_zcc.patient_lookup_received  — POST PatientLookUp(2012) parsed.
+                                           openemr_user_id = <UserID>;
+                                           detail.criteria_fields lists which
+                                           inputs were present;
+                                           detail.patient_id_type set when
+                                           PatientID is in play.
+      epic_zcc.patient_lookup_resolved  — OR-search completed.
+                                           detail.match_count,
+                                           detail.queried_fields (which criterion
+                                           keys actually generated SQL; not a
+                                           confidence ranking — Zoom decides order).
+      epic_zcc.patient_lookup_failed    — request refused. detail.reason:
+                                           'empty_body' | 'malformed_xml' |
+                                           'missing_user' | 'insufficient_criteria' |
+                                           'db_error'. detail.fault_code carries
+                                           the Epic-shaped fault code returned to ZCC.
+      epic_zcc.practitioner_lookup_received — GET Practitioner.Search parsed.
+                                                detail.search_type:
+                                                'identifier' | '_id' | 'name' |
+                                                'family'; detail.query_fields
+                                                lists the request parameters used.
+      epic_zcc.practitioner_lookup_resolved — OpenEMR provider search completed.
+                                                detail.match_count.
+      epic_zcc.practitioner_lookup_failed   — request refused or search failed.
+                                                detail.reason:
+                                                'missing_search_parameters' |
+                                                'invalid_identifier' |
+                                                'given_without_family' |
+                                                'invalid_count' | 'db_error'.
+                                                detail.fhir_error_code carries
+                                                the FHIR error code returned.
+      epic_zcc.receive_communication_received — POST ReceiveCommunication3 parsed.
+                                                 detail.recipient_id,
+                                                 detail.patient_id_type,
+                                                 detail.has_patient_id,
+                                                 detail.communication_type,
+                                                 detail.call_id.
+      epic_zcc.receive_communication_pushed   — cached PatientLookUp row matched
+                                                 and an SSE event was pushed to at
+                                                 least one OpenEMR subscriber.
+                                                 detail.recipient_id,
+                                                 detail.subscriber_count,
+                                                 detail.matched_on.
+      epic_zcc.receive_communication_failed   — screen-pop dispatch refused or
+                                                 skipped. Routes still ack ZCC for
+                                                 business misses so the connected
+                                                 call is not retried. detail.reason:
+                                                 'malformed_body' |
+                                                 'missing_recipient' |
+                                                 'unknown_agent' |
+                                                 'mapping_missing_openemr_user' |
+                                                 'no_cached_lookup' |
+                                                 'missing_patient_id' |
+                                                 'patient_not_in_cache' |
+                                                 'no_subscribers' | 'db_error' |
+                                                 'handler_error'.
+      epic_zcc.screenpop_subscribed           — OpenEMR browser SSE stream
+                                                 connected. detail.expires_at,
+                                                 detail.client_ip.
+      epic_zcc.screenpop_unsubscribed         — OpenEMR browser SSE stream
+                                                 disconnected. detail.client_ip.
+      epic_zcc.screenpop_subscribe_failed     — OpenEMR screen-pop bootstrap or
+                                                 SSE stream refused. detail.reason:
+                                                 'missing_secret' |
+                                                 'missing_signature' |
+                                                 'invalid_signature' |
+                                                 'malformed_body' |
+                                                 'missing_openemr_user' |
+                                                 'missing_expires' |
+                                                 'invalid_expires' |
+                                                 'missing_token' |
+                                                 'expired_token' |
+                                                 'invalid_token' |
+                                                 'mapping_not_active'.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started

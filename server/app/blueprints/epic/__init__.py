@@ -23,6 +23,12 @@ epic_bp = Blueprint(
     url_prefix="/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth",
 )
 
+epic_openemr_bp = Blueprint(
+    "epic_openemr",
+    __name__,
+    url_prefix="/zoomly/epic-zcc",
+)
+
 
 @epic_bp.before_request
 def resolve_account():
@@ -50,4 +56,8 @@ def resolve_account():
     return None
 
 
-from app.blueprints.epic import auth_routes  # noqa: F401, E402
+from app.blueprints.epic import auth_routes 
+from app.blueprints.epic import patient_routes  
+from app.blueprints.epic import practitioner_routes
+from app.blueprints.epic import communication_routes
+from app.blueprints.epic import screenpop_routes
