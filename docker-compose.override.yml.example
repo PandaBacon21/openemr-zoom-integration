@@ -39,8 +39,11 @@ services:
       - ./openemr/patches/post_calendar/month/ajax_template.html:/var/www/localhost/htdocs/openemr/interface/main/calendar/modules/PostCalendar/pntemplates/default/views/month/ajax_template.html:ro
       # Main nav (navbar logo link/height/title)
       - ./openemr/patches/main.php:/var/www/localhost/htdocs/openemr/interface/main/tabs/main.php:ro
-      # Epic-ZCC CTI screen-pop subscriber + top-nav iframe shell
+      # Epic-ZCC CTI screen-pop subscriber + top-nav iframe shell + same-origin SSE proxy
       - ./openemr/patches/epic_cti:/var/www/localhost/htdocs/openemr/interface/epic_cti:ro
+      # Patient dashboard + finder CTI phone links
+      - ./openemr/patches/demographics.php:/var/www/localhost/htdocs/openemr/interface/patient_file/summary/demographics.php:ro
+      - ./openemr/patches/dynamic_finder.php:/var/www/localhost/htdocs/openemr/interface/main/finder/dynamic_finder.php:ro
       # Patient Flow Board patches
       - ./openemr/patches/patient_tracker.inc.php:/var/www/localhost/htdocs/openemr/library/patient_tracker.inc.php:ro
       - ./openemr/patches/patient_tracker.php:/var/www/localhost/htdocs/openemr/interface/patient_tracker/patient_tracker.php:ro
@@ -67,3 +70,6 @@ services:
       # new migration files to take effect without rebuilding zoom-bridge.
       - ./server/migrations:/app/migrations
       - ./server/alembic.ini:/app/alembic.ini
+      # config.py is baked into the image but changes often enough in dev that
+      # a live mount avoids the docker cp / rebuild cycle.
+      - ./server/config.py:/app/config.py

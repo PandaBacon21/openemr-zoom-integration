@@ -221,6 +221,34 @@ def write_audit_log(
                                                  'expired_token' |
                                                  'invalid_token' |
                                                  'mapping_not_active'.
+      epic_zcc.click_to_dial_initiated        — OpenEMR click-to-dial request
+                                                 was accepted by ZCC.
+                                                 detail.agent_id,
+                                                 detail.zcc_status_code,
+                                                 detail.has_patient_context.
+      epic_zcc.click_to_dial_failed           — OpenEMR click-to-dial was
+                                                 refused locally or rejected by
+                                                 ZCC. detail.reason:
+                                                 'missing_secret' |
+                                                 'missing_signature' |
+                                                 'invalid_signature' |
+                                                 'malformed_body' |
+                                                 'missing_phone' |
+                                                 'missing_openemr_user' |
+                                                 'unknown_agent' |
+                                                 'mapping_missing_zcc_user' |
+                                                 'missing_backend_url' |
+                                                 'missing_client_id' |
+                                                 'missing_epic_kid' |
+                                                 'missing_private_key' |
+                                                 'missing_agent_id' |
+                                                 'request_failed' |
+                                                 'upstream_error' |
+                                                 'db_error' | 'handler_error'.
+                                                 For upstream_error, detail also
+                                                 carries status_code and
+                                                 body_snippet with the dialed
+                                                 phone redacted.
 
     Event types for demo data hydration (Sprint 13):
       demo.hydrate_started          — Hydrate Demo Data orchestrator started

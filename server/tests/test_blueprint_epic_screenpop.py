@@ -28,6 +28,7 @@ def reset_screenpop_state(app):
     screenpop_dispatch._subscribers.clear()
     app.config["OPENEMR_FLASK_SECRET"] = "screenpop-secret"
     app.config["APP_PUBLIC_URL"] = "https://bridge.example"
+    app.config["OPENEMR_PUBLIC_URL"] = "https://openemr.example"
     yield
     screenpop_dispatch._subscribers.clear()
 
@@ -117,11 +118,12 @@ def test_bootstrap_returns_streams_for_active_zcc_agent_mappings_only(app, clien
     assert len(streams) == 1
     assert streams[0]["account_id"] == TEST_ACCOUNT_ID
     assert streams[0]["url"].startswith(
-        f"https://bridge.example/zoomly/{TEST_ACCOUNT_ID}/{EPIC_PATH_SLUG}/screenpop/stream?"
+        "https://openemr.example/interface/epic_cti/screenpop_stream.php?"
     )
 
     parsed = urlsplit(streams[0]["url"])
     params = parse_qs(parsed.query)
+    assert params["account_id"] == [TEST_ACCOUNT_ID]
     assert params["openemr_user_id"] == [TEST_OPENEMR_USER_ID]
     assert int(params["expires"][0]) > int(time.time())
     assert params["token"][0]
@@ -200,7 +202,9 @@ def test_stream_rejects_expired_token(app, client):
         )
     )
 
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+    assert b"event: auth_error" in resp.data
     failed = _audit_details(app, "epic_zcc.screenpop_subscribe_failed")
     assert failed[-1]["reason"] == "expired_token"
 
@@ -221,7 +225,9 @@ def test_stream_rejects_token_for_wrong_account(app, client):
 
     resp = client.get(path)
 
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+    assert b"event: auth_error" in resp.data
     failed = _audit_details(app, "epic_zcc.screenpop_subscribe_failed")
     assert failed[-1]["reason"] == "invalid_token"
 

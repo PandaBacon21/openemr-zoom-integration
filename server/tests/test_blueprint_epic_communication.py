@@ -6,7 +6,7 @@ import pytest
 
 from app.extensions import db
 from app.models import AccountConfig, AuditLog, UserMapping, ZoomAccount
-from app.services.epic import lookup_cache, screenpop_dispatch, token_store
+from app.services.epic import lookup_cache, outbound_call_cache, screenpop_dispatch, token_store
 
 
 TEST_ACCOUNT_ID = "epic-communication-acct"
@@ -22,10 +22,12 @@ COMMUNICATION_PATH = (
 def reset_epic_state():
     token_store._tokens.clear()
     lookup_cache._cache.clear()
+    outbound_call_cache._cache.clear()
     screenpop_dispatch._subscribers.clear()
     yield
     token_store._tokens.clear()
     lookup_cache._cache.clear()
+    outbound_call_cache._cache.clear()
     screenpop_dispatch._subscribers.clear()
 
 
@@ -75,7 +77,7 @@ def _post(client, payload: dict, *, token: str | None):
 def _cache_rows(rows: list[dict], queried_fields: list[str] | None = None) -> None:
     lookup_cache.cache_lookup(
         TEST_ACCOUNT_ID,
-        TEST_OPENEMR_USER_ID,
+        TEST_ZCC_USER_ID,
         rows,
         queried_fields or ["phone"],
     )
@@ -174,6 +176,7 @@ def test_receive_communication_unknown_agent_returns_ack_and_audit(app, client):
 
 
 def test_receive_communication_no_cached_lookup_returns_ack_and_audit(app, client):
+    # No PatientLookUp cache and no outbound call cache entry — should fail gracefully.
     _seed_account(app)
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
@@ -182,7 +185,24 @@ def test_receive_communication_no_cached_lookup_returns_ack_and_audit(app, clien
     assert resp.status_code == 200
     assert q.empty()
     failed = _audit_details(app, "epic_zcc.receive_communication_failed")
-    assert any(d.get("reason") == "no_cached_lookup" for d in failed)
+    assert any(d.get("reason") == "no_outbound_call_record" for d in failed)
+
+
+def test_receive_communication_outbound_call_cache_pops_patient(app, client):
+    # Outbound call: no PatientLookUp cache, but initiate-call stored patient in
+    # outbound_call_cache keyed by ZCC user ID. ReceiveCommunication3 should pop.
+    _seed_account(app)
+    outbound_call_cache.store_outbound_call(TEST_ACCOUNT_ID, TEST_ZCC_USER_ID, "100")
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "100"
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["recipient_id"] == TEST_ZCC_USER_ID
 
 
 def test_receive_communication_patient_not_in_cache_returns_ack_and_audit(app, client):

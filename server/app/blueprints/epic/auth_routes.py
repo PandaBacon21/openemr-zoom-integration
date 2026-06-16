@@ -7,9 +7,12 @@ with the OAuth2-shaped JSON Zoom expects.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
+
 from flask import current_app, g, jsonify, request
 
 from app.blueprints.epic import epic_bp
+from app.extensions import db
 from app.services.audit import write_audit_log
 from app.services.epic.constants import EPIC_DEFAULT_SCOPES, EPIC_KEY_VERSION
 from app.services.epic.inbound_jwt import InvalidAssertionError, verify_zoom_assertion
@@ -69,6 +72,10 @@ def token(zoom_account_id: str):
         return _oauth_error(oauth_err, e.reason, account.account_id, str(e))
 
     access_token, expires_in = issue_token(account.account_id)
+
+    account.epic_zcc_bearer_token = access_token
+    account.epic_zcc_bearer_token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    db.session.commit()
 
     write_audit_log(
         event_type="epic_zcc.token_issued",

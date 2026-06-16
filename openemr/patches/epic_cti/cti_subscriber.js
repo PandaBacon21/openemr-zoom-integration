@@ -68,15 +68,156 @@
         }
         var source = new EventSource(stream.url);
         source.addEventListener("navigate", handleNavigate);
+        source.addEventListener("auth_error", function () {
+            source.close();
+        });
         source.addEventListener("error", function (event) {
             console.warn("[ZoomlyEpicCti] Screen-pop stream error", stream.account_id, event);
         });
         sources.push(source);
     }
 
+    function defaultAccountId() {
+        return streams.length === 1 ? streams[0].account_id : "";
+    }
+
+    function initiateCall(phone, options) {
+        var opts = options || {};
+        var accountId = opts.accountId || defaultAccountId();
+        if (!accountId || !phone) {
+            return Promise.reject(new Error("Missing account or phone"));
+        }
+        return fetch(webroot() + "/interface/epic_cti/initiate_call.php", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                account_id: accountId,
+                phone: phone,
+                openemr_patient_id: opts.openemrPatientId || "",
+                patient_name: opts.patientName || ""
+            })
+        }).then(function (response) {
+            return response.text().then(function (text) {
+                var payload = {};
+                if (text) {
+                    try {
+                        payload = JSON.parse(text);
+                    } catch (error) {
+                        payload = {raw: text};
+                    }
+                }
+                if (!response.ok) {
+                    throw new Error(payload.error || "Click-to-dial failed");
+                }
+                return payload;
+            });
+        });
+    }
+
+    function phoneFromTelHref(href) {
+        return decodeURIComponent((href || "").replace(/^tel:/i, "")).trim();
+    }
+
+    document.addEventListener("click", function (event) {
+        var link = event.target && event.target.closest ? event.target.closest("a[href^='tel:']") : null;
+        if (!link || streams.length !== 1) {
+            return;
+        }
+        var href = link.getAttribute("href") || "";
+        var phone = phoneFromTelHref(href);
+        if (!phone) {
+            return;
+        }
+        event.preventDefault();
+        initiateCall(phone).catch(function (error) {
+            console.error("[ZoomlyEpicCti] Click-to-dial failed", error);
+            window.location.href = href;
+        });
+    });
+
+    // ── Top-frame phone injection into same-origin content iframes ──────────────
+
+    function watchFrame(name, onLoad) {
+        var selector = 'iframe[name="' + name + '"]';
+        function attachLoad(iframe) {
+            if (iframe._zoomlyPhoneWatched) { return; }
+            iframe._zoomlyPhoneWatched = true;
+            iframe.addEventListener("load", function () {
+                try { onLoad(iframe); } catch (err) {}
+            });
+        }
+        document.querySelectorAll(selector).forEach(attachLoad);
+        var obs = new window.MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+                m.addedNodes.forEach(function (node) {
+                    if (node.nodeType === 1 && node.tagName === "IFRAME" && node.name === name) {
+                        attachLoad(node);
+                    }
+                });
+            });
+        });
+        obs.observe(document.body || document.documentElement, {childList: true, subtree: true});
+    }
+
+    function injectDemographicsPhones(iframe) {
+        var doc = iframe.contentDocument;
+        var win = iframe.contentWindow;
+        var pid = "";
+        try {
+            var params = new URL(win.location.href).searchParams;
+            pid = params.get("set_pid") || params.get("pid") || "";
+        } catch (err) {}
+        var phoneIds = ["text_phone_home", "text_phone_cell", "text_phone_biz", "text_phone_contact", "text_em_number"];
+        phoneIds.forEach(function (id) {
+            var td = doc.getElementById(id);
+            if (!td || td.querySelector("[data-zoomly-phone]")) { return; }
+            var phone = (td.dataset.value || "").trim();
+            if (!phone) { return; }
+            var a = doc.createElement("a");
+            a.href = "#";
+            a.dataset.zoomlyPhone = "1";
+            a.textContent = phone;
+            a.style.cursor = "pointer";
+            a.addEventListener("click", function (e) {
+                e.preventDefault();
+                initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+            });
+            td.textContent = "";
+            td.appendChild(a);
+        });
+    }
+
+    function injectFinderPhones(iframe) {
+        var doc = iframe.contentDocument;
+        doc.addEventListener("click", function (e) {
+            var td = e.target.closest && e.target.closest("#pt_table td");
+            if (!td) { return; }
+            var phone = (td.textContent || "").trim();
+            if (!/^(\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}$/.test(phone)) { return; }
+            var row = td.closest("tr[id^='pid_']");
+            if (!row) { return; }
+            var pid = row.id.replace("pid_", "");
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+        }, true);
+    }
+
+    watchFrame("pat", injectDemographicsPhones);
+    watchFrame("fin", injectFinderPhones);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+
     streams.forEach(connect);
 
     window.ZoomlyEpicCtiSources = sources;
+    window.ZoomlyEpicCti = Object.assign(config, {
+        initiateCall: initiateCall
+    });
     window.addEventListener("beforeunload", function () {
         sources.forEach(function (source) {
             source.close();

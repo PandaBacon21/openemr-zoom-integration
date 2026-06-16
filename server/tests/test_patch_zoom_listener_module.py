@@ -57,7 +57,27 @@ def test_epic_cti_subscriber_uses_eventsource_and_openemr_tabs():
     assert 'source.addEventListener("navigate", handleNavigate)' in text
     assert "/interface/patient_file/summary/demographics.php?set_pid=" in text
     assert "/interface/main/finder/dynamic_finder.php?search_any=" in text
+    assert "/interface/epic_cti/initiate_call.php" in text
+    assert "a[href^='tel:']" in text
+    assert "streams.length !== 1" in text
     assert "window.navigateTab" in text
+
+
+def test_epic_cti_initiate_call_php_signs_account_scoped_route():
+    text = _epic_cti_path("initiate_call.php").read_text(encoding="utf-8")
+
+    assert "$_SESSION['authUserID']" in text
+    assert "rawurlencode($accountId)" in text
+    assert "interconnect-amcurprd-oauth/cti/initiate-call" in text
+    assert "zoomly_bridge_post($path, $payloadJson, 10)" in text
+
+
+def test_epic_cti_panel_frames_configured_zoom_cti_url():
+    text = _epic_cti_path("cti_panel.php").read_text(encoding="utf-8")
+
+    assert "ZOOMLY_EPIC_ZCC_CLIENT_URL" in text
+    assert 'src="<?php echo attr($zoomlyEpicCtiClientUrl); ?>"' in text
+    assert "zoomly-epic-cti-frame" in text
 
 
 def test_main_patch_loads_epic_cti_assets_and_panel():

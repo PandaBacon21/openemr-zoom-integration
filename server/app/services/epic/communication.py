@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from app.models import UserMapping
 from app.services.audit import write_audit_log
 from app.services.epic.lookup_cache import get_cached_lookup
+from app.services.epic.outbound_call_cache import get_outbound_call
 from app.services.epic.screenpop_dispatch import dispatch
 
 
@@ -57,37 +58,46 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
             openemr_user_id=None,
         )
 
-    cached = get_cached_lookup(account.account_id, openemr_user_id)
-    if cached is None:
-        return _failed(
-            account.account_id,
-            recipient_id,
-            "no_cached_lookup",
-            openemr_user_id=openemr_user_id,
-        )
-
     patient_id = (payload.get("patient_id") or "").strip()
     patient_id_type = (payload.get("patient_id_type") or "").strip()
-    if not patient_id:
-        return _failed(
-            account.account_id,
-            recipient_id,
-            "missing_patient_id",
-            openemr_user_id=openemr_user_id,
-        )
 
-    row = _find_cached_patient(cached.get("rows") or [], patient_id, patient_id_type)
-    if row is None:
-        return _failed(
-            account.account_id,
-            recipient_id,
-            "patient_not_in_cache",
-            openemr_user_id=openemr_user_id,
-            detail={
-                "patient_id_type": patient_id_type or None,
-                "cached_count": len(cached.get("rows") or []),
-            },
-        )
+    cached = get_cached_lookup(account.account_id, recipient_id)
+    if cached is not None:
+        # Inbound IVR path: find patient in cached PatientLookUp results.
+        if not patient_id:
+            return _failed(
+                account.account_id,
+                recipient_id,
+                "missing_patient_id",
+                openemr_user_id=openemr_user_id,
+            )
+        row = _find_cached_patient(cached.get("rows") or [], patient_id, patient_id_type)
+        if row is None:
+            return _failed(
+                account.account_id,
+                recipient_id,
+                "patient_not_in_cache",
+                openemr_user_id=openemr_user_id,
+                detail={
+                    "patient_id_type": patient_id_type or None,
+                    "cached_count": len(cached.get("rows") or []),
+                },
+            )
+    else:
+        # No PatientLookUp cache — outbound call path. Look up the patient by
+        # the agent's ZCC user ID (recipient_id), which was stored at InitiateCall
+        # time. ZCC's call_id in this event does not match any value we sent in
+        # the InitiateCall request (PhoneSystemCallID is null in ZCC's response).
+        pid_str = get_outbound_call(account.account_id, recipient_id)
+        if not pid_str:
+            return _failed(
+                account.account_id,
+                recipient_id,
+                "no_outbound_call_record",
+                openemr_user_id=openemr_user_id,
+                detail={"call_id": payload.get("call_id")},
+            )
+        row = {"pid": int(pid_str)}
 
     event = {
         "type": "navigate",

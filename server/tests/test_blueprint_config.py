@@ -1105,21 +1105,52 @@ def test_features_returns_db_browser_true_when_enabled(app, client):
     app.config["ENABLE_DBGATE"] = True
     response = client.get("/config/features", headers=AUTH_HEADERS)
     assert response.status_code == 200
-    assert response.get_json() == {"db_browser": True}
+    assert response.get_json() == {"db_browser": True, "epic_zcc": True}
 
 
 def test_features_returns_db_browser_false_when_disabled(app, client):
     app.config["ENABLE_DBGATE"] = False
     response = client.get("/config/features", headers=AUTH_HEADERS)
     assert response.status_code == 200
-    assert response.get_json() == {"db_browser": False}
+    assert response.get_json()["db_browser"] is False
 
 
 def test_features_returns_db_browser_false_when_unset(app, client):
     app.config.pop("ENABLE_DBGATE", None)
     response = client.get("/config/features", headers=AUTH_HEADERS)
     assert response.status_code == 200
-    assert response.get_json() == {"db_browser": False}
+    assert response.get_json()["db_browser"] is False
+
+
+def test_features_returns_epic_zcc_true_when_enabled(app, client):
+    app.config["ENABLE_EPIC_ZCC"] = True
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json()["epic_zcc"] is True
+
+
+def test_features_returns_epic_zcc_false_when_disabled(app, client):
+    app.config["ENABLE_EPIC_ZCC"] = False
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json()["epic_zcc"] is False
+
+
+def test_features_returns_epic_zcc_false_when_unset(app, client):
+    app.config.pop("ENABLE_EPIC_ZCC", None)
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.get_json()["epic_zcc"] is False
+
+
+def test_features_response_contains_both_flags(app, client):
+    app.config["ENABLE_DBGATE"] = True
+    app.config["ENABLE_EPIC_ZCC"] = True
+    response = client.get("/config/features", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    body = response.get_json()
+    assert "db_browser" in body
+    assert "epic_zcc" in body
 
 
 def test_features_requires_auth(client):

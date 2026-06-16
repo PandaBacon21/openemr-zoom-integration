@@ -81,6 +81,17 @@ def patient_lookup(zoom_account_id: str):
         )
         if v
     ]
+    logger.info(
+        "epic.patient_lookup | parsed criteria "
+        f"account_id={account.account_id} "
+        f"user_id={criteria['user_id']!r} "
+        f"user_id_type={criteria.get('user_id_type')!r} "
+        f"patient_id={criteria.get('patient_id')!r} "
+        f"patient_id_type={criteria.get('patient_id_type')!r} "
+        f"dob={criteria.get('dob')!r} "
+        f"ssn_last4={criteria.get('ssn_last4')!r} "
+        f"phones={criteria.get('phones')!r}"
+    )
     write_audit_log(
         event_type="epic_zcc.patient_lookup_received",
         success=True,

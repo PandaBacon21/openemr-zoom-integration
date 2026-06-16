@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import { getFeatures, type Features } from "../api/config";
 
-const DEFAULT_FEATURES: Features = { db_browser: false };
+const DEFAULT_FEATURES: Features = { db_browser: false, epic_zcc: false };
 
 interface FeaturesContextType {
   features: Features;

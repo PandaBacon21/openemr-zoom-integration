@@ -13,9 +13,11 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import type { Registration, UserMapping } from "../../api/config";
 import { verifyAccount, getUserMappings } from "../../api/config";
+import { useFeatures } from "../../context/FeaturesContext";
 import AccountConfigTab from "./tabs/AccountConfigTab";
 import AccountProvidersTab from "./tabs/AccountProvidersTab";
 import AccountDashboardTab from "./tabs/AccountDashboardTab";
+import EpicZccTab from "./tabs/EpicZccTab";
 
 interface Props {
   account: Registration;
@@ -30,6 +32,7 @@ const AccountDetail: React.FC<Props> = ({
   onAccountUpdated,
   onDeregistered,
 }) => {
+  const { features } = useFeatures();
   const [tab, setTab] = useState(0);
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>("loading");
   const [verifyMessage, setVerifyMessage] = useState<string>("");
@@ -160,6 +163,7 @@ const AccountDetail: React.FC<Props> = ({
           <Tab label="Config" />
           <Tab label="User Mappings" disabled={!isVerified || loadingMappings} />
           <Tab label="Dashboard" disabled={!isVerified} />
+          {features.epic_zcc && <Tab label="Epic ZCC" />}
         </Tabs>
       </Box>
 
@@ -180,6 +184,7 @@ const AccountDetail: React.FC<Props> = ({
         />
       )}
       {tab === 2 && isVerified && <AccountDashboardTab account={account} />}
+      {tab === 3 && features.epic_zcc && <EpicZccTab account={account} />}
     </Box>
   );
 };

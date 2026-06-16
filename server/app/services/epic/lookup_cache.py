@@ -6,9 +6,8 @@ This cache bridges the two so ReceiveCommunication3 can drive the screen
 pop without re-querying OpenEMR.
 
 The key is (zoom_account_id, agent_user_id) where agent_user_id is the
-OpenEMR user id passed in the PatientLookUp <UserID> element. That's the
-same identifier ZCC will pass to ReceiveCommunication3 for routing, so the
-cache miss surface is small.
+ZCC user id ZCC sends in PatientLookUp's <UserID> element — the same value
+ZCC passes as RecipientID in ReceiveCommunication3.
 
 Process-local + in-memory like token_store. Gunicorn 1-gevent-worker means
 all requests for an account hit the same process; a restart drops every

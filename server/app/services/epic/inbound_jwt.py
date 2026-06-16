@@ -21,6 +21,7 @@ from .constants import (
     EPIC_JKU_HOST_ALLOWLIST,
     EPIC_JTI_REPLAY_TTL_SECONDS,
     EPIC_JWKS_CACHE_TTL_SECONDS,
+    EPIC_ZOOM_FALLBACK_JWKS_URL,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,17 +118,20 @@ def verify_zoom_assertion(token: str, expected_audience: str) -> dict:
         header = jwt.get_unverified_header(token)
     except jwt.InvalidTokenError as e:
         raise InvalidAssertionError("bad_request", f"malformed JWT header: {e}")
-
+    logger.info(header)
+    
     kid = header.get("kid")
     alg = header.get("alg")
     jku = header.get("jku")
+
+    logger.info(f"epic.inbound_jwt | assertion header | kid={kid!r} alg={alg!r} jku={jku!r}")
 
     if not kid:
         raise InvalidAssertionError("kid_missing", "JWT header lacks kid")
     if alg not in EPIC_INBOUND_JWT_ALGS:
         raise InvalidAssertionError("alg_unsupported", f"alg={alg!r} not in {EPIC_INBOUND_JWT_ALGS}")
     if not jku:
-        raise InvalidAssertionError("kid_missing", "JWT header lacks jku (pre-registered JWKS not yet supported)")
+        jku = EPIC_ZOOM_FALLBACK_JWKS_URL
     if not _jku_host_allowed(jku):
         raise InvalidAssertionError("jku_untrusted", f"jku host not in allowlist: {jku}")
 

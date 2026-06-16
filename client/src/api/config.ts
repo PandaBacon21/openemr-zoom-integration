@@ -324,9 +324,55 @@ export const getZccUsers = (zoom_account_id: string) =>
 // Features (process-wide UI feature flags)
 export interface Features {
   db_browser: boolean;
+  epic_zcc: boolean;
 }
 
 export const getFeatures = () => apiClient.get<Features>("/config/features");
+
+// Epic ZCC CTI configuration
+export interface EpicZccConfig {
+  zoom_account_id: string;
+  epic_zcc_enabled: boolean;
+  epic_zcc_connection_name: string | null;
+  epic_zcc_backend_url: string | null;
+  epic_zcc_background_user_id: string | null;
+  epic_zcc_background_user_id_type: string | null;
+  epic_zcc_phone_system_id: string | null;
+  epic_zcc_phone_system_id_type: string | null;
+  epic_zcc_recipient_id_type: string;
+  epic_zcc_client_id: string | null;
+  epic_kid: string | null;
+  instance_url: string;
+  jwks_url: string | null;
+}
+
+export const getEpicZccConfig = (zoom_account_id: string) =>
+  apiClient.get<EpicZccConfig>(`/config/account/${zoom_account_id}/epic-zcc`);
+
+export const updateEpicZccConfig = (
+  zoom_account_id: string,
+  data: Partial<{
+    epic_zcc_enabled: boolean;
+    epic_zcc_connection_name: string | null;
+    epic_zcc_backend_url: string | null;
+    epic_zcc_background_user_id: string | null;
+    epic_zcc_background_user_id_type: string | null;
+    epic_zcc_phone_system_id: string | null;
+    epic_zcc_phone_system_id_type: string | null;
+    epic_zcc_recipient_id_type: string;
+  }>,
+) =>
+  apiClient.patch<EpicZccConfig>(
+    `/config/account/${zoom_account_id}/epic-zcc`,
+    data,
+  );
+
+export const initializeEpicZcc = (zoom_account_id: string) =>
+  apiClient.post<{
+    zoom_account_id: string;
+    epic_zcc_client_id: string;
+    epic_kid: string;
+  }>(`/config/account/${zoom_account_id}/epic-zcc/initialize`);
 
 // Audit Logs
 export const getAuditLogs = (filters: AuditLogFilters = {}) => {

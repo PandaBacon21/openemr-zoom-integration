@@ -86,8 +86,7 @@ class Config:
 
     # Epic-ZCC CTI middleware. When off the `/zoomly/<id>/interconnect-amcurprd-oauth/*`
     # blueprint is not registered, so every Epic-shaped endpoint returns 404.
-    # Default off so deployments that don't run the CTI integration leave no
-    # surface area exposed.
+    # Default off
     ENABLE_EPIC_ZCC = os.environ.get("ENABLE_EPIC_ZCC", "false").lower() in ("true", "1")
 
 

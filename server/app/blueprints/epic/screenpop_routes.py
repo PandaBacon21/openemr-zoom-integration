@@ -4,14 +4,14 @@ import json
 import logging
 import time
 from queue import Empty
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 from flask import Response, current_app, g, jsonify, request
 
 from app.blueprints.epic import epic_bp, epic_openemr_bp
 from app.models import AccountConfig, UserMapping, ZoomAccount
 from app.services.audit import write_audit_log
-from app.services.epic.constants import EPIC_PATH_SLUG, EPIC_SCREENPOP_TOKEN_TTL_SECONDS
+from app.services.epic.constants import EPIC_SCREENPOP_TOKEN_TTL_SECONDS
 from app.services.epic.screenpop_auth import (
     ScreenpopTokenError,
     make_screenpop_token,
@@ -103,13 +103,7 @@ def screenpop_stream(zoom_account_id: str):
             request.args.get("token"),
         )
     except ScreenpopTokenError as e:
-        return _stream_failure(
-            account_id,
-            openemr_user_id,
-            e.reason,
-            status=401,
-            error_message=e.message,
-        )
+        return _stream_auth_error(account_id, openemr_user_id, e.reason, e.message)
 
     if not _has_active_agent_mapping(account_id, openemr_user_id):
         return _stream_failure(
@@ -190,22 +184,16 @@ def _build_stream_descriptor(secret: str, mapping: UserMapping, openemr_user_id:
         openemr_user_id,
         expires_at,
     )
-    public_base = (
-        current_app.config.get("APP_PUBLIC_URL")
-        or request.host_url.rstrip("/")
-    ).rstrip("/")
-    path = (
-        f"/zoomly/{quote(mapping.zoom_account_id, safe='')}/"
-        f"{EPIC_PATH_SLUG}/screenpop/stream"
-    )
+    openemr_base = (current_app.config.get("OPENEMR_PUBLIC_URL") or "").rstrip("/")
     query = urlencode({
+        "account_id": mapping.zoom_account_id,
         "openemr_user_id": openemr_user_id,
         "expires": str(expires_at),
         "token": token,
     })
     return {
         "account_id": mapping.zoom_account_id,
-        "url": f"{public_base}{path}?{query}",
+        "url": f"{openemr_base}/interface/epic_cti/screenpop_stream.php?{query}",
         "expires_at": expires_at,
     }
 
@@ -267,6 +255,34 @@ def _stream_failure(
         json.dumps({"error": reason}).encode("utf-8"),
         status=status,
         content_type=_JSON_CONTENT_TYPE,
+    )
+
+
+def _stream_auth_error(
+    zoom_account_id: str | None,
+    openemr_user_id: str | None,
+    reason: str,
+    error_message: str | None = None,
+) -> Response:
+    _audit_screenpop_failure(
+        reason,
+        zoom_account_id,
+        openemr_user_id,
+        error_message=error_message,
+    )
+
+    def generate():
+        yield (
+            f"retry: 86400000\n"
+            f"event: auth_error\n"
+            f"data: {json.dumps({'reason': reason})}\n\n"
+        )
+
+    return Response(
+        generate(),
+        status=200,
+        content_type=_SSE_CONTENT_TYPE,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
