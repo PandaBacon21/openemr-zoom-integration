@@ -1428,7 +1428,7 @@ if (empty($_GET['prov']) && empty($_GET['group'])) { ?>
         <?php
         foreach ($patienttitle as $entry) {
             if (!empty($entry['phone'])) {
-                echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="tel:' . attr($entry['phone']) . '"'
+                echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
                     . ' data-phone="' . attr($entry['phone']) . '"'
                     . ' data-pid="' . attr((string)$patientid) . '"'
                     . ' data-name="' . attr($patientname) . '">'
@@ -1476,7 +1476,7 @@ if ($_GET['group'] === true && $have_group_global_enabled) { ?>
             <?php
             foreach ($patienttitle as $entry) {
                 if (!empty($entry['phone'])) {
-                    echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="tel:' . attr($entry['phone']) . '"'
+                    echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
                         . ' data-phone="' . attr($entry['phone']) . '"'
                         . ' data-pid="' . attr((string)$patientid) . '"'
                         . ' data-name="' . attr($patientname) . '">'
@@ -2122,12 +2122,14 @@ document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a.zoomly-cti-phone');
     if (!a) { return; }
     e.preventDefault();
-    if (window.top && window.top.ZoomlyEpicCti) {
-        window.top.ZoomlyEpicCti.initiateCall(a.dataset.phone, {
+    var cti = window.top && window.top.ZoomlyEpicCti;
+    if (!cti) { return; }
+    cti.showCallButton(a, document, function () {
+        cti.initiateCall(a.dataset.phone, {
             openemrPatientId: a.dataset.pid,
             patientName: a.dataset.name
         });
-    }
+    });
 });
 </script>
 </body>

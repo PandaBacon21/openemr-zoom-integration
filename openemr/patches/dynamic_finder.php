@@ -339,17 +339,22 @@ $loading = "";
     function wrapInPhoneLink(data, type, full) {
         if (type !== 'display' || !data) { return data || ''; }
         var pid = String(full.pid || '').replace(/\D/g, '');
-        return '<a class="zoomly-cti-phone" href="tel:' + data + '" data-phone="' + data + '" data-pid="' + pid + '">' + data + '</a>';
+        return '<a class="zoomly-cti-phone" href="#" role="button" data-phone="' + data + '" data-pid="' + pid + '">' + data + '</a>';
     }
 
-    $(document).on('click', 'a.zoomly-cti-phone', function (e) {
+    // Capture phase fires before the #pt_table row-click handler, preventing DataTable
+    // row navigation when the user clicks a phone link.
+    document.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest && e.target.closest('a.zoomly-cti-phone');
+        if (!a) { return; }
         e.preventDefault();
-        e.stopPropagation();
-        var $a = $(this);
-        if (window.top && window.top.ZoomlyEpicCti) {
-            window.top.ZoomlyEpicCti.initiateCall($a.data('phone'), {openemrPatientId: $a.data('pid')});
-        }
-    });
+        e.stopImmediatePropagation();
+        var cti = window.top && window.top.ZoomlyEpicCti;
+        if (!cti) { return; }
+        cti.showCallButton(a, document, function () {
+            cti.initiateCall(a.getAttribute('data-phone'), {openemrPatientId: a.getAttribute('data-pid')});
+        });
+    }, true);
 
     function openNewTopWindow(pid) {
         document.fnew.patientID.value = pid;

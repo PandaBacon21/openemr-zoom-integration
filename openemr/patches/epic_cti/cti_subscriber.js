@@ -121,6 +121,65 @@
         return decodeURIComponent((href || "").replace(/^tel:/i, "")).trim();
     }
 
+    // Insert an inline "Call now" button immediately after target in its own
+    // document. No positioning math, no cross-frame rendering — the button
+    // appears in normal document flow right next to the phone number.
+    function showCallButton(target, doc, callFn) {
+        var old = doc.getElementById("zoomly-call-btn");
+        if (old && old.parentNode) {
+            old.parentNode.removeChild(old);
+        }
+
+        var btn = doc.createElement("button");
+        btn.id = "zoomly-call-btn";
+        btn.type = "button";
+        btn.textContent = "Call now";
+        btn.style.cssText = [
+            "background:#0B5CFF",
+            "color:#fff",
+            "border:none",
+            "border-radius:3px",
+            "padding:2px 8px",
+            "cursor:pointer",
+            "font-size:inherit",
+            "margin-left:4px",
+            "vertical-align:middle",
+        ].join(";");
+
+        // Table cells: append inside so we don't create invalid sibling elements.
+        var tag = (target.tagName || "").toUpperCase();
+        if (tag === "TD" || tag === "TH") {
+            target.appendChild(btn);
+        } else if (target.parentNode) {
+            target.parentNode.insertBefore(btn, target.nextSibling);
+        } else {
+            (doc.body || doc.documentElement).appendChild(btn);
+        }
+
+        function dismiss() {
+            if (btn.parentNode) {
+                btn.parentNode.removeChild(btn);
+            }
+            doc.removeEventListener("click", onDocClick, true);
+        }
+
+        function onDocClick(e) {
+            if (e.target !== btn) {
+                dismiss();
+            }
+        }
+
+        btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            dismiss();
+            callFn();
+        });
+
+        setTimeout(function () {
+            doc.addEventListener("click", onDocClick, true);
+        }, 0);
+    }
+
     document.addEventListener("click", function (event) {
         var link = event.target && event.target.closest ? event.target.closest("a[href^='tel:']") : null;
         if (!link || streams.length !== 1) {
@@ -132,9 +191,11 @@
             return;
         }
         event.preventDefault();
-        initiateCall(phone).catch(function (error) {
-            console.error("[ZoomlyEpicCti] Click-to-dial failed", error);
-            window.location.href = href;
+        showCallButton(link, document, function () {
+            initiateCall(phone).catch(function (error) {
+                console.error("[ZoomlyEpicCti] Click-to-dial failed", error);
+                window.location.href = href;
+            });
         });
     });
 
@@ -183,7 +244,9 @@
             a.style.cursor = "pointer";
             a.addEventListener("click", function (e) {
                 e.preventDefault();
-                initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+                showCallButton(a, doc, function () {
+                    initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+                });
             });
             td.textContent = "";
             td.appendChild(a);
@@ -203,7 +266,9 @@
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+            showCallButton(td, doc, function () {
+                initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
+            });
         }, true);
     }
 
@@ -216,7 +281,8 @@
 
     window.ZoomlyEpicCtiSources = sources;
     window.ZoomlyEpicCti = Object.assign(config, {
-        initiateCall: initiateCall
+        initiateCall: initiateCall,
+        showCallButton: showCallButton
     });
     window.addEventListener("beforeunload", function () {
         sources.forEach(function (source) {

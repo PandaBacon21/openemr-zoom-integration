@@ -2090,9 +2090,11 @@ $_cti_name = js_escape(trim(($result['fname'] ?? '') . ' ' . ($result['lname'] ?
         a.style.cursor = 'pointer';
         a.addEventListener('click', function (e) {
             e.preventDefault();
-            if (window.top && window.top.ZoomlyEpicCti) {
-                window.top.ZoomlyEpicCti.initiateCall(phone, {openemrPatientId: pid, patientName: name});
-            }
+            var cti = window.top && window.top.ZoomlyEpicCti;
+            if (!cti) { return; }
+            cti.showCallButton(a, document, function () {
+                cti.initiateCall(phone, {openemrPatientId: pid, patientName: name});
+            });
         });
         td.textContent = '';
         td.appendChild(a);
