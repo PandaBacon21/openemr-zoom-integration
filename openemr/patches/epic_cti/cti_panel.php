@@ -49,13 +49,7 @@ if ($zoomlyEpicCtiClientUrl !== '') :
         }
     }
 
-    var collapsed = true;
-    try {
-        collapsed = window.localStorage.getItem("zoomlyEpicCtiCollapsed") !== "0";
-    } catch (error) {
-        collapsed = true;
-    }
-    setCollapsed(collapsed);
+    setCollapsed(true);
 
     toggle.addEventListener("click", function () {
         setCollapsed(!shell.classList.contains("is-collapsed"));

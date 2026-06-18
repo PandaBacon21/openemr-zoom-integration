@@ -50,6 +50,22 @@
         };
     }
 
+    function closeActiveModal() {
+        var jq = window.jQuery || window.$;
+        if (jq && typeof jq.fn.modal === "function") {
+            jq(".dialogModal.show").modal("hide");
+        }
+    }
+
+    function expandCtiPanel() {
+        var shell = document.getElementById("zoomly-epic-cti-shell");
+        if (!shell) { return; }
+        shell.classList.remove("is-collapsed");
+        var toggle = document.getElementById("zoomly-epic-cti-toggle");
+        if (toggle) { toggle.setAttribute("aria-expanded", "true"); }
+        try { window.localStorage.setItem("zoomlyEpicCtiCollapsed", "0"); } catch (e) {}
+    }
+
     function handleNavigate(event) {
         var payload;
         try {
@@ -59,6 +75,8 @@
             return;
         }
         var target = buildNavigation(payload || {});
+        expandCtiPanel();
+        closeActiveModal();
         navigate(target.url, target.tabName);
     }
 
