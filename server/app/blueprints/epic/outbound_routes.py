@@ -9,7 +9,6 @@ from flask import Response, current_app, g, jsonify, request
 from app.blueprints.epic import epic_bp
 from app.models import UserMapping
 from app.services.audit import write_audit_log
-from app.services.epic.outbound_call_cache import store_outbound_call
 from app.services.epic.outbound_zcc import (
     OutboundZccError,
     OutboundZccUpstreamError,
@@ -23,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 @epic_bp.route("/cti/initiate-call", methods=["POST"])
 def cti_initiate_call(zoom_account_id: str):
-    # Flask passes zoom_account_id from the blueprint URL prefix; before_request
-    # already resolved it onto g.zoom_account.
+    # before_request already resolved zoom_account_id onto g.zoom_account.
     _ = zoom_account_id
     account = g.zoom_account
     raw_body = request.get_data()
@@ -132,9 +130,6 @@ def cti_initiate_call(zoom_account_id: str):
             openemr_patient_id=openemr_patient_id,
             error_message=str(e),
         )
-
-    if openemr_patient_id:
-        store_outbound_call(account.account_id, mapping.zcc_user_id, openemr_patient_id)
 
     write_audit_log(
         event_type="epic_zcc.click_to_dial_initiated",

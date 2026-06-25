@@ -23,8 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 def _phone_digits(raw: str) -> str:
-    """Strip every non-digit so the digits-only comparison ignores formatting."""
-    return re.sub(r"\D", "", raw)
+    """Strip non-digits and normalize US E.164 country code to 10-digit local format.
+
+    ZCC sends E.164 (+13035550101 → 13035550101) while OpenEMR stores 10-digit
+    US local format (3035550101). Strip the leading 1 from 11-digit numbers so
+    both sides compare on the same 10-digit value.
+    """
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 11 and digits.startswith("1"):
+        return digits[1:]
+    return digits
 
 
 def search_patients(criteria: dict) -> tuple[list[dict], list[str]]:

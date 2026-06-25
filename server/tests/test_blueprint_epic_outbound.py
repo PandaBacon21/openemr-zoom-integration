@@ -9,6 +9,7 @@ import pytest
 
 from app.extensions import db
 from app.models import AccountConfig, AuditLog, UserMapping, ZoomAccount
+from app.services.epic import screenpop_dispatch
 from app.services.keys import generate_keypair
 
 
@@ -22,6 +23,9 @@ OUTBOUND_PATH = f"/zoomly/{TEST_ACCOUNT_ID}/interconnect-amcurprd-oauth/cti/init
 def configure_outbound(app):
     app.config["OPENEMR_FLASK_SECRET"] = "outbound-secret"
     app.config["APP_PUBLIC_URL"] = "https://bridge.example"
+    screenpop_dispatch._subscribers.clear()
+    yield
+    screenpop_dispatch._subscribers.clear()
 
 
 def _seed_account(
@@ -160,10 +164,10 @@ def test_initiate_call_posts_signed_request_to_zcc(app, client, monkeypatch):
     assert claims["sub"] == "epic-client-id"
     assert claims["aud"] == captured["url"]
 
-    # Outbound call cache should be keyed by ZCC user ID so ReceiveCommunication3
-    # can pop the patient using the recipient_id it carries.
-    from app.services.epic.outbound_call_cache import get_outbound_call
-    assert get_outbound_call(TEST_ACCOUNT_ID, TEST_ZCC_USER_ID) == "100"
+    # Screen pop for outbound is driven by ReceiveCommunication3, not by
+    # initiate-call, so no SSE event is dispatched at this point.
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+    assert q.empty()
 
     initiated = _audit_details(app, "epic_zcc.click_to_dial_initiated")
     assert initiated[-1]["agent_id"] == TEST_ZCC_USER_ID

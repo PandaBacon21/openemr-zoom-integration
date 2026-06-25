@@ -1,11 +1,14 @@
 """Epic PatientLookUp (2012) endpoint for the ZCC CTI middleware.
 
-ZCC POSTs an XML PatientLookUp request after the IVR has collected one or
+ZCC POSTs a JSON PatientLookUp request after the IVR has collected one or
 more search criteria (phone, DOB, MRN/FHIR ID, SSN last-4). We OR-search
 OpenEMR's patient_data and return all matches in Epic's PatientLookupResult
-XML envelope. The result is also cached per agent (UserID) so the
-subsequent ReceiveCommunication3 can drive the screen pop without redoing
-the search.
+XML envelope. The result is cached keyed by normalized caller phone so the
+subsequent ReceiveCommunication3 can drive the screen pop without re-querying
+OpenEMR.
+
+UserID/UserIDType in the request are per-account Epic background service
+credentials configured in ZCC — not the individual agent handling the call.
 """
 
 import logging
@@ -15,7 +18,7 @@ from app.blueprints.auth.auth_helpers import verify_bearer_token_in_store
 from app.blueprints.epic import epic_bp
 from app.services.audit import write_audit_log
 from app.services.epic.lookup_cache import cache_lookup
-from app.services.epic.patient_search import search_patients
+from app.services.epic.patient_search import _phone_digits, search_patients
 from app.services.epic.request_parser import InvalidEpicRequest, parse_patient_lookup_request
 from app.services.epic.response_builders import build_fault_xml, build_patient_lookup_response_xml
 
@@ -61,6 +64,12 @@ def patient_lookup(zoom_account_id: str):
         return _fault_response("INVALID-REQUEST", "empty body",
                                account_id=account.account_id, reason="empty_body")
 
+    logger.info(
+        "epic.patient_lookup | raw_body account_id=%s\n%s",
+        account.account_id,
+        raw_body.decode("utf-8", errors="replace"),
+    )
+
     try:
         criteria = parse_patient_lookup_request(raw_body)
     except InvalidEpicRequest as e:
@@ -96,10 +105,10 @@ def patient_lookup(zoom_account_id: str):
         event_type="epic_zcc.patient_lookup_received",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_user_id=criteria["user_id"],
         detail={
             "criteria_fields": queried_fields_from_criteria,
             "patient_id_type": criteria.get("patient_id_type"),
+            "epic_service_user": criteria["user_id"],
         },
     )
 
@@ -110,16 +119,18 @@ def patient_lookup(zoom_account_id: str):
         return _fault_response("INVALID-REQUEST", "search failed",
                                account_id=account.account_id, reason="db_error")
 
-    cache_lookup(account.account_id, criteria["user_id"], rows, queried_fields)
+    phones = criteria.get("phones") or []
+    if phones and (cache_phone := _phone_digits(phones[0])):
+        cache_lookup(account.account_id, cache_phone, rows, queried_fields)
 
     write_audit_log(
         event_type="epic_zcc.patient_lookup_resolved",
         success=True,
         zoom_account_id=account.account_id,
-        openemr_user_id=criteria["user_id"],
         detail={
             "match_count": len(rows),
             "queried_fields": queried_fields,
+            "epic_service_user": criteria["user_id"],
         },
     )
 

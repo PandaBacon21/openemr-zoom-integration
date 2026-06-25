@@ -1,11 +1,8 @@
 """Parse Epic-ZCC inbound request bodies.
 
-PatientLookUp(2012) uses a SOAP-style XML document under the
-`urn:Epic-com:EMPI.2012.Services.Patient` namespace. We accept the full Epic
-schema but only act on the fields Zoomly's IVR-driven CTI flow actually
-populates: PatientID + PatientIDType, DateOfBirth, NationalIdentifier (SSN),
-phone numbers, and the required UserID identifying which ZCC agent is doing
-the lookup.
+PatientLookUp(2012): ZCC sends JSON despite Epic's published XML spec.
+UserID/UserIDType are per-account Epic background service credentials
+configured in ZCC — not the individual agent handling the call.
 
 ReceiveCommunication3 uses JSON in Epic's published docs. We parse that as
 the primary contract and keep a small XML fallback for integration resilience.
@@ -41,34 +38,6 @@ class InvalidEpicRequest(Exception):
 _NS = {"e": EPIC_XML_NAMESPACE}
 
 
-def _text(root: ET.Element, path: str) -> str | None:
-    """Find a single element under the Epic namespace and return its stripped text, or None."""
-    el = root.find(path, _NS)
-    if el is None or el.text is None:
-        return None
-    text = el.text.strip()
-    return text or None
-
-
-def _phones(root: ET.Element) -> list[str]:
-    """Collect all phone numbers under the Address.PhoneNumbers branch.
-
-    Epic wraps phone strings in the MS Serialization Arrays namespace inside
-    the PhoneNumbers container. We use a wildcard child match so we don't
-    have to hardcode that secondary namespace.
-    """
-    container = root.find("e:Address/e:PhoneNumbers", _NS)
-    if container is None:
-        return []
-    phones: list[str] = []
-    for child in container:
-        if child.text:
-            normalized = child.text.strip()
-            if normalized:
-                phones.append(normalized)
-    return phones
-
-
 def _normalize_ssn_last4(raw: str | None) -> str | None:
     """Pull the last 4 digits out of a NationalIdentifier value.
 
@@ -83,8 +52,11 @@ def _normalize_ssn_last4(raw: str | None) -> str | None:
     return digits[-4:]
 
 
-def parse_patient_lookup_request(xml_bytes: bytes) -> dict:
-    """Parse an Epic PatientLookUp request body.
+def parse_patient_lookup_request(raw_body: bytes) -> dict:
+    """Parse an Epic PatientLookUp request body (JSON).
+
+    ZCC sends JSON despite Epic's published XML spec. UserID/UserIDType are
+    per-account Epic background service credentials, not the individual agent.
 
     Raises InvalidEpicRequest with the appropriate Epic fault code if the
     body is malformed, missing the required UserID, or has no search
@@ -93,8 +65,8 @@ def parse_patient_lookup_request(xml_bytes: bytes) -> dict:
 
     Returns:
         {
-            "user_id":           str         # OpenEMR user id (UserID), required
-            "user_id_type":      str | None  # UserIDType ('EXTERNAL', etc.) — informational
+            "user_id":           str         # Epic background service UserID, required
+            "user_id_type":      str | None  # UserIDType — informational
             "patient_id":        str | None  # PatientID
             "patient_id_type":   str | None  # PatientIDType ('EPI', 'MRN', 'FHIR', ...)
             "dob":               str | None  # DateOfBirth (YYYY-MM-DD)
@@ -102,29 +74,39 @@ def parse_patient_lookup_request(xml_bytes: bytes) -> dict:
             "phones":            list[str]   # raw phone strings; normalized in patient_search
         }
     """
+    if not raw_body:
+        raise InvalidEpicRequest("INVALID-REQUEST", "empty body")
+
     try:
-        root = ET.fromstring(xml_bytes)
-    except ET.ParseError as e:
-        logger.warning(f"epic.request_parser | malformed XML: {e}")
-        raise InvalidEpicRequest("INVALID-REQUEST", f"malformed XML: {e}")
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        logger.warning(f"epic.request_parser | malformed PatientLookUp JSON: {e}")
+        raise InvalidEpicRequest("INVALID-REQUEST", f"malformed JSON: {e}")
 
-    # Strip the namespace from the root tag for the check; Epic always uses
-    # <PatientLookup> as the root.
-    if not root.tag.endswith("}PatientLookup") and root.tag != "PatientLookup":
-        raise InvalidEpicRequest("INVALID-REQUEST", f"unexpected root element {root.tag!r}")
+    if not isinstance(payload, dict):
+        raise InvalidEpicRequest("INVALID-REQUEST", "body must be a JSON object")
 
-    user_id = _text(root, "e:UserID")
+    user_id = _json_text(payload.get("UserID"))
     if not user_id:
         raise InvalidEpicRequest("INVALID-USER", "UserID is required")
 
+    address = payload.get("Address") or {}
+    phones: list[str] = []
+    if isinstance(address, dict):
+        phone_val = address.get("PhoneNumbers")
+        if isinstance(phone_val, list):
+            phones = [p for p in phone_val if isinstance(p, str) and p.strip()]
+        elif isinstance(phone_val, str) and phone_val.strip():
+            phones = [phone_val.strip()]
+
     parsed = {
         "user_id": user_id,
-        "user_id_type": _text(root, "e:UserIDType"),
-        "patient_id": _text(root, "e:PatientID"),
-        "patient_id_type": _text(root, "e:PatientIDType"),
-        "dob": _text(root, "e:DateOfBirth"),
-        "ssn_last4": _normalize_ssn_last4(_text(root, "e:NationalIdentifier")),
-        "phones": _phones(root),
+        "user_id_type": _json_text(payload.get("UserIDType")),
+        "patient_id": _json_text(payload.get("PatientID")),
+        "patient_id_type": _json_text(payload.get("PatientIDType")),
+        "dob": _json_text(payload.get("DateOfBirth")),
+        "ssn_last4": _normalize_ssn_last4(_json_text(payload.get("NationalIdentifier"))),
+        "phones": phones,
     }
 
     has_criterion = any([
@@ -136,7 +118,7 @@ def parse_patient_lookup_request(xml_bytes: bytes) -> dict:
     if not has_criterion:
         raise InvalidEpicRequest(
             "INSUFFICIENT-CRITERIA",
-            "at least one of PatientID, DateOfBirth, NationalIdentifier, or PhoneNumbers is required",
+            "at least one search criterion is required (PatientID, DateOfBirth, NationalIdentifier, or PhoneNumbers)",
         )
 
     return parsed
@@ -159,6 +141,7 @@ def parse_receive_communication3_request(raw_body: bytes, content_type: str | No
             "dialed_number":      str | None
             "call_id":            str | None
             "lookup_type":        str | None
+            "contact_type":       str | None  # "Incoming" or "Outgoing"
         }
     """
     if not raw_body:
@@ -216,6 +199,7 @@ def _parse_receive_communication3_json(raw_body: bytes, content_type: str | None
         "dialed_number": _json_text(payload.get("DialedPhoneNumber")),
         "call_id": _json_text(payload.get("CallID")),
         "lookup_type": _json_text(payload.get("LookupType")),
+        "contact_type": _json_text(payload.get("ContactType")),
     }
 
 
@@ -247,6 +231,7 @@ def _parse_receive_communication3_xml(xml_bytes: bytes) -> dict:
         "dialed_number": _xml_local_text(root, "DialedPhoneNumber"),
         "call_id": _xml_local_text(root, "CallID"),
         "lookup_type": _xml_local_text(root, "LookupType"),
+        "contact_type": _xml_local_text(root, "ContactType"),
     }
 
 

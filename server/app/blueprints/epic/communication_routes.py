@@ -42,6 +42,12 @@ def receive_communication3(zoom_account_id: str):
     raw_body = request.get_data()
     wants_xml = raw_body.lstrip().startswith(b"<")
 
+    logger.info(
+        "epic.receive_communication3 | raw_body account_id=%s\n%s",
+        account.account_id,
+        raw_body.decode("utf-8", errors="replace"),
+    )
+
     try:
         payload = parse_receive_communication3_request(
             raw_body,
