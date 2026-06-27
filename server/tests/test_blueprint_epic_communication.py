@@ -198,7 +198,7 @@ def test_receive_communication_no_lookup_criteria_is_audited(app, client):
 
 def test_receive_communication_phone_no_match_dispatches_search_navigate(app, client, monkeypatch):
     # No PatientLookUp cache, no LookupID; phone lookup returns no results — dispatches
-    # phone-only navigate so JS can pre-fill the patient finder.
+    # no_match navigate so JS can open the new patient entry form.
     _seed_account(app)
     monkeypatch.setattr(
         "app.services.epic.communication.search_patients",
@@ -212,10 +212,11 @@ def test_receive_communication_phone_no_match_dispatches_search_navigate(app, cl
     event = q.get_nowait()
     assert event["type"] == "navigate"
     assert "openemr_patient_id" not in event
+    assert "candidates" not in event
     assert event["caller_number"] == "+13035550101"
-    assert event["matched_on"] == "phone_no_match"
+    assert event["matched_on"] == "no_match"
     pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
-    assert pushed[-1]["matched_on"] == "phone_no_match"
+    assert pushed[-1]["matched_on"] == "no_match"
 
 
 def test_receive_communication_phone_lookup_single_match_pops_patient(app, client, monkeypatch):
@@ -346,6 +347,66 @@ def test_receive_communication_ss_cache_discriminates_single_match(app, client):
     event = q.get_nowait()
     assert event["type"] == "navigate"
     assert event["openemr_patient_id"] == "100"
+
+
+def test_receive_communication_multi_match_cache_dispatches_picker(app, client):
+    # Two PatientLookUp candidates both match phone — RC3 discriminator (PH) hits
+    # both rows. Picker event must carry both candidates with matched_fields.
+    _seed_account(app)
+    _cache_rows([
+        _row(pid=100, pubpid="100", phone_cell="+13035550101", _matched_on=["phone"]),
+        _row(pid=101, pubpid="101", uuid_hex="b" * 32, phone_cell="+13035550101", _matched_on=["phone"]),
+    ])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(LookupID={"ID": "+13035550101", "Type": "PH"}),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["matched_on"] == "multi_match"
+    assert "openemr_patient_id" not in event
+    candidates = event["candidates"]
+    assert len(candidates) == 2
+    assert {c["pid"] for c in candidates} == {"100", "101"}
+    for c in candidates:
+        assert c["matched_fields"] == ["phone"]
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "multi_match"
+    assert pushed[-1]["match_count"] == 2
+
+
+def test_receive_communication_direct_ambiguous_dispatches_picker(app, client, monkeypatch):
+    # No cache; direct phone search returns 2 matches — picker must be dispatched.
+    _seed_account(app)
+    rows = [
+        _row(pid=100, pubpid="100", phone_cell="+13035550101", _matched_on=["phone"]),
+        _row(pid=101, pubpid="101", uuid_hex="b" * 32, phone_cell="+13035550101", _matched_on=["phone"]),
+    ]
+    monkeypatch.setattr(
+        "app.services.epic.communication.search_patients",
+        lambda criteria: (rows, ["phone"]),
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(LookupID=None), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["matched_on"] == "multi_match"
+    assert "openemr_patient_id" not in event
+    candidates = event["candidates"]
+    assert len(candidates) == 2
+    assert {c["pid"] for c in candidates} == {"100", "101"}
+    for c in candidates:
+        assert c["matched_fields"] == ["phone"]
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "multi_match"
 
 
 def test_receive_communication_outbound_uses_caller_number_as_patient_phone(app, client):

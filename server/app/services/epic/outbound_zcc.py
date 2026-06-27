@@ -73,6 +73,12 @@ def initiate_call(
     except FileNotFoundError as e:
         raise OutboundZccError("missing_private_key", str(e)) from e
     body = build_initiate_call_body(phone, agent, epic_call_id)
+    logger.info(
+        "epic.outbound_zcc | initiate-call request "
+        f"account_id={account.account_id} "
+        f"url={url!r} "
+        f"body={body!r}"
+    )
 
     try:
         response = requests.post(
@@ -104,7 +110,12 @@ def initiate_call(
 
     phone_system_call_id: str | None = None
     try:
-        phone_system_call_id = response.json().get("PhoneSystemCallID") or None
+        resp_json = response.json()
+        phone_system_call_id = (
+            resp_json.get("PhoneSystemCallID")
+            or (resp_json.get("result") or {}).get("PhoneSystemCallID")
+            or None
+        )
     except Exception:
         pass
 
@@ -112,7 +123,7 @@ def initiate_call(
         "epic.outbound_zcc | initiate-call accepted "
         f"account_id={account.account_id} status={response.status_code} "
         f"phone_system_call_id={phone_system_call_id!r} "
-        f"response_body={body_snippet!r}"
+        f"response_body={response.text[:500]!r}"
     )
 
     return OutboundZccResult(

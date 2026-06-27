@@ -9,7 +9,7 @@ import pytest
 
 from app.extensions import db
 from app.models import AccountConfig, AuditLog, UserMapping, ZoomAccount
-from app.services.epic import screenpop_dispatch
+from app.services.epic import lookup_cache, screenpop_dispatch
 from app.services.keys import generate_keypair
 
 
@@ -205,6 +205,42 @@ def test_initiate_call_requires_backend_url(app, client):
     assert resp.status_code == 400
     failed = _audit_details(app, "epic_zcc.click_to_dial_failed")
     assert failed[-1]["reason"] == "missing_backend_url"
+
+
+def test_initiate_call_with_patient_id_preloads_lookup_cache(app, client, monkeypatch):
+    # When openemr_patient_id is present and the ZCC call succeeds, the patient row
+    # must be pre-loaded into the lookup cache so RC3 can navigate directly even
+    # when multiple patients share the same phone number.
+    lookup_cache._cache.clear()
+    _seed_account(app)
+
+    monkeypatch.setattr(
+        "app.services.epic.outbound_zcc.requests.post",
+        lambda url, json, headers, timeout: _FakeResponse(202, '{"PhoneSystemCallID":"call-xyz"}'),
+    )
+    patient_row = {
+        "pid": 100, "pubpid": "100", "uuid_hex": "a" * 32,
+        "fname": "James", "mname": None, "lname": "Harrison", "title": None,
+        "DOB": None, "sex": None,
+        "street": None, "city": None, "state": None, "postal_code": None,
+        "phone_cell": "+13035550101", "phone_home": None, "email": None,
+        "ssn_last4": None,
+    }
+    monkeypatch.setattr(
+        "app.blueprints.epic.outbound_routes.get_patient_by_pid",
+        lambda pid: patient_row if pid == "100" else None,
+    )
+
+    resp = _signed_post(client, app, _payload())
+
+    assert resp.status_code == 200
+    cached = lookup_cache.get_cached_lookup(TEST_ACCOUNT_ID, "3035550101")
+    assert cached is not None
+    assert len(cached["rows"]) == 1
+    assert cached["rows"][0]["pid"] == 100
+    assert cached["rows"][0]["_matched_on"] == ["outbound_context"]
+
+    lookup_cache._cache.clear()
 
 
 def test_initiate_call_surfaces_zcc_validation_error_with_phone_redacted(app, client, monkeypatch):

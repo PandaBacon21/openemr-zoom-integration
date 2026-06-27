@@ -338,8 +338,7 @@ $loading = "";
 
     function wrapInPhoneLink(data, type, full) {
         if (type !== 'display' || !data) { return data || ''; }
-        var pid = String(full.pid || '').replace(/\D/g, '');
-        return '<a class="zoomly-cti-phone" href="#" role="button" data-phone="' + data + '" data-pid="' + pid + '">' + data + '</a>';
+        return '<a class="zoomly-cti-phone" href="#" role="button" data-phone="' + data + '">' + data + '</a>';
     }
 
     // Capture phase fires before the #pt_table row-click handler, preventing DataTable
@@ -351,8 +350,26 @@ $loading = "";
         e.stopImmediatePropagation();
         var cti = window.top && window.top.ZoomlyEpicCti;
         if (!cti) { return; }
+        var pid = '';
+        var tr = a.closest('tr');
+        if (tr) {
+            var rowId = tr.getAttribute('id') || '';
+            if (/^pid_/.test(rowId)) {
+                pid = rowId.replace('pid_', '');
+            } else {
+                var tbl = document.getElementById('pt_table');
+                var ths = tbl ? tbl.querySelectorAll('thead th') : [];
+                var cells = tr.querySelectorAll('td');
+                for (var i = 0; i < ths.length; i++) {
+                    if (/external.{0,4}id/i.test(ths[i].textContent.trim())) {
+                        pid = (cells[i] ? cells[i].textContent.trim() : '').replace(/\D/g, '');
+                        break;
+                    }
+                }
+            }
+        }
         cti.showCallButton(a, document, function () {
-            cti.initiateCall(a.getAttribute('data-phone'), {openemrPatientId: a.getAttribute('data-pid')});
+            cti.initiateCall(a.getAttribute('data-phone'), {openemrPatientId: pid});
         });
     }, true);
 

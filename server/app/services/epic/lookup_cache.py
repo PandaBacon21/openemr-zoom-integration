@@ -79,6 +79,14 @@ def get_cached_lookup(zoom_account_id: str, phone_digits: str) -> dict | None:
     return payload
 
 
+def clear_cached_lookup(zoom_account_id: str, phone_digits: str) -> None:
+    """Remove a cache entry after RC3 has consumed it — entries are single-use."""
+    if not phone_digits:
+        return
+    with _lock:
+        _cache.pop((zoom_account_id, phone_digits), None)
+
+
 def invalidate_for_account(zoom_account_id: str) -> int:
     """Drop every cached lookup for an account (used when CTI is disabled)."""
     with _lock:

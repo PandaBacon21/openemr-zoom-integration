@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from app.models import UserMapping
 from app.services.audit import write_audit_log
-from app.services.epic.lookup_cache import get_cached_lookup
+from app.services.epic.lookup_cache import clear_cached_lookup, get_cached_lookup
 from app.services.epic.patient_search import _phone_digits, search_patients
 from app.services.epic.screenpop_dispatch import dispatch
 
@@ -66,9 +66,30 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
     # (i.e. the patient's phone), while DialedPhoneNumber is the ZCC agent-side number.
     caller_phone_raw = payload.get("caller_number") or payload.get("dialed_number")
     normalized_caller_phone = _phone_digits(caller_phone_raw) if caller_phone_raw else None
+    logger.info(
+        "epic.receive_communication | cache lookup "
+        f"account_id={account.account_id} "
+        f"caller_number={payload.get('caller_number')!r} "
+        f"dialed_number={payload.get('dialed_number')!r} "
+        f"cache_key={normalized_caller_phone!r}"
+    )
 
     row = None
     cached = get_cached_lookup(account.account_id, normalized_caller_phone or "")
+    if cached is not None:
+        logger.info(
+            "epic.receive_communication | cache hit "
+            f"account_id={account.account_id} "
+            f"cache_key={normalized_caller_phone!r} "
+            f"row_count={len(cached.get('rows') or [])}"
+        )
+        clear_cached_lookup(account.account_id, normalized_caller_phone or "")
+    else:
+        logger.info(
+            "epic.receive_communication | cache miss "
+            f"account_id={account.account_id} "
+            f"cache_key={normalized_caller_phone!r}"
+        )
     if cached is not None:
         cached_rows = cached.get("rows") or []
         if len(cached_rows) == 1:
@@ -85,8 +106,8 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
                     "missing_patient_id",
                     openemr_user_id=openemr_user_id,
                 )
-            row = _find_cached_patient(cached_rows, patient_id, patient_id_type)
-            if row is None:
+            matched = _find_cached_patients(cached_rows, patient_id, patient_id_type)
+            if len(matched) == 0:
                 return _failed(
                     account.account_id,
                     recipient_id,
@@ -96,6 +117,40 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
                         "patient_id_type": patient_id_type or None,
                         "cached_count": len(cached_rows),
                     },
+                )
+            if len(matched) == 1:
+                row = matched[0]
+            else:
+                # Discriminator matched more than one cached candidate (e.g. twins
+                # sharing a phone, or two patients with the same DOB) — dispatch a
+                # picker so the agent can select the right patient.
+                candidates = [_candidate_info(r) for r in matched]
+                event = {
+                    "type": "navigate",
+                    "matched_on": "multi_match",
+                    "caller_number": payload.get("caller_number"),
+                    "candidates": candidates,
+                }
+                subscriber_count = dispatch(account.account_id, openemr_user_id, event)
+                write_audit_log(
+                    event_type="epic_zcc.receive_communication_pushed",
+                    success=True,
+                    zoom_account_id=account.account_id,
+                    openemr_user_id=openemr_user_id,
+                    detail={
+                        "recipient_id": recipient_id,
+                        "subscriber_count": subscriber_count,
+                        "matched_on": "multi_match",
+                        "match_count": len(matched),
+                        "patient_id_type": patient_id_type or None,
+                        "call_id": payload.get("call_id"),
+                    },
+                )
+                return ReceiveCommunicationResult(
+                    pushed=True,
+                    openemr_user_id=openemr_user_id,
+                    subscriber_count=subscriber_count,
+                    event=event,
                 )
         # else 0 rows: PatientLookUp found nothing; fall through to direct search.
 
@@ -134,14 +189,21 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
             )
 
         if len(rows) != 1:
-            suffix = "ambiguous" if rows else "no_match"
-            matched_on = f"{search_type}_{suffix}"
-            finder_event = {
-                "type": "navigate",
-                "caller_number": fallback_phone,
-                "matched_on": matched_on,
-            }
-            subscriber_count = dispatch(account.account_id, openemr_user_id, finder_event)
+            if not rows:
+                event = {
+                    "type": "navigate",
+                    "matched_on": "no_match",
+                    "caller_number": fallback_phone,
+                }
+            else:
+                candidates = [_candidate_info(r) for r in rows]
+                event = {
+                    "type": "navigate",
+                    "matched_on": "multi_match",
+                    "caller_number": fallback_phone,
+                    "candidates": candidates,
+                }
+            subscriber_count = dispatch(account.account_id, openemr_user_id, event)
             write_audit_log(
                 event_type="epic_zcc.receive_communication_pushed",
                 success=True,
@@ -150,7 +212,7 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
                 detail={
                     "recipient_id": recipient_id,
                     "subscriber_count": subscriber_count,
-                    "matched_on": matched_on,
+                    "matched_on": event["matched_on"],
                     "match_count": len(rows),
                     "search_type": search_type,
                     "call_id": payload.get("call_id"),
@@ -160,7 +222,7 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
                 pushed=True,
                 openemr_user_id=openemr_user_id,
                 subscriber_count=subscriber_count,
-                event=finder_event,
+                event=event,
             )
 
         row = rows[0]
@@ -233,11 +295,27 @@ def _failed(
     )
 
 
-def _find_cached_patient(rows: list[dict], patient_id: str, patient_id_type: str | None) -> dict | None:
-    for row in rows:
-        if _patient_id_matches(row, patient_id, patient_id_type):
-            return row
-    return None
+def _find_cached_patients(rows: list[dict], patient_id: str, patient_id_type: str | None) -> list[dict]:
+    return [row for row in rows if _patient_id_matches(row, patient_id, patient_id_type)]
+
+
+def _candidate_info(row: dict) -> dict:
+    """Format a patient_data row into the shape the multi-match picker SSE event expects."""
+    last = (row.get("lname") or "").strip()
+    first = (row.get("fname") or "").strip()
+    name = f"{last}, {first}" if last and first else last or first or None
+    dob = row.get("DOB")
+    dob_str = dob.isoformat() if (dob and hasattr(dob, "isoformat")) else (str(dob) if dob else None)
+    ssn_last4 = row.get("ssn_last4")
+    return {
+        "pid": str(row["pid"]),
+        "name": name,
+        "dob": dob_str,
+        "phone": row.get("phone_cell") or row.get("phone_home"),
+        "mrn": str(row.get("pubpid") or "") or None,
+        "ssn": f"xxx-xx-{ssn_last4}" if ssn_last4 else None,
+        "matched_fields": row.get("_matched_on") or [],
+    }
 
 
 def _patient_id_matches(row: dict, patient_id: str, patient_id_type: str | None) -> bool:

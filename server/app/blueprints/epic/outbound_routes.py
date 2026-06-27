@@ -9,11 +9,13 @@ from flask import Response, current_app, g, jsonify, request
 from app.blueprints.epic import epic_bp
 from app.models import UserMapping
 from app.services.audit import write_audit_log
+from app.services.epic.lookup_cache import cache_lookup
 from app.services.epic.outbound_zcc import (
     OutboundZccError,
     OutboundZccUpstreamError,
     initiate_call,
 )
+from app.services.epic.patient_search import _phone_digits, get_patient_by_pid
 from app.services.epic.screenpop_auth import verify_bridge_signature
 
 
@@ -48,6 +50,14 @@ def cti_initiate_call(zoom_account_id: str):
         return _fail(account.account_id, "missing_phone", status=400)
     if not openemr_user_id:
         return _fail(account.account_id, "missing_openemr_user", status=400)
+
+    logger.info(
+        "epic.initiate_call | received "
+        f"account_id={account.account_id} "
+        f"phone={phone!r} "
+        f"openemr_user_id={openemr_user_id!r} "
+        f"openemr_patient_id={openemr_patient_id!r}"
+    )
 
     try:
         mapping = UserMapping.query.filter_by(
@@ -145,6 +155,39 @@ def cti_initiate_call(zoom_account_id: str):
             "has_patient_context": bool(openemr_patient_id),
         },
     )
+
+    # Pre-load the lookup cache with the known patient so ReceiveCommunication3
+    # can navigate directly without phone-based disambiguation — even if other
+    # patients share the same number.
+    if openemr_patient_id:
+        try:
+            patient_row = get_patient_by_pid(openemr_patient_id)
+            if patient_row:
+                cache_phone = _phone_digits(phone)
+                if cache_phone:
+                    patient_row["_matched_on"] = ["outbound_context"]
+                    cache_lookup(account.account_id, cache_phone, [patient_row], ["outbound_context"])
+                    logger.info(
+                        "epic.initiate_call | cache pre-loaded "
+                        f"account_id={account.account_id} "
+                        f"raw_phone={phone!r} "
+                        f"cache_key={cache_phone!r} "
+                        f"pid={patient_row.get('pid')!r} "
+                        f"name='{patient_row.get('fname')} {patient_row.get('lname')}'"
+                    )
+                else:
+                    logger.warning(
+                        "epic.initiate_call | cache pre-load skipped — phone did not normalize "
+                        f"account_id={account.account_id} "
+                        f"raw_phone={phone!r} "
+                        f"openemr_patient_id={openemr_patient_id!r}"
+                    )
+        except Exception as e:
+            logger.warning(
+                "epic.outbound_routes | patient cache pre-load failed "
+                f"account_id={account.account_id} patient_id={openemr_patient_id}: {e}"
+            )
+
     return jsonify({"status": "ok", "zcc_status_code": result.status_code}), 200
 
 

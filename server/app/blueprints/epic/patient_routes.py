@@ -122,6 +122,14 @@ def patient_lookup(zoom_account_id: str):
     phones = criteria.get("phones") or []
     if phones and (cache_phone := _phone_digits(phones[0])):
         cache_lookup(account.account_id, cache_phone, rows, queried_fields)
+        logger.info(
+            "epic.patient_lookup | cache stored "
+            f"account_id={account.account_id} "
+            f"raw_phone={phones[0]!r} "
+            f"cache_key={cache_phone!r} "
+            f"match_count={len(rows)} "
+            f"queried_fields={queried_fields!r}"
+        )
 
     write_audit_log(
         event_type="epic_zcc.patient_lookup_resolved",
