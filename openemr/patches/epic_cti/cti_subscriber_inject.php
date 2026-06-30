@@ -34,6 +34,8 @@ if ($zoomlyEpicCtiUserId !== '') {
     }
 }
 
+$_SESSION['zoomly_is_zcc_agent'] = !empty($zoomlyEpicCtiStreams) ? 1 : 0;
+
 $zoomlyEpicCtiConfig = [
     'openemrUserId' => $zoomlyEpicCtiUserId,
     'streams' => $zoomlyEpicCtiStreams,

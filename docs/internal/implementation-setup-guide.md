@@ -148,6 +148,7 @@ Use `.env.example` as the source of truth. Do not commit `.env`.
 | `OPENEMR_FLASK_SECRET`  | HMAC secret shared by OpenEMR patch code and Flask for OpenEMR-signed requests  | Generate a long random secret and use the same value in both services |
 | `API_KEY`               | API key for protected endpoint guard middleware                                 | Generate a long random secret                                         |
 | `ENABLE_DBGATE`         | Gates the DbGate database browser proxy at `/admin/db` and the React Database nav. Set `true` in dev/staging; leave unset or `false` in production | One of: `true`, `false` (default `false`)                             |
+| `ENABLE_EPIC_ZCC`       | Gates the Epic-style ZCC CTI middleware blueprints and React Epic ZCC config tab. Leave `false` unless configuring ZCC CTI demos | One of: `true`, `false` (default `false`)                             |
 
 Important: Do not change `ENCRYPTION_KEY` after accounts are registered unless you run the repository's key rotation workflow first. Existing encrypted values become unreadable if the key changes unexpectedly.
 
@@ -192,6 +193,8 @@ The Flask service builds `OPENEMR_DB_URI` from the `OPENEMR_DB_*` values and use
 | `OPENEMR_SCOPES`        | SMART Backend Services scopes requested during dynamic client registration       | Use the space-delimited scope list in `.env.example` unless the integration requirements change |
 | `APP_PUBLIC_URL`        | Public Flask URL                                                                 | Your reverse proxy/DNS URL for the Flask app                                                    |
 | `APP_INTERNAL_URL`      | Internal Flask URL used for JWKS and callback URIs during OpenEMR registration   | In compose, `http://zoom-bridge:5000`                                                           |
+| `EPIC_ZCC_CLIENT_ID`    | Global client ID shown in the Epic ZCC admin tab and expected by ZCC CTI auth    | Choose/provision for the ZCC Epic integration                                                    |
+| `ZOOMLY_EPIC_ZCC_CLIENT_URL` | Optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell      | ZCC/CCSE URL when rendering the callbar inside OpenEMR                                           |
 
 The OpenEMR container receives `OPENEMR_SETTING_site_addr_oath=${OPENEMR_PUBLIC_URL}`. This must match the public OpenEMR URL used for OAuth/FHIR flows.
 
@@ -261,6 +264,7 @@ OpenEMR patch files are baked into the custom `zoomly-openemr:local` image at bu
 - `openemr/patches/add_edit_event.php`
 - `openemr/patches/post_calendar/ajax_template.html`
 - `openemr/patches/clinical_note_fetcher/*`
+- `openemr/patches/epic_cti/*`
 - `openemr/patches/library/zoomly/ZoomBridge.php`
 
 In dev, `docker-compose.override.yml` bind-mounts these same files over the baked copies so PHP edits take effect on a page refresh without rebuilding the image. `start-dev.sh --baked` skips the override to verify the baked image; staging and prod scripts always run image-authoritative.
@@ -321,20 +325,50 @@ Only matching OpenEMR appointment categories/list option IDs pass through to Zoo
 Available settings include:
 
 - timezone
-- shared Zoom user behavior - Enable/disable multiple providers to single Zoom user
 - clinical note writeback mode: `both`, `clinical_note_only`, or `soap_only`
 - demo patient email/phone overrides
   - Currently this does nothing either way. No patient communication occurs during demos.
 
-7. Configure provider mappings.
+7. Configure user mappings.
 
 Use the config UI to map:
 
-- 1 OpenEMR provider to 1 Zoom user account
-- Multiple OpenEMR providers can be mapped to a single Zoom user account during testing.
-  - Configuration flag enabled/disabled on the Account Config page.
+- OpenEMR provider-role users to Zoom users for telehealth meeting creation
+- ZCC agent-role users to Zoom/ZCC users for Epic-ZCC screen-pop routing
+- A single mapping row can carry both roles when the same OpenEMR user is both a provider and a ZCC agent
 
-Provider mappings are required before appointment webhooks can create/update meetings.
+Provider-role mappings are required before appointment webhooks can create/update meetings. ZCC-agent-role mappings are required before Epic-ZCC screen-pop bootstrap can return stream URLs for an OpenEMR user.
+
+## Epic-ZCC CTI Setup
+
+This path is optional and disabled by default.
+
+1. Set `ENABLE_EPIC_ZCC=true` on `zoom-bridge`.
+2. Register or select a Zoom account in the admin UI.
+3. Open the account's Epic ZCC tab and initialize credentials. This generates the per-account `epic_kid`; the Client ID shown in the UI comes from `EPIC_ZCC_CLIENT_ID`.
+4. In the Zoom Admin Portal, configure the ZCC Epic integration connection settings with the generated instance URL and JWKS URL:
+
+```text
+Instance URL: https://<flask-public-host>/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth
+JWKS URL:     https://<flask-public-host>/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth/oauth2/keys/1/<epic_kid>
+```
+
+5. Save the remaining Zoom Admin Portal fields from the Epic ZCC tab:
+   - Connection Name
+   - Phone System ID and type
+   - Background User ID and type
+   - Recipient ID Type
+   - ZCC Backend URL
+6. Map OpenEMR users to Zoom users with `is_zcc_agent=true` and a matching `zcc_user_id`. Provider-role mappings can remain enabled on the same row.
+7. Configure `ZOOMLY_EPIC_ZCC_CLIENT_URL` when the OpenEMR top-nav callbar iframe should render.
+
+Operational notes:
+
+- OpenEMR click-to-call controls render only for logged-in users whose bootstrap call returns active ZCC-agent streams. Non-ZCC users do not load the callbar/subscriber assets and see plain phone numbers in demographics, patient finder, and appointment-card views.
+- Demo seed phone numbers ending in `555-####` are intentionally not clickable, even for ZCC-agent sessions, so synthetic demo numbers are not dialed through ZCC.
+- PatientLookUp results are held in a short process-local cache for ReceiveCommunication3. The cache is keyed by account + normalized phone number, is single-use once consumed by ReceiveCommunication3, and uses the same short TTL as PatientLookUp.
+- Outbound click-to-dial does not use a separate outbound-call cache. After ZCC accepts the initiate-call request, the route preloads the PatientLookUp cache with the known OpenEMR patient under the normalized dialed phone number and marks the cached row with `matched_on=outbound_context`.
+- Gunicorn currently runs one worker, so the process-local cache is consistent inside one Flask process. A future multi-worker or multi-replica deployment would need a shared cache or a different screen-pop correlation strategy.
 
 ## Zoom Webhook Setup
 

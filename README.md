@@ -6,7 +6,7 @@ Current implemented areas:
 
 - Zoom account registration, update, and deregistration
 - OpenEMR dynamic client registration + registration verification checks
-- Provider mapping management (OpenEMR provider <-> Zoom user)
+- User mapping management (OpenEMR provider and/or ZCC agent <-> Zoom user)
 - Appointment type filter management
 - OpenEMR appointment webhook handling for create, update, and delete flows
 - Meeting lifecycle handling (create/update/recreate/delete) with MeetingRecord persistence
@@ -18,8 +18,9 @@ Current implemented areas:
 - Per-account Zoom webhook URL (`/webhooks/zoom/<account_id>`) so CRC URL validation resolves the correct secret and payload account_id is cross-checked against the path
 - Audit logging for webhook intake, meeting lifecycle, note, completion, eSign-locked refusals, status transitions, hydration, and config events
 - Paginated audit log API for the admin UI
-- Per-account config records for timezone, shared Zoom user behavior, clinical note writeback mode, and demo patient contact overrides
+- Per-account config records for timezone, clinical note writeback mode, demo patient contact overrides, and Epic-ZCC behavior/settings
 - Zoom EHR Context auth and appointment lookup endpoints
+- Epic-style ZCC CTI middleware, gated by `ENABLE_EPIC_ZCC`, including OAuth/JWKS, PatientLookUp, Practitioner.Search, ReceiveCommunication3 screen-pop dispatch, OpenEMR SSE screen-pop bootstrap, ZCC user lookup, and outbound click-to-dial plumbing with ZCC-agent-only OpenEMR controls
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
@@ -77,7 +78,7 @@ Set required values. The most load-bearing ones:
 
 **Zoomly Postgres**
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
-- `DATABASE_URL` (e.g. `postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`)
+- `DATABASE_URL` is constructed by `docker-compose.yml` for `zoom-bridge` from the `POSTGRES_*` values. Set it manually only for host-side/server-only runs outside Compose.
 
 **URLs**
 - `OPENEMR_BASE_URL` (= `http://openemr:80`) — internal HTTP, used by Flask
@@ -87,8 +88,11 @@ Set required values. The most load-bearing ones:
 - `APP_INTERNAL_URL` (= `http://zoom-bridge:5000`)
 - `OPENEMR_SCOPES` — space-delimited SMART scopes
 
-**Feature flags**
+**Feature flags and Epic-ZCC**
 - `ENABLE_DBGATE` — set to `true` in dev/staging to enable the DbGate database browser proxied at `/admin/db`. Leave unset or `false` in production. See [ARCHITECTURE.md §13](ARCHITECTURE.md) for the three-layer gating model.
+- `ENABLE_EPIC_ZCC` — set to `true` only when configuring Epic-style ZCC CTI demos. When false, Flask does not register the Epic-ZCC runtime blueprints and the React UI hides the Epic ZCC tab.
+- `EPIC_ZCC_CLIENT_ID` — global client ID shown in the Epic ZCC config tab and expected by ZCC CTI auth when Epic-ZCC is enabled.
+- `ZOOMLY_EPIC_ZCC_CLIENT_URL` — optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell. The OpenEMR callbar, SSE subscriber, and click-to-call phone links render only for logged-in users whose bootstrap request returns an active ZCC-agent stream.
 
 See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) for the full env-var reference (what each variable does, where to source it, and rollback semantics for registration secrets).
 
@@ -197,14 +201,15 @@ Configuration and registration (JWT bearer protected):
 - `DELETE /config/register/<zoom_account_id>`
 - `GET /config/registrations`
 - `POST /config/register/<zoom_account_id>/verify`
+- `POST /config/ehr-credentials`
 
 Registration create/update responses include `tenant_id` for Zoom EHR Context and `note_writeback_mode` for clinical note writes. Supported writeback modes are `both`, `clinical_note_only`, and `soap_only`.
 
-Provider mapping management (JWT bearer protected):
+User/provider mapping management (JWT bearer protected):
 
 - `POST /config/providers`
 - `GET /config/providers?zoom_account_id=...`
-- `DELETE /config/providers/<openemr_provider_id>?zoom_account_id=...`
+- `DELETE /config/providers/<openemr_user_id>?zoom_account_id=...`
 
 Appointment filter management (JWT bearer protected):
 
@@ -217,6 +222,7 @@ OpenEMR and Zoom lookup helpers (JWT bearer protected):
 - `GET /openemr/providers?zoom_account_id=...`
 - `GET /openemr/appointment-types?zoom_account_id=...`
 - `GET /zoom/users?zoom_account_id=...`
+- `GET /zoom/zcc/users?zoom_account_id=...`
 
 Audit logs (JWT bearer protected):
 
@@ -224,7 +230,13 @@ Audit logs (JWT bearer protected):
 
 Feature flags (JWT bearer protected):
 
-- `GET /config/features` — returns process-wide UI feature gates (e.g. `{"db_browser": bool}`) consumed by the React `FeaturesContext` to hide/show nav entries
+- `GET /config/features` — returns process-wide UI feature gates (currently `{"db_browser": bool, "epic_zcc": bool}`) consumed by the React `FeaturesContext` to hide/show nav entries
+
+Epic-ZCC configuration (JWT bearer protected, feature-gated in the UI):
+
+- `GET /config/account/<zoom_account_id>/epic-zcc`
+- `PATCH /config/account/<zoom_account_id>/epic-zcc`
+- `POST /config/account/<zoom_account_id>/epic-zcc/initialize`
 
 DbGate database browser proxy — **non-prod only** (JWT cookie protected, since iframes can't send custom auth headers). The blueprint is conditionally registered based on `ENABLE_DBGATE`; the DbGate container is gated behind the `non-prod` compose profile. In production both layers are off, so these routes return 404 and the upstream container isn't running:
 
@@ -244,7 +256,23 @@ OpenEMR-signed note endpoints:
 
 Demo hydration (JWT bearer protected):
 
-- `POST /config/demo/hydrate` — idempotent backfill of the next-2-weekdays × 2-slots-per-day appointment + Zoom meeting grid for every active provider mapping on the account
+- `POST /config/demo/hydrate` — idempotent backfill of the next-2-weekdays × 2-slots-per-day appointment + Zoom meeting grid for every active provider-role user mapping on the account
+
+Epic-ZCC CTI endpoints:
+
+- Registered only when `ENABLE_EPIC_ZCC=true`
+- External Zoom/Epic-shaped base: `/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth`
+- `POST /oauth2/token`
+- `GET /oauth2/keys/1/<epic_kid>`
+- `POST /api/epic/2012/EMPI/Patient/PATIENTLOOKUP/Lookup`
+- `GET /api/FHIR/R4/Practitioner`
+- `POST /api/epic/2023/Common/Utility/RECEIVECOMMUNICATION3/ReceiveCommunication3`
+- `GET /screenpop/stream`
+- `POST /cti/initiate-call`
+- OpenEMR-facing bootstrap base: `/zoomly/epic-zcc`
+- `POST /screenpop/bootstrap`
+
+OpenEMR click-to-call controls are intentionally session-gated. Non-ZCC users see plain phone numbers and no callbar/subscriber assets. Demo seed phone numbers ending in `555-####` are also left unlinked so synthetic demo numbers are not dialed through ZCC.
 
 Inbound webhook endpoints:
 
@@ -274,6 +302,6 @@ server/scripts/test.sh
 
 This runs `uv run pytest -q` from the `server/` directory with `UV_CACHE_DIR` pinned to `server/.uv-cache` so it works in restricted/sandboxed environments. Requires `uv` installed on the host plus `uv sync --group dev` first.
 
-Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, provider mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, eSign-locked encounter writeback refusal (encounter-, SOAP-, and Clinical-Notes-level locks), forward-only appointment status state machine including the `patient_tracker_element` sync that keeps the Flow Board aligned, hydration service helpers and orchestrator, past locked-encounter seeder, demo seed/reset contracts, the `/config/features` feature-flag endpoint, Zoom lookups, protected blueprint endpoints, and migration contract checks.
+Current test suite coverage includes auth/JWKS (endpoint hit audits, OpenEMR token refresh + verify outcomes, Zoom token refresh + credentials-validation outcomes), registration lifecycle and updates, account config migration contracts, user mappings, appointment filters, appointment event processing/webhooks (including the `appointment.deleted` preserve-vs-delete branch on `ClinicalNoteRecord` presence), audit logging and audit API filtering, EHR Context auth/appointment lookup, OpenEMR lookups/writeback, Epic-ZCC auth/PatientLookUp/Practitioner/ReceiveCommunication3/screen-pop/outbound/config flows, clinical note writeback mode routing, SOAP/Clinical Notes form upsert dedup (encounter-based), `MeetingRecord.clinical_note` ordering guarantees, manual `fetch_zoom_note` audit/log coverage, eSign-locked encounter writeback refusal (encounter-, SOAP-, and Clinical-Notes-level locks), forward-only appointment status state machine including the `patient_tracker_element` sync that keeps the Flow Board aligned, hydration service helpers and orchestrator, past locked-encounter seeder, demo seed/reset contracts, the `/config/features` feature-flag endpoint, Zoom lookups, protected blueprint endpoints, and migration contract checks.
 
-Latest backend run result in this workspace: `377 passed`.
+Latest backend run result in this workspace: `474 passed`.

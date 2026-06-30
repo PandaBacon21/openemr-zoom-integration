@@ -75,6 +75,7 @@ COPY --chown=apache:apache --chmod=644 \
      openemr/patches/epic_cti/cti_subscriber.js \
      openemr/patches/epic_cti/cti_subscriber_inject.php \
      openemr/patches/epic_cti/screenpop_stream.php \
+     openemr/patches/epic_cti/cti_phone_inject.js \
      /var/www/localhost/htdocs/openemr/interface/epic_cti/
 
 # ─── Patient Dashboard / Finder CTI phone links ──────────────────────────────

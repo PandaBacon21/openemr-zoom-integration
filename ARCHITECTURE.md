@@ -1,15 +1,18 @@
 # Zoomly — Architecture & Deployment Handoff
 
-> Scope: documents the **current docker-compose state** (dev + staging) as of
-> Sprint 13.
+> Scope: documents the **current docker-compose state** (dev, staging, and
+> production-shaped local runs) as of Sprint 13.
 
 ---
 
 ## 1. What Zoomly is, in one paragraph
 
 Zoomly is a sandbox demo Electronic Health Record (EHR) environment that
-integrates Zoom solutions (meetings and clinical notes; ZCC/ZVA on the
-roadmap) with OpenEMR 8.0.0 via a Python Flask middleware application `zoom-bridge`. It is **not a production clinical system** though it is a modified version of OpemEMR which is an open source production capable EHR, typically for smaller practices or clinics — it
+integrates Zoom solutions (meetings, clinical notes, and an Epic-style ZCC
+CTI integration; ZVA is next on the roadmap) with OpenEMR 8.0.0 via a
+Python Flask middleware application `zoom-bridge`. It is **not a production
+clinical system** though it is a modified version of OpenEMR, an open source
+production-capable EHR typically used by smaller practices or clinics. It
 powers SE-led demos showcasing real EHR + telehealth workflows. The stack
 runs as a single instance per demo deployment. Internal services are segmented
 across two Docker bridge networks.
@@ -65,6 +68,9 @@ Key shapes to internalize:
 - **DbGate is non-prod only.** Dashed arrows mark its paths. In prod it's
   not started, the Flask `/admin/db` proxy is unregistered, and the React UI
   hides the nav entry (§13).
+- **Epic-ZCC CTI is feature gated.** When `ENABLE_EPIC_ZCC=false`, Flask does
+  not register the `/zoomly/<account>/interconnect-amcurprd-oauth/*` or
+  `/zoomly/epic-zcc/*` blueprints and the React UI hides the Epic ZCC tab.
 - **`zoom-module-init`** is a one-shot container that runs during stack
   startup and exits. Omitted from this diagram — it has no runtime data flow.
   (The previous `branding` init container was retired when patches + branding
@@ -293,7 +299,7 @@ sequenceDiagram
     OE->>OE: ZoomBridge::sign() — HMAC body<br/>with OPENEMR_FLASK_SECRET
     OE->>Flask: POST /webhooks/openemr<br/>X-Zoomly-Signature: ...
     Flask->>Flask: verify HMAC
-    Flask->>Postgres: SELECT ProviderMapping<br/>(openemr_provider_id → zoom_user_id)
+    Flask->>Postgres: SELECT UserMapping<br/>(openemr_user_id → zoom_user_id)
     Flask->>Zoom: POST /users/<zoom_user>/meetings
     Zoom-->>Flask: meeting JSON (id, join_url)
     Flask->>Postgres: INSERT MeetingRecord + MeetingPatient
@@ -309,25 +315,86 @@ present represents real chart data that should never be silently cleaned up.
 A `ON DELETE CASCADE` on `clinical_note_records.zoom_meeting_id` is a safety
 net at the DB layer for any future raw-delete path.
 
+### 6c. ZCC call event → OpenEMR screen pop
+
+The Epic-style CTI path is account-scoped under
+`/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth` and is registered only
+when `ENABLE_EPIC_ZCC=true`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant ZCC as Zoom Contact Center
+    participant Flask as zoom-bridge
+    participant MariaDB
+    participant Postgres
+    participant OE as OpenEMR browser
+
+    ZCC->>Flask: POST /oauth2/token<br/>(Zoom-signed JWT assertion)
+    Flask->>Flask: verify assertion against Zoom JWKS
+    Flask->>Postgres: store encrypted Epic-ZCC bearer token
+    Flask-->>ZCC: bearer token
+
+    ZCC->>Flask: PatientLookUp(2012)<br/>(phone/DOB/MRN/SSN criteria)
+    Flask->>MariaDB: search OpenEMR patients
+    Flask->>Flask: cache results by account + normalized phone
+    Flask-->>ZCC: XML PatientLookUp response
+
+    OE->>Flask: POST /zoomly/epic-zcc/screenpop/bootstrap<br/>(HMAC signed)
+    Flask-->>OE: account-scoped SSE stream URLs<br/>(active ZCC-agent mappings only)
+    OE->>Flask: GET /screenpop/stream
+
+    ZCC->>Flask: ReceiveCommunication3<br/>(recipient + caller context)
+    Flask->>Postgres: resolve UserMapping.is_zcc_agent
+    Flask->>Flask: consume PatientLookUp cache<br/>or search direct criteria
+    Flask-->>OE: SSE navigate event
+    OE->>OE: open patient chart or finder
+```
+
+Operational notes:
+
+- OpenEMR ZCC controls are gated by the same bootstrap result used for screen
+  pops. `cti_subscriber_inject.php` stores whether the logged-in OpenEMR user
+  received any active ZCC-agent streams in `$_SESSION['zoomly_is_zcc_agent']`;
+  `main.php`, `cti_panel.php`, appointment-card phone links, demographics, and
+  patient finder phone links only render CTI controls for those sessions.
+  Non-ZCC users see plain phone numbers and no callbar/subscriber assets.
+- Demo seed phone numbers ending in `555-####` are intentionally not made
+  clickable by the shared OpenEMR phone-link helper or the legacy frame
+  injector, so synthetic demo numbers are not sent to ZCC.
+- PatientLookUp results are held in a short process-local cache keyed by
+  account + normalized caller phone number. The cache is single-use once
+  consumed by ReceiveCommunication3 and uses the same short TTL as
+  PatientLookUp.
+- Outbound click-to-dial does not use a separate outbound-call cache. After
+  ZCC accepts `initiate-call`, Zoomly preloads the PatientLookUp cache with
+  the known OpenEMR patient under the normalized dialed phone number and marks
+  the cached row with `matched_on=outbound_context`.
+- Gunicorn currently runs one worker, so the process-local cache is
+  consistent inside one Flask process. A future multi-worker or multi-replica
+  deployment would need a shared cache or a different screen-pop correlation
+  strategy.
+
 ---
 
 ## 7. Persistent state
 
 Three categories. The first is runtime data, the second is code/config
-shipped to OpenEMR via bind mount, the third is application logs.
+mounted into containers for local state or dev iteration, the third is
+application logs.
 
 ### 7a. Named volumes (real runtime state)
 
-| Volume          | Container path                       | Contents                                                                                                                                        | Blast radius if lost                                                        |
-| --------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `db_data`       | `mariadb:/var/lib/mysql`             | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                  | Total demo loss; re-seed required                                           |
-| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, meeting records, clinical note records, audit log, provider mappings, encryption-at-rest keys for stored secrets | All Zoom integrations break; re-registration required for each account      |
-| `openemr_sites` | `openemr:/var/www/.../openemr/sites` | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                               | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
-| `openemr_logs`  | `openemr:/var/log`                   | OpenEMR Apache + PHP error logs                                                                                                                 | Diagnostic data only — non-load-bearing                                     |
+| Volume          | Container path                       | Contents                                                                                                                                                                 | Blast radius if lost                                                        |
+| --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `db_data`       | `mariadb:/var/lib/mysql`             | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                                           | Total demo loss; re-seed required                                           |
+| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, user mappings, meeting records, clinical note records, audit log, Epic-ZCC token cache, encryption-at-rest ciphertexts for stored secrets | All Zoom integrations break; re-registration required for each account      |
+| `openemr_sites` | `openemr:/var/www/.../openemr/sites` | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                                                        | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
+| `openemr_logs`  | `openemr:/var/log`                   | OpenEMR Apache + PHP error logs                                                                                                                                          | Diagnostic data only — non-load-bearing                                     |
 
 (The previous `openemr_public` named volume was retired when branding moved into the custom OpenEMR image — `openemr/Dockerfile` now lays the Zoom logos and favicon under `/var/www/.../openemr/public/images/logos/` at build time.)
 
-### 7b. Bind mounts — code/config shipped to running containers
+### 7b. Bind mounts and dev shadow mounts
 
 PHP patches and branding are baked into the custom OpenEMR image
 (`openemr/Dockerfile`). In dev, the auto-loaded `docker-compose.override.yml`
@@ -337,17 +404,33 @@ baked image as it would behave in staging/prod. Staging and prod scripts pass
 `-f docker-compose.yml` explicitly so they never see the override and are
 always image-authoritative.
 
-| Source (repo)          | Target (container)             | Purpose                                                                                                             |
-| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `./keys`               | `zoom-bridge:/app/keys`        | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive. |
-| `./server/logs`        | `zoom-bridge:/app/logs`        | Flask app logs (also written to stdout)                                                                             |
-| `./server/migrations`  | `zoom-bridge:/app/migrations`  | Alembic migration files                                                                                             |
-| `./server/alembic.ini` | `zoom-bridge:/app/alembic.ini` | Alembic config                                                                                                      |
+Base Compose always mounts the durable local paths that must survive image
+rebuilds:
+
+| Source (repo)   | Target (container)      | Purpose                                                                                                             |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `./keys`        | `zoom-bridge:/app/keys` | **Per-account RSA private keys** used for SMART on FHIR `private_key_jwt` assertions. Gitignored. Highly sensitive. |
+| `./server/logs` | `zoom-bridge:/app/logs` | Flask app logs (also written to stdout)                                                                             |
+
+The dev override adds live-code and patch shadow mounts so edits take effect
+without rebuilding images:
+
+| Source (repo)                                        | Target (container)             | Purpose                                             |
+| ---------------------------------------------------- | ------------------------------ | --------------------------------------------------- |
+| `./server/app`                                       | `zoom-bridge:/app/app`         | Flask live-code mount                               |
+| `./server/tests`                                     | `zoom-bridge:/app/tests`       | Live test mount                                     |
+| `./seed_data`                                        | `zoom-bridge:/seed_data`       | Test/helper access to seed files                    |
+| `./openemr/patches`                                  | `zoom-bridge:/patches`         | Test/helper access to OpenEMR patches               |
+| `./server/migrations`                                | `zoom-bridge:/app/migrations`  | Alembic migration live mount                        |
+| `./server/alembic.ini`                               | `zoom-bridge:/app/alembic.ini` | Alembic config live mount                           |
+| `./server/config.py`                                 | `zoom-bridge:/app/config.py`   | Flask config live mount                             |
+| individual `openemr/patches/*` files and directories | `openemr:/var/www/...`         | Shadow baked PHP patches for page-refresh iteration |
 
 The full set of PHP files baked into the OpenEMR image is enumerated in
 `openemr/Dockerfile`. Notable patches: `AuthorizationController.php` (DELETE
-column-name fix), `RsaSha384Signer.php` (multi-client JWT kid lookup — see
-`TD-02` in `CLAUDE.md`), the four `zoom_appointment_listener` module files,
+column-name fix), `RsaSha384Signer.php` (multi-client JWT kid lookup),
+the four `zoom_appointment_listener` module files,`clinical_note_fetcher/`,
+`epic_cti/`, patient dashboard/finder CTI linkpatches, Flow Board patches,
 and `library/zoomly/ZoomBridge.php` (shared HMAC signing helper).
 
 ### 7c. K8s notes on persistence
@@ -372,16 +455,17 @@ Secrets are flagged. Everything else is operational config.
 
 #### Database & service URLs
 
-| Var                                   | Example value                                    | Sensitive?        | Purpose                                     |
-| ------------------------------------- | ------------------------------------------------ | ----------------- | ------------------------------------------- |
-| `DATABASE_URL`                        | `postgresql+psycopg2://...@postgres:5432/zoomly` | yes (contains pw) | SQLAlchemy connection to Zoomly Postgres    |
-| `OPENEMR_DB_URI`                      | (built from `OPENEMR_DB_USER`/`PASS`/`HOST`)     | yes               | Direct MariaDB connection for raw queries   |
-| `OPENEMR_DB_USER` / `OPENEMR_DB_PASS` | `openemr` / \*\*\*                               | yes               | MariaDB credentials                         |
-| `OPENEMR_BASE_URL`                    | `http://openemr:80`                              | no                | Internal OpenEMR HTTP endpoint              |
-| `OPENEMR_FHIR_BASE_URL`               | `http://openemr:80/apis/default/fhir`            | no                | Internal OpenEMR FHIR endpoint              |
-| `OPENEMR_PUBLIC_URL`                  | `https://openemr-dev.theloosemoose.us`           | no                | Used only for OAuth2 `aud` claims           |
-| `APP_PUBLIC_URL`                      | `https://zoom-bridge-dev.theloosemoose.us`       | no                | Used for webhook callback URLs sent to Zoom |
-| `APP_INTERNAL_URL`                    | `http://zoom-bridge:5000`                        | no                | Internal self-reference for the admin proxy |
+| Var                                   | Example value                                    | Sensitive?        | Purpose                                                                     |
+| ------------------------------------- | ------------------------------------------------ | ----------------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL`                        | `postgresql+psycopg2://...@postgres:5432/zoomly` | yes (contains pw) | SQLAlchemy connection to Zoomly Postgres                                    |
+| `OPENEMR_DB_URI`                      | (built from `OPENEMR_DB_USER`/`PASS`/`HOST`)     | yes               | Direct MariaDB connection for raw queries                                   |
+| `OPENEMR_DB_USER` / `OPENEMR_DB_PASS` | `openemr` / \*\*\*                               | yes               | MariaDB credentials                                                         |
+| `OPENEMR_BASE_URL`                    | `http://openemr:80`                              | no                | Internal OpenEMR HTTP endpoint                                              |
+| `OPENEMR_FHIR_BASE_URL`               | `http://openemr:80/apis/default/fhir`            | no                | Internal OpenEMR FHIR endpoint                                              |
+| `OPENEMR_SCOPES`                      | `system/Patient.read ...`                        | no                | SMART Backend Services scopes requested during OpenEMR dynamic registration |
+| `OPENEMR_PUBLIC_URL`                  | `https://openemr-dev.theloosemoose.us`           | no                | Used only for OAuth2 `aud` claims                                           |
+| `APP_PUBLIC_URL`                      | `https://zoom-bridge-dev.theloosemoose.us`       | no                | Used for webhook callback URLs sent to Zoom                                 |
+| `APP_INTERNAL_URL`                    | `http://zoom-bridge:5000`                        | no                | Internal self-reference for the admin proxy                                 |
 
 #### Application secrets
 
@@ -396,21 +480,30 @@ Secrets are flagged. Everything else is operational config.
 
 #### Operational
 
-| Var             | Default                                        | Purpose                                                                                    |
-| --------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `FLASK_ENV`     | `production` (dev override sets `development`) | Selects `ProductionConfig`/`DevelopmentConfig`                                             |
-| `LOG_LEVEL`     | `DEBUG`                                        | Python log level                                                                           |
-| `LOG_FILE`      | `./logs/zoomly.log`                            | File log path (also writes to stdout)                                                      |
-| `KEYS_BASE_DIR` | `/app/keys`                                    | Where per-account RSA private keys are stored                                              |
-| `ENABLE_DBGATE` | `false`                                        | Gates the `/admin/db` reverse proxy + `/config/features` `db_browser` flag. Non-prod only. |
+| Var                  | Default                                        | Purpose                                                                                    |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `FLASK_ENV`          | `production` (dev override sets `development`) | Selects `ProductionConfig`/`DevelopmentConfig`                                             |
+| `LOG_LEVEL`          | `DEBUG`                                        | Python log level                                                                           |
+| `LOG_FILE`           | `./logs/zoomly.log`                            | File log path (also writes to stdout)                                                      |
+| `KEYS_BASE_DIR`      | `/app/keys`                                    | Where per-account RSA private keys are stored                                              |
+| `ENABLE_DBGATE`      | `false`                                        | Gates the `/admin/db` reverse proxy + `/config/features` `db_browser` flag. Non-prod only. |
+| `ENABLE_EPIC_ZCC`    | `false`                                        | Gates the Epic-style ZCC CTI middleware blueprints and `/config/features` `epic_zcc` flag. |
+| `EPIC_ZCC_CLIENT_ID` | unset                                          | Global client ID shown in the Epic ZCC config tab and expected by ZCC CTI auth.            |
+
+#### OpenEMR container operational env
+
+| Var                          | Default | Purpose                                                                 |
+| ---------------------------- | ------- | ----------------------------------------------------------------------- |
+| `ZOOMLY_EPIC_ZCC_CLIENT_URL` | unset   | Optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell. |
 
 #### Per-account values
 
 Not env vars — stored encrypted in Postgres `zoom_accounts` and
 `account_configs`. Includes: Zoom client ID/secret, Zoom webhook secret,
 OpenEMR client ID/secret, EHR context creds, timezone, behavioral toggles
-(`note_writeback_mode`, `allow_shared_zoom_user`, demo overrides). All
-encryption-at-rest uses `ENCRYPTION_KEY` above.
+(`note_writeback_mode`, demo overrides, Epic-ZCC behavior/settings). Epic-ZCC
+bearer-token cache fields live on `zoom_accounts`. All encryption-at-rest uses
+`ENCRYPTION_KEY` above.
 
 ---
 
@@ -489,7 +582,7 @@ The gunicorn-gevent config is what staging and production use.
 ## 10. OpenEMR PHP patches
 
 OpenEMR doesn't ship the integration hooks Zoomly needs, so the custom image
-(`openemr/Dockerfile`) layers 15+ patched PHP files over the upstream
+(`openemr/Dockerfile`) layers every patch under `openemr/patches/` over the upstream
 `openemr/openemr:8.0.0` base. Editing a patch in `openemr/patches/` requires a rebuild
 (`docker compose build openemr`) for the change to land in the image; the dev
 override (`docker-compose.override.yml`, auto-loaded by `start-dev.sh`)
@@ -498,13 +591,19 @@ cost. `start-dev.sh --baked` opts out of the override to verify the baked
 image. See §7b. Two things worth knowing:
 
 1. **One patch is for an actual upstream bug** that hasn't been merged
-   yet: `RsaSha384Signer.php` (multi-client JWT kid lookup). Tracked as
-   `TD-02` in `CLAUDE.md` — an upstream PR is the long-term fix, our patch
-   is the interim.
+   yet: `RsaSha384Signer.php` (multi-client JWT kid lookup).
 
 2. **All PHP→Flask calls share a single helper** at `library/zoomly/ZoomBridge.php`
    that signs requests with HMAC-SHA256 using `OPENEMR_FLASK_SECRET`. The
    secret is shared by env var between both containers; both must agree.
+
+3. **Epic-ZCC phone controls are session-gated.** The screen-pop bootstrap
+   returns SSE streams only for active `UserMapping.is_zcc_agent` mappings.
+   OpenEMR stores that result in `$_SESSION['zoomly_is_zcc_agent']`, and the
+   callbar/subscriber plus demographics, patient finder, and appointment-card
+   phone links render only when that flag is set. `cti_phone_inject.js`
+   centralizes click-to-call anchoring and suppresses demo seed phone numbers
+   ending in `555-####`.
 
 ---
 
@@ -529,15 +628,17 @@ variables persist across file boundaries:
 ./seed_data/reset.sh && ./seed_data/seed.sh
 ```
 
-Produces a fixed dataset: 4 facilities, 17 providers, 8 nurses/MAs, 51
-patients, 175 weekday appointments, persona-driven clinical data. The
-operation is idempotent — running it twice produces the same state.
+Produces a fixed dataset: 4 facilities, 18 patient-panel providers, 4 nurses,
+4 medical assistants, 108 patients (PIDs 100-207), 292 weekday appointments,
+regional pharmacies/payers, complete patient contact/insurance fields,
+provider+nurse care teams, and persona-driven clinical data. The operation is
+idempotent — running it twice produces the same state.
 
 **Today this is an interactive shell flow.** The seed scripts use a
-host-side `mariadb` client (invoked via `docker exec`) to cat-pipe the SQL
-files into MariaDB. A "Demo Reset capability" Flask endpoint is on the
-roadmap and would reuse the pattern from the existing `/config/demo/hydrate`
-endpoint.
+host-side shell pipeline into `docker exec -i <mariadb-container> mariadb` so
+the SQL files execute inside the MariaDB container in one session. A "Demo
+Reset capability" Flask endpoint is on the roadmap and would reuse the pattern
+from the existing `/config/demo/hydrate` endpoint.
 
 ---
 
@@ -661,7 +762,8 @@ matter how the migration is structured.
   an image.
 - **`.env` → Secret + ConfigMap.** Split sensitive values (passwords, JWT
   secrets, `ENCRYPTION_KEY`, `OPENEMR_FLASK_SECRET`) into a Secret;
-  operational config (URLs, log level, `ENABLE_DBGATE`) into a ConfigMap. See
+  operational config (URLs, log level, `ENABLE_DBGATE`, `ENABLE_EPIC_ZCC`,
+  `EPIC_ZCC_CLIENT_ID`, `ZOOMLY_EPIC_ZCC_CLIENT_URL`) into a ConfigMap. See
   §8 for the full inventory.
 - **NetworkPolicy: deny `openemr` → `postgres`.** Today enforced by separate
   Compose networks (§4). Load-bearing — Postgres holds the
@@ -698,9 +800,9 @@ matter how the migration is structured.
   the actual SecurityContext is being authored. The `zoomly-openemr:local`
   image already runs as `apache` (uid 1000) from the upstream base, no
   change needed there.
-- **Move seed/reset into a Flask endpoint.** Today `seed.sh` runs on the host
-  via `docker exec` against a `mariadb` client. Pattern to copy: the existing
-  `/config/demo/hydrate` endpoint.
+- **Move seed/reset into a Flask endpoint.** Today `seed.sh` runs from the
+  host shell and pipes SQL into `docker exec -i <mariadb-container> mariadb`.
+  Pattern to copy: the existing `/config/demo/hydrate` endpoint.
 
 ### Must preserve
 
@@ -728,8 +830,6 @@ matter how the migration is structured.
 
 ## Appendix A: Infra-relevant directory map
 
-Application/clinical concerns omitted — see `CLAUDE.md` for the full tree.
-
 ```
 OpenEMR-Integration/
 ├── docker-compose.yml                    ← Base (production-shaped); openemr service uses build: openemr/Dockerfile
@@ -738,7 +838,6 @@ OpenEMR-Integration/
 ├── docker-compose.staging.yml            ← Staging overlay (healthcheck only)
 ├── .env                                  ← gitignored
 ├── ARCHITECTURE.md                       ← (this file)
-├── CLAUDE.md                             ← Application-level context
 ├── openemr/
 │   ├── Dockerfile                        ← Custom OpenEMR image — bakes patches/ + branding/ into FROM openemr/openemr:8.0.0
 │   ├── branding/                         ← Zoom-branded assets (baked into the image)
@@ -750,6 +849,10 @@ OpenEMR-Integration/
 │       ├── patient_tracker.inc.php
 │       ├── patient_tracker.php
 │       ├── clinical_note_fetcher/        ← forms.php, fetch_zoom_note.php, complete_zoom_note.php
+│       ├── epic_cti/                     ← CTI panel, click-to-dial proxy, SSE subscriber/stream helper, phone-link helper
+│       ├── demographics.php              ← ZCC-agent-gated patient dashboard CTI phone links
+│       ├── dynamic_finder.php            ← ZCC-agent-gated patient finder CTI phone links
+│       ├── main.php                      ← Top-nav patch that loads Epic-ZCC assets/panel
 │       ├── library/zoomly/ZoomBridge.php ← Shared HMAC helper
 │       ├── post_calendar/                ← day/week/month ajax_template.html
 │       └── zoom_appointment_listener/    ← AppointmentListener, Bootstrap, DialogCloseListener, openemr.bootstrap

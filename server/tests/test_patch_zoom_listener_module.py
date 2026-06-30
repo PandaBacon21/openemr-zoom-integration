@@ -1,12 +1,20 @@
 from pathlib import Path
 
 
+def _patches_root() -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    host_path = repo_root / "openemr" / "patches"
+    if host_path.exists():
+        return host_path
+    return repo_root / "patches"
+
+
 def _patch_path(filename: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "patches" / "zoom_appointment_listener" / filename
+    return _patches_root() / "zoom_appointment_listener" / filename
 
 
 def _epic_cti_path(filename: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "patches" / "epic_cti" / filename
+    return _patches_root() / "epic_cti" / filename
 
 
 def test_bootstrap_registers_dialog_close_listener():
@@ -81,7 +89,7 @@ def test_epic_cti_panel_frames_configured_zoom_cti_url():
 
 
 def test_main_patch_loads_epic_cti_assets_and_panel():
-    text = (Path(__file__).resolve().parents[2] / "patches" / "main.php").read_text(encoding="utf-8")
+    text = (_patches_root() / "main.php").read_text(encoding="utf-8")
 
     assert "/interface/epic_cti/cti_panel.css" in text
     assert "cti_subscriber_inject.php" in text

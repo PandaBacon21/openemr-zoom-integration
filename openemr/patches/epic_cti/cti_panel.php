@@ -8,7 +8,7 @@
  */
 
 $zoomlyEpicCtiClientUrl = getenv('ZOOMLY_EPIC_ZCC_CLIENT_URL') ?: '';
-if ($zoomlyEpicCtiClientUrl !== '') :
+if ($zoomlyEpicCtiClientUrl !== '' && !empty($zoomlyEpicCtiStreams)) :
 ?>
 <div id="zoomly-epic-cti-shell" class="zoomly-epic-cti-shell is-collapsed">
     <button

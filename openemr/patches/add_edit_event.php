@@ -1428,11 +1428,15 @@ if (empty($_GET['prov']) && empty($_GET['group'])) { ?>
         <?php
         foreach ($patienttitle as $entry) {
             if (!empty($entry['phone'])) {
-                echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
-                    . ' data-phone="' . attr($entry['phone']) . '"'
-                    . ' data-pid="' . attr((string)$patientid) . '"'
-                    . ' data-name="' . attr($patientname) . '">'
-                    . text($entry['phone']) . '</a>';
+                if (!empty($_SESSION['zoomly_is_zcc_agent'])) {
+                    echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
+                        . ' data-phone="' . attr($entry['phone']) . '"'
+                        . ' data-pid="' . attr((string)$patientid) . '"'
+                        . ' data-name="' . attr($patientname) . '">'
+                        . text($entry['phone']) . '</a>';
+                } else {
+                    echo text($entry['label']) . ': ' . text($entry['phone']);
+                }
             }
             if (count($patienttitle) > 1) {
                 echo "<br />";
@@ -1476,11 +1480,15 @@ if ($_GET['group'] === true && $have_group_global_enabled) { ?>
             <?php
             foreach ($patienttitle as $entry) {
                 if (!empty($entry['phone'])) {
-                    echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
-                        . ' data-phone="' . attr($entry['phone']) . '"'
-                        . ' data-pid="' . attr((string)$patientid) . '"'
-                        . ' data-name="' . attr($patientname) . '">'
-                        . text($entry['phone']) . '</a>';
+                    if (!empty($_SESSION['zoomly_is_zcc_agent'])) {
+                        echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
+                            . ' data-phone="' . attr($entry['phone']) . '"'
+                            . ' data-pid="' . attr((string)$patientid) . '"'
+                            . ' data-name="' . attr($patientname) . '">'
+                            . text($entry['phone']) . '</a>';
+                    } else {
+                        echo text($entry['label']) . ': ' . text($entry['phone']);
+                    }
                 }
                 if (count($patienttitle) > 1) {
                     echo "<br />";
@@ -2117,20 +2125,21 @@ function SubmitForm() {
     return true;
 }
 </script>
+<?php if (!empty($_SESSION['zoomly_is_zcc_agent'])): ?>
+<script src="<?php echo attr($GLOBALS['webroot']); ?>/interface/epic_cti/cti_phone_inject.js"></script>
 <script>
-document.addEventListener('click', function (e) {
-    var a = e.target.closest && e.target.closest('a.zoomly-cti-phone');
+document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a.zoomly-cti-phone");
     if (!a) { return; }
     e.preventDefault();
-    var cti = window.top && window.top.ZoomlyEpicCti;
-    if (!cti) { return; }
-    cti.showCallButton(a, document, function () {
-        cti.initiateCall(a.dataset.phone, {
-            openemrPatientId: a.dataset.pid,
-            patientName: a.dataset.name
-        });
+    var zpi = window.ZoomlyPhoneInject;
+    if (!zpi) { return; }
+    zpi.dial(a, document, a.dataset.phone, {
+        openemrPatientId: a.dataset.pid || "",
+        patientName: a.dataset.name || ""
     });
 });
 </script>
+<?php endif; ?>
 </body>
 </html>

@@ -34,6 +34,9 @@ Related planning:
 | `openemr_token_expires_at`          | `DateTime(timezone=True)`    | no       | OpenEMR token expiry                                           |
 | `private_key_path`                  | `String(512)`                | no       | Filesystem path to per-account private key                     |
 | `kid`                               | `String(256)`                | no       | JWKS key id used for private_key_jwt                           |
+| `epic_kid`                          | `String(64)`                 | no       | Per-account Epic-ZCC JWKS key id                               |
+| `epic_zcc_bearer_token`             | `EncryptedType(Text)`        | no       | Current opaque Epic-ZCC bearer token, encrypted at rest        |
+| `epic_zcc_bearer_token_expires_at`  | `DateTime(timezone=True)`    | no       | Expiry for the Epic-ZCC bearer token                           |
 | `is_active`                         | `Boolean`                    | yes      | Soft-active registration state                                 |
 | `created_at`                        | `DateTime(timezone=True)`    | yes      | Created timestamp (UTC)                                        |
 | `updated_at`                        | `DateTime(timezone=True)`    | yes      | Updated timestamp (UTC)                                        |
@@ -41,7 +44,7 @@ Related planning:
 Relationships:
 
 - `config` -> `AccountConfig | None`
-- `provider_mappings` -> `ProviderMapping[]`
+- `user_mappings` -> `UserMapping[]`
 - `appointment_type_filters` -> `AppointmentTypeFilter[]`
 - `meeting_records` -> `MeetingRecord[]`
 
@@ -50,36 +53,47 @@ Relationships:
 | Column                                | Type                      | Required | Notes                                                                                                            |
 | ------------------------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
 | `account_id`                          | `String(128, FK)`         | yes      | Primary key and FK to `zoom_accounts.account_id`                                                                 |
-| `timezone`                            | `String(64)`              | yes      | Account-level IANA timezone, used as the *fallback* for Zoom meeting scheduling when a mapped provider has no `ProviderMapping.zoom_user_timezone` set. Also used for EHR appointment window conversion. Default `America/New_York` |
-| `allow_shared_zoom_user`              | `Boolean`                 | yes      | Allows shared Zoom user behavior in config workflows; default `false`                                            |
+| `timezone`                            | `String(64)`              | yes      | Account-level IANA timezone, used as the *fallback* for Zoom meeting scheduling when a mapped provider has no `UserMapping.zoom_user_timezone` set. Also used for EHR appointment window conversion. Default `America/New_York` |
 | `demo_patient_email_override_enabled` | `Boolean`                 | yes      | Enables demo patient email override                                                                              |
 | `demo_patient_email_override`         | `String(256)`             | no       | Optional demo override for patient email communications                                                          |
 | `demo_patient_phone_override_enabled` | `Boolean`                 | yes      | Enables demo patient phone override                                                                              |
 | `demo_patient_phone_override`         | `String(32)`              | no       | Optional demo override for patient phone/SMS communications                                                      |
 | `note_writeback_mode`                 | `String(32)`              | yes      | Controls note writeback target: `both`, `clinical_note_only`, or `soap_only`; default `both`                     |
+| `epic_zcc_enabled`                    | `Boolean`                 | yes      | Enables account-scoped Epic-ZCC CTI endpoints; disabled accounts return 404                                      |
+| `epic_zcc_connection_name`            | `String(256)`             | no       | Display/config name for the ZCC CTI connection                                                                   |
+| `epic_zcc_backend_url`                | `String(256)`             | no       | ZCC Epic CTI backend used for outbound `initiate-call`                                                           |
+| `epic_zcc_background_user_id`         | `String(128)`             | no       | Background user ID value entered in ZCC CTI config                                                               |
+| `epic_zcc_background_user_id_type`    | `String(64)`              | no       | Background user ID type                                                                                          |
+| `epic_zcc_phone_system_id`            | `String(128)`             | no       | Phone system ID value entered in ZCC CTI config                                                                  |
+| `epic_zcc_phone_system_id_type`       | `String(64)`              | no       | Phone system ID type                                                                                             |
+| `epic_zcc_recipient_id_type`          | `String(64)`              | yes      | Recipient ID type sent by ZCC; default `Phone`                                                                   |
 | `created_at`                          | `DateTime(timezone=True)` | no       | Created timestamp (UTC)                                                                                          |
 | `updated_at`                          | `DateTime(timezone=True)` | no       | Updated timestamp (UTC)                                                                                          |
 
-### `provider_mappings` (`ProviderMapping`)
+### `user_mappings` (`UserMapping`)
 
-| Column                           | Type                      | Required | Notes                                                                    |
-| -------------------------------- | ------------------------- | -------- | ------------------------------------------------------------------------ |
-| `id`                             | `Integer`                 | yes      | Primary key                                                              |
-| `zoom_account_id`                | `String(128, FK)`         | yes      | FK to `zoom_accounts.account_id`                                         |
-| `openemr_fhir_id`                | `String(128)`             | yes      | OpenEMR practitioner FHIR id                                             |
-| `openemr_provider_npi`           | `String(10)`              | yes      | Provider NPI used by filter pipeline                                     |
-| `openemr_provider_id`            | `String(128)`             | no       | OpenEMR `users.id` / appointment `provider_id` used for webhook matching |
-| `openemr_provider_name`          | `String(256)`             | no       | Provider display name                                                    |
-| `openemr_facility_id`            | `Integer`                 | no       | OpenEMR `users.facility_id` captured at mapping creation (S7-14)         |
-| `openemr_facility_name`          | `String(255)`             | no       | OpenEMR `users.facility` (display name) captured at mapping creation     |
-| `zoom_user_email`                | `String(256)`             | yes      | Zoom host email                                                          |
-| `zoom_user_name`                 | `String(256)`             | no       | Zoom display name                                                        |
-| `zoom_user_id`                   | `String(128)`             | no       | Zoom user id                                                             |
-| `zoom_user_type`                 | `Integer`                 | no       | Zoom license/type                                                        |
-| `zoom_user_timezone`             | `String(64)`              | no       | IANA timezone from the mapped Zoom user's profile (e.g. `America/Denver`). Used when scheduling Zoom meetings for this provider — `AccountConfig.timezone` is the fallback when this is NULL (Zoom user with no profile TZ, or mapping created before this field shipped) |
-| `default_alternative_host_email` | `String(256)`             | no       | Default alternative host                                                 |
-| `is_active`                      | `Boolean`                 | yes      | Active mapping flag                                                      |
-| `created_at`                     | `DateTime(timezone=True)` | no       | Created timestamp (UTC)                                                  |
+| Column                           | Type                      | Required | Notes                                                                  |
+| -------------------------------- | ------------------------- | -------- | ---------------------------------------------------------------------- |
+| `id`                             | `Integer`                 | yes      | Primary key                                                            |
+| `zoom_account_id`                | `String(128, FK)`         | yes      | FK to `zoom_accounts.account_id`                                       |
+| `is_provider`                    | `Boolean`                 | yes      | Provider-role flag; requires provider fields when true                 |
+| `is_zcc_agent`                   | `Boolean`                 | yes      | ZCC-agent-role flag; requires `zcc_user_id` when true                  |
+| `openemr_user_id`                | `String(128)`             | no       | OpenEMR `users.id`; used by provider and ZCC-agent roles              |
+| `openemr_fhir_id`                | `String(128)`             | no       | OpenEMR practitioner FHIR id; required when `is_provider=true`         |
+| `openemr_provider_npi`           | `String(10)`              | no       | Provider NPI used by filter pipeline; required when `is_provider=true` |
+| `openemr_provider_name`          | `String(256)`             | no       | Provider display name                                                  |
+| `openemr_facility_id`            | `Integer`                 | no       | OpenEMR `users.facility_id` captured at mapping creation               |
+| `openemr_facility_name`          | `String(255)`             | no       | OpenEMR facility display name captured at mapping creation             |
+| `zoom_user_email`                | `String(256)`             | yes      | Zoom host/agent email                                                  |
+| `zoom_user_name`                 | `String(256)`             | no       | Zoom display name                                                      |
+| `zoom_user_id`                   | `String(128)`             | no       | Zoom user id                                                           |
+| `zoom_user_type`                 | `Integer`                 | no       | Zoom license/type                                                      |
+| `zoom_user_timezone`             | `String(64)`              | no       | IANA timezone from the mapped Zoom user's profile                      |
+| `default_alternative_host_email` | `String(256)`             | no       | Default alternative host; not yet wired                                |
+| `zcc_user_id`                    | `String(128)`             | no       | ZCC user id used for CTI recipient/agent routing                       |
+| `agent_role`                     | `String(64)`              | no       | Optional agent role (`billing`, `intake`, `scheduling`, etc.)          |
+| `is_active`                      | `Boolean`                 | yes      | Active mapping flag                                                    |
+| `created_at`                     | `DateTime(timezone=True)` | no       | Created timestamp (UTC)                                                |
 
 ### `appointment_type_filters` (`AppointmentTypeFilter`)
 
@@ -101,7 +115,7 @@ Relationships:
 | `zoom_join_url`          | `String(1024)`            | no       | Patient join URL                                                           |
 | `alternative_host_email` | `String(256)`             | no       | Captured alternative host                                                  |
 | `openemr_appointment_id` | `String(128)`             | yes      | OpenEMR appointment/event id                                               |
-| `openemr_provider_id`    | `String(128)`             | yes      | OpenEMR provider id (`users.id`)                                           |
+| `openemr_user_id`        | `String(128)`             | yes      | OpenEMR provider/user id (`users.id`)                                      |
 | `openemr_appt_status`    | `String(16)`              | no       | OpenEMR `apptstat`/`pc_apptstatus` code                                    |
 | `status`                 | `String(64)`              | yes      | Internal progression status (for workflow orchestration)                   |
 | `meeting_started_at`     | `DateTime(timezone=True)` | no       | Timestamp for when the Zoom meeting/arrival flow marks the meeting started |
@@ -147,7 +161,7 @@ Relationships:
 | `zoom_account_id`          | `String(128)`             | no       | Context field          |
 | `openemr_appointment_id`   | `String(128)`             | no       | Context field          |
 | `openemr_encounter_number` | `String(128)`             | no       | Context field          |
-| `openemr_provider_id`      | `String(128)`             | no       | Context field          |
+| `openemr_user_id`          | `String(128)`             | no       | Context field          |
 | `openemr_patient_id`       | `String(128)`             | no       | Context field          |
 | `zoom_meeting_id`          | `String(128)`             | no       | Context field          |
 | `zoom_note_id`             | `String(128)`             | no       | Context field          |
@@ -201,7 +215,7 @@ Optional JSON fields:
 - `ehr_context_username`
 - `ehr_context_password`
 
-Registration returns the saved `ZoomAccount` identity fields plus the created `AccountConfig.timezone` and default `AccountConfig.note_writeback_mode`. EHR Context credentials are stored on `ZoomAccount`; timezone, note writeback mode, shared-user behavior, and demo override settings are stored on `AccountConfig`.
+Registration returns the saved `ZoomAccount` identity fields plus the created `AccountConfig.timezone` and default `AccountConfig.note_writeback_mode`. EHR Context credentials are stored on `ZoomAccount`; timezone, note writeback mode, demo override settings, and Epic-ZCC behavior/settings are stored on `AccountConfig`.
 
 The registration flow auto-enables the dynamically registered OpenEMR client. After the RFC 7591 registration succeeds, Flask runs `UPDATE oauth_clients SET is_enabled = 1 WHERE client_id = :client_id` against the OpenEMR database. This removes the manual "Enable Client" step from the SE demo flow.
 
@@ -222,14 +236,13 @@ Editable JSON fields:
 - `ehr_context_username`
 - `ehr_context_password`
 - `timezone`
-- `allow_shared_zoom_user`
 - `demo_patient_email_override_enabled`
 - `demo_patient_email_override`
 - `demo_patient_phone_override_enabled`
 - `demo_patient_phone_override`
 - `note_writeback_mode` (`both`, `clinical_note_only`, or `soap_only`)
 
-`GET /config/registrations` includes `nickname`, `tenant_id`, EHR Context username, token status, `AccountConfig.timezone`, `allow_shared_zoom_user`, and the split demo patient contact override flags/values in each registration summary. `POST /config/register/<zoom_account_id>/verify` includes `nickname`, OpenEMR verification, Zoom verification, and a combined status message.
+`GET /config/registrations` includes `nickname`, `tenant_id`, EHR Context username, token status, `AccountConfig.timezone`, and the split demo patient contact override flags/values in each registration summary. `POST /config/register/<zoom_account_id>/verify` includes `nickname`, OpenEMR verification, Zoom verification, and a combined status message.
 
 ## Lookup And Audit API Contracts
 
@@ -238,8 +251,9 @@ JWT-protected lookup helpers:
 - `GET /openemr/providers?zoom_account_id=...&search=...&id=...`
 - `GET /openemr/appointment-types?zoom_account_id=...`
 - `GET /zoom/users?zoom_account_id=...&search=...`
+- `GET /zoom/zcc/users?zoom_account_id=...&search=...`
 
-All three require an active `ZoomAccount` for the supplied `zoom_account_id`. OpenEMR provider responses include `user_id`, the OpenEMR `users.id` value that should be stored on `ProviderMapping.openemr_provider_id` for webhook matching and EHR Context appointment lookups.
+All four require an active `ZoomAccount` for the supplied `zoom_account_id`. OpenEMR provider responses include `user_id`, the OpenEMR `users.id` value that should be stored on `UserMapping.openemr_user_id` for webhook matching, EHR Context appointment lookups, and CTI agent bootstrap matching.
 
 JWT-protected audit log endpoint:
 
@@ -251,7 +265,7 @@ Supported filters:
 - `event_type`
 - `openemr_appointment_id`
 - `openemr_encounter_number`
-- `openemr_provider_id`
+- `openemr_user_id`
 - `openemr_patient_id`
 - `zoom_meeting_id`
 - `zoom_note_id`
@@ -295,8 +309,8 @@ These `/rest/*` routes are called by Zoom's EHR integration and are not config-J
 - Requires the same `X-Tenant-ID`
 - Requires `Authorization: Bearer <token-from-gettoken>`
 - Body: `{"dateTime": "2026-04-27T16:00:00", "zoomUserId": "..."}` where `dateTime` is UTC
-- Resolves `zoomUserId` through `ProviderMapping.zoom_user_id`
-- Requires `ProviderMapping.openemr_provider_id`
+- Resolves `zoomUserId` through `UserMapping.zoom_user_id`
+- Requires `UserMapping.openemr_user_id`
 - Converts the UTC query time into `AccountConfig.timezone`, queries OpenEMR appointments within +/- 2 hours, and returns Zoom's expected appointment list wrapper:
 
 ```json
@@ -353,7 +367,7 @@ Current bridge behavior:
 
 - Validates signature and minimal payload shape
 - For `appointment.set`:
-  - filters by `ProviderMapping.openemr_provider_id` and appointment-type allowlist
+  - filters by `UserMapping.openemr_user_id` and appointment-type allowlist
   - creates new meetings when no `MeetingRecord` exists
   - updates existing meetings when `MeetingRecord` exists and Zoom meeting is still present
   - recreates meetings when `MeetingRecord` exists but Zoom meeting was deleted
@@ -383,6 +397,7 @@ Audit event taxonomy is canonical in the `write_audit_log()` docstring at `serve
 - `zoom.credentials_*` — registration-time validation outcomes (`validated` with `detail.scopes` / `validation_failed` with `detail.status_code`)
 - `zoom.webhook_account_mismatch` — payload account_id didn't match the URL path account_id on a per-account webhook (`/webhooks/zoom/<account_id>`)
 - `demo.*` — Hydrate Demo Data orchestrator and past-encounter seeder events (Sprint 13): `hydrate_started`, `hydrate_completed`, `hydrate_request_failed`, `hydrate_provider_skipped` (with `detail.reason`), `future_appointment_created`, `future_appointment_create_failed`, `future_meeting_created`, `future_meeting_backfilled`, `past_encounter_seeded`, `past_encounter_skipped` (with `detail.reason`), `past_encounter_failed` (with `detail.stage`). Full taxonomy + detail field shapes in `services/audit.py`.
+- `epic_zcc.*` — Epic-ZCC CTI auth, PatientLookUp, ReceiveCommunication3, screen-pop dispatch, and outbound initiate-call events. Full taxonomy + detail field shapes in `services/audit.py`.
 
 `note.written` and `note.write_failed` include `openemr_encounter_number` and `detail.content_blank`; manual-fetch flows carry `detail.trigger=manual_fetch`.
 
@@ -403,6 +418,49 @@ Manual note endpoints under `/zoom/encounter/<encounter_number>/...` are OpenEMR
 - `fetch_zoom_note` resolves a `note_id` via `MeetingRecord.clinical_note.zoom_note_id`. When multiple `ClinicalNoteRecord` rows exist for one meeting (e.g. a failed/empty note followed by a real one), the relationship returns the most-recently-received note (`order_by="ClinicalNoteRecord.received_at.desc()"`). Form dedup is encounter-scoped, so repeated retrieves on the same encounter update the existing SOAP + Clinical Notes forms in place. **Limitation:** recurring Zoom meetings that share a `zoom_meeting_id` across multiple appointments are not yet supported — the schema forces 1 MeetingRecord per Zoom meeting. Tracked as TD-01 in `phase-2-sprint-plan.md`.
 - `complete_zoom_note` marks the stored Zoom note complete; the route is idempotent and returns 200 for valid skip/error outcomes so OpenEMR UI actions are not blocked
 
+## Epic-ZCC CTI API Contract
+
+These routes are registered only when `ENABLE_EPIC_ZCC=true`. Account lookup
+is done from the path. Unknown, inactive, or CTI-disabled accounts return 404.
+
+External account-scoped base path:
+
+```text
+/zoomly/<zoom_account_id>/interconnect-amcurprd-oauth
+```
+
+JWT-protected admin configuration endpoints:
+
+- `GET /config/account/<zoom_account_id>/epic-zcc`
+- `PATCH /config/account/<zoom_account_id>/epic-zcc`
+- `POST /config/account/<zoom_account_id>/epic-zcc/initialize`
+
+Configuration response fields include the global Epic client ID from
+`EPIC_ZCC_CLIENT_ID`, the per-account `epic_kid`, the generated instance URL,
+the generated JWKS URL, and the `AccountConfig.epic_zcc_*` settings.
+
+External ZCC/Epic-shaped endpoints:
+
+- `POST /oauth2/token` — validates Zoom's JWT client assertion and issues a stored opaque bearer token.
+- `GET /oauth2/keys/1/<epic_kid>` — serves the single per-account JWKS used by outbound CTI assertions.
+- `POST /api/epic/2012/EMPI/Patient/PATIENTLOOKUP/Lookup` — XML PatientLookUp; OR-searches by supported patient criteria and caches results by normalized caller phone number for the later ReceiveCommunication3 event.
+- `GET /api/FHIR/R4/Practitioner` — FHIR R4 Practitioner search by `identifier`, `_id`, `name`, or `family`/`given`.
+- `POST /api/epic/2023/Common/Utility/RECEIVECOMMUNICATION3/ReceiveCommunication3` — accepts XML or JSON, resolves the ZCC recipient through `UserMapping`, and dispatches OpenEMR screen-pop events.
+- `GET /screenpop/stream` — account/user-scoped SSE stream for browser navigation events.
+- `POST /cti/initiate-call` — OpenEMR HMAC-signed click-to-dial route that calls ZCC's Epic initiate-call API and preloads the PatientLookUp cache with the known patient under the normalized dialed phone number for the later ReceiveCommunication3 event.
+
+OpenEMR-facing helper:
+
+- `POST /zoomly/epic-zcc/screenpop/bootstrap` — HMAC-signed PHP helper that returns stream URLs for active agent mappings belonging to the logged-in OpenEMR user. OpenEMR treats a non-empty stream response as the session's ZCC-agent capability flag.
+
+Operational notes:
+
+- OpenEMR click-to-call controls are session-gated. `cti_subscriber_inject.php` writes `$_SESSION['zoomly_is_zcc_agent']` from the bootstrap result; `main.php`, `cti_panel.php`, appointment-card phone links, demographics, and patient finder phone columns only load or render CTI controls for sessions with active ZCC-agent streams. Non-ZCC users see plain phone numbers.
+- Demo seed phone numbers ending in `555-####` are intentionally left unlinked by `cti_phone_inject.js` and the legacy frame injector, preventing synthetic demo numbers from being dialed through ZCC.
+- PatientLookUp results are held in a short process-local cache for ReceiveCommunication3. The cache is keyed by account + normalized phone number, is single-use once consumed by ReceiveCommunication3, and uses the same short TTL as PatientLookUp.
+- Outbound click-to-dial does not use a separate outbound-call cache. After ZCC accepts the initiate-call request, the route preloads the PatientLookUp cache with the known OpenEMR patient under the normalized dialed phone number and marks the cached row with `matched_on=outbound_context`.
+- Gunicorn currently runs one worker, so the process-local cache is consistent inside one Flask process. A future multi-worker or multi-replica deployment would need a shared cache or a different screen-pop correlation strategy.
+
 ## OpenEMR Patch Module (PHP)
 
 Patch files under `openemr/patches/zoom_appointment_listener` currently wire two events:
@@ -415,6 +473,13 @@ Patch files under `openemr/patches/clinical_note_fetcher` provide OpenEMR encoun
 - `fetch_zoom_note.php` signs and forwards "Retrieve Zoom Note" requests to Flask
 - `complete_zoom_note.php` signs and forwards Zoom note completion requests; the JavaScript trigger in `forms.php` is currently present but commented out
 - `forms.php` contains the encounter-page "Retrieve Zoom Note" button integration
+
+Patch files under `openemr/patches/epic_cti` provide the OpenEMR-side Epic-ZCC screen-pop shell:
+
+- `cti_panel.php` renders the optional callbar iframe when `ZOOMLY_EPIC_ZCC_CLIENT_URL` is configured and stream URLs are present
+- `cti_subscriber_inject.php` calls `/zoomly/epic-zcc/screenpop/bootstrap`, injects account/user-scoped SSE stream URLs for the logged-in OpenEMR user, and sets `$_SESSION['zoomly_is_zcc_agent']` from the result
+- `cti_subscriber.js` listens for `navigate` events and opens the patient chart or patient finder when stream URLs exist
+- `cti_phone_inject.js` centralizes OpenEMR phone-link click-to-call behavior and suppresses demo seed phone numbers ending in `555-####`
 
 Current listener behavior highlights:
 
@@ -460,12 +525,20 @@ Current migration chain:
 - `585c85c5c79c_add_ehr_auth_fields_to_zoom_accounts`
 - `18c6821766b3_add_meeting_started_at_to_meeting_`
 - `8e1a97239ec2_add_note_writeback_mode_to_account_`
+- `a3f4e1c92b04_add_openemr_facility_to_provider_`
+- `c1d2e3f4a5b6_add_zoom_user_timezone_to_provider_`
+- `b4f7c2a91e83_add_cascade_to_clinical_note_records_fk`
+- `db55813136ea_add_epic_zcc_config_columns`
+- `c4ce55279557_add_epic_zcc_bearer_token_cache_to_zoom_`
+- `fadc607b7921_rename_provider_mappings_to_user_`
+- `e1f2a3b4c5d6_drop_epic_zcc_client_id_from_zoom_accounts`
 
 The current schema migration uses natural string primary keys for the core integration relationships:
 
 - `zoom_accounts.account_id`
 - `meeting_records.zoom_meeting_id`
 - foreign keys from provider mappings, appointment filters, meeting records, patients, and clinical notes point at those natural IDs.
+  The provider mapping table has since been renamed to `user_mappings`, but older migration names still carry the original wording.
 
 Recent config/auth migrations:
 
@@ -474,6 +547,8 @@ Recent config/auth migrations:
 - add EHR Context tenant ID, username, and password hash fields to `zoom_accounts`
 - add the unique `zoom_accounts.tenant_id` index and nullable `meeting_records.meeting_started_at`
 - add `account_configs.note_writeback_mode` with default `both`
+- add provider facility/timezone fields, then rename `provider_mappings` to `user_mappings`
+- add Epic-ZCC account config fields, persisted bearer-token cache fields, and drop the retired `zoom_accounts.epic_zcc_client_id` column in favor of the global `EPIC_ZCC_CLIENT_ID` config value plus per-account `epic_kid`
 
 ## Test Coverage Pointers
 
@@ -497,6 +572,13 @@ Primary files for this integration slice:
 - `server/tests/test_services_reg_verification.py`
 - `server/tests/test_services_zoom.py`
 - `server/tests/test_blueprint_config.py`
+- `server/tests/test_blueprint_epic_config.py`
+- `server/tests/test_blueprint_epic_communication.py`
+- `server/tests/test_blueprint_epic_outbound.py`
+- `server/tests/test_blueprint_epic_patient.py`
+- `server/tests/test_blueprint_epic_practitioner.py`
+- `server/tests/test_blueprint_epic_screenpop.py`
+- `server/tests/test_blueprint_epic_token.py`
 - `server/tests/test_jwks.py`
 - `server/tests/test_jwt_assertion.py`
 - `server/tests/test_routes.py`

@@ -64,7 +64,9 @@ while ($row = sqlFetchArray($res)) {
         $coljson .= ", \"mRender\": wrapInLink";
     }
     if (in_array($colname, ['phone_home', 'phone_biz', 'phone_cell', 'phone_contact'])) {
-        $coljson .= ", \"mRender\": wrapInPhoneLink";
+        if (!empty($_SESSION['zoomly_is_zcc_agent'])) {
+            $coljson .= ", \"mRender\": wrapInPhoneLink";
+        }
     }
     $coljson .= "}";
     if ($orderjson) {
@@ -251,6 +253,9 @@ $loading = "";
         display: none !important;
     }
 </style>
+<?php if (!empty($_SESSION['zoomly_is_zcc_agent'])): ?>
+<script src="<?php echo attr($GLOBALS['webroot']); ?>/interface/epic_cti/cti_phone_inject.js"></script>
+<?php endif; ?>
 <script>
     var uspfx = '<?php echo attr($uspfx); ?>';
 
@@ -336,42 +341,46 @@ $loading = "";
         }
     }
 
+    <?php if (!empty($_SESSION['zoomly_is_zcc_agent'])): ?>
+    // Defined only for ZCC agents; non-ZCC users have no mRender set for phone columns.
     function wrapInPhoneLink(data, type, full) {
-        if (type !== 'display' || !data) { return data || ''; }
-        return '<a class="zoomly-cti-phone" href="#" role="button" data-phone="' + data + '">' + data + '</a>';
+        if (type !== "display" || !data) { return data || ""; }
+        var zpi = window.ZoomlyPhoneInject;
+        if (!zpi || zpi.isSeedPhone(data)) { return data || ""; }
+        return "<a class=\"zoomly-cti-phone\" href=\"#\" role=\"button\" data-phone=\""
+            + data.replace(/"/g, "&quot;") + "\">" + data + "</a>";
     }
 
     // Capture phase fires before the #pt_table row-click handler, preventing DataTable
     // row navigation when the user clicks a phone link.
-    document.addEventListener('click', function (e) {
-        var a = e.target && e.target.closest && e.target.closest('a.zoomly-cti-phone');
+    document.addEventListener("click", function (e) {
+        var a = e.target && e.target.closest && e.target.closest("a.zoomly-cti-phone");
         if (!a) { return; }
         e.preventDefault();
         e.stopImmediatePropagation();
-        var cti = window.top && window.top.ZoomlyEpicCti;
-        if (!cti) { return; }
-        var pid = '';
-        var tr = a.closest('tr');
+        var zpi = window.ZoomlyPhoneInject;
+        if (!zpi) { return; }
+        var pid = "";
+        var tr = a.closest("tr");
         if (tr) {
-            var rowId = tr.getAttribute('id') || '';
+            var rowId = tr.getAttribute("id") || "";
             if (/^pid_/.test(rowId)) {
-                pid = rowId.replace('pid_', '');
+                pid = rowId.replace("pid_", "");
             } else {
-                var tbl = document.getElementById('pt_table');
-                var ths = tbl ? tbl.querySelectorAll('thead th') : [];
-                var cells = tr.querySelectorAll('td');
+                var tbl = document.getElementById("pt_table");
+                var ths = tbl ? tbl.querySelectorAll("thead th") : [];
+                var cells = tr.querySelectorAll("td");
                 for (var i = 0; i < ths.length; i++) {
                     if (/external.{0,4}id/i.test(ths[i].textContent.trim())) {
-                        pid = (cells[i] ? cells[i].textContent.trim() : '').replace(/\D/g, '');
+                        pid = (cells[i] ? cells[i].textContent.trim() : "").replace(/\D/g, "");
                         break;
                     }
                 }
             }
         }
-        cti.showCallButton(a, document, function () {
-            cti.initiateCall(a.getAttribute('data-phone'), {openemrPatientId: pid});
-        });
+        zpi.dial(a, document, a.getAttribute("data-phone"), {openemrPatientId: pid});
     }, true);
+    <?php endif; ?>
 
     function openNewTopWindow(pid) {
         document.fnew.patientID.value = pid;
