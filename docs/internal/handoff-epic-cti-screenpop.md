@@ -3,6 +3,15 @@
 > Written: 2026-06-24 for context continuation. The immediate priority is diagnosing
 > why `ReceiveCommunication3` phone lookup returns 0 matches even after the E.164 fix.
 
+> Current status: this handoff is historical. The active implementation now uses
+> a phone-keyed PatientLookUp cache for both inbound PatientLookUp handoff and
+> outbound click-to-dial context preload. There is no separate
+> `outbound_call_cache.py`; click-to-dial and manual dialing are expected to work
+> through ZCC initiate-call plus ReceiveCommunication3 screen-pop routing.
+> OpenEMR CTI controls are now session-gated to active ZCC-agent streams; non-ZCC
+> users see plain phone numbers. Demo seed numbers ending in `555-####` are not
+> made clickable.
+
 ---
 
 ## What is this?
@@ -14,14 +23,15 @@ navigates to the relevant patient record. This is driven by:
 1. **`/cti/initiate-call`** — OpenEMR PHP calls Flask when an agent clicks a phone link
    in the browser (click-to-dial)
 2. **`ReceiveCommunication3`** — ZCC calls Flask to notify Epic of call events
-3. **SSE stream** (`/cti/screenpop/subscribe`) — Flask pushes navigation events to the
+3. **SSE stream** (`/screenpop/stream`) — Flask pushes navigation events to the
    agent's OpenEMR browser session via `cti_subscriber.js`
 
 ---
 
-## Immediate Broken Behavior (must fix first)
+## Historical Broken Behavior
 
-**All three call flows navigate to the patient finder instead of the patient record.**
+The following issue was observed during the 2026-06-24 QA pass and is retained
+for context only.
 
 Josh ran three QA tests on 2026-06-24:
 
@@ -73,17 +83,16 @@ Earlier tests (BEFORE code changes, old `no_outbound_call_record` reason):
 
 ---
 
-## What Changed in This Session (code already merged to branch)
+## Historical Changes From The 2026-06-24 Session
 
 ### Files modified:
 
 **`server/app/blueprints/epic/outbound_routes.py`**
 - Fixed missing `zoom_account_id: str` parameter on `cti_initiate_call()` (pre-existing Flask routing bug)
-- Replaced `store_outbound_call(...)` with immediate `dispatch(...)` SSE navigate at initiate-call time
-- Click-to-dial now navigates to patient immediately without waiting for `ReceiveCommunication3`
+- Replaced the old outbound-call cache approach. Current code calls ZCC's Epic initiate-call API and, after ZCC accepts it, preloads the PatientLookUp cache with the known OpenEMR patient under the normalized dialed phone number.
 
 **`server/app/services/epic/communication.py`**
-- Replaced outbound call cache path in the `else` branch with `_build_rc3_criteria()` helper
+- ReceiveCommunication3 can consume the phone-keyed PatientLookUp cache or fall back to direct lookup criteria from the ReceiveCommunication3 payload.
 - `_build_rc3_criteria` maps `patient_id_type` → search criterion:
   - `DOB` → `search_patients({"dob": patient_id})`
   - `SS`/`SSN` → `search_patients({"ssn_last4": last4})`
@@ -100,8 +109,9 @@ Earlier tests (BEFORE code changes, old `no_outbound_call_record` reason):
 - `_phone_digits()` now strips leading `1` country code from 11-digit US E.164 numbers:
   `+13035550101` → `13035550101` → `3035550101` (10-digit, matches OpenEMR stored format)
 
-**`server/app/services/epic/outbound_call_cache.py`**
-- **DELETED** — dead code after above changes
+**`server/app/services/epic/lookup_cache.py`**
+- Holds short-lived PatientLookUp results by `(zoom_account_id, phone_digits)`.
+- Outbound click-to-dial preloads this same cache with `matched_on=outbound_context`; there is no separate outbound-call cache.
 
 **Tests updated:**
 - `server/tests/test_blueprint_epic_communication.py` — replaced cache-based tests with phone/DOB path tests
@@ -170,12 +180,10 @@ WHERE pid = {test_patient_pid};
    in `click_to_dial_initiated` suggests ZCC's initiate-call response doesn't return a
    call ID either, which may indicate ZCC's behavior for this flow is minimal.
 
-3. **If ZCC sends the wrong phone (agent's number instead of patient's):** The click-to-dial
-   case needs a de-dup approach — at initiate-call time we know the patient, so when
-   ReceiveCommunication3 arrives 3 seconds later for the same call with no useful identifier,
-   we should skip the SSE dispatch (we already navigated at step 1). A short-TTL in-memory
-   cache keyed by `(account_id, zcc_user_id)` → set at click-to-dial time, consumed on
-   the first ReceiveCommunication3 for that agent, would suppress the duplicate.
+3. **If ZCC sends the wrong phone (agent's number instead of patient's):** The current
+   click-to-dial path preloads the phone-keyed PatientLookUp cache with the known
+   patient under the dialed number. If ZCC later echoes a different phone in
+   ReceiveCommunication3, the correlation strategy would need to change.
 
 ---
 
@@ -183,10 +191,10 @@ WHERE pid = {test_patient_pid};
 
 ```
 OpenEMR browser (cti_subscriber.js)
-  └─ SSE GET /cti/screenpop/subscribe
+  └─ SSE GET /screenpop/stream
        └─ screenpop_dispatch.py (Queue per openemr_user_id)
             ↑ dispatch() called from:
-              • outbound_routes.py  (click-to-dial — immediate)
+              • outbound_routes.py  (click-to-dial — cache preload after ZCC accepts initiate-call)
               • communication.py    (ReceiveCommunication3 — from ZCC)
 
 ZCC CTI integration calls:
@@ -206,9 +214,11 @@ ZCC CTI integration calls:
 | `server/app/services/epic/communication.py` | `process_receive_communication()` + `_build_rc3_criteria()` |
 | `server/app/services/epic/patient_search.py` | `search_patients()` + `_phone_digits()` |
 | `server/app/services/epic/screenpop_dispatch.py` | SSE queue dispatch |
-| `server/app/blueprints/epic/outbound_routes.py` | `cti_initiate_call()` — dispatches SSE immediately |
+| `server/app/blueprints/epic/outbound_routes.py` | `cti_initiate_call()` — calls ZCC initiate-call and preloads PatientLookUp cache |
+| `server/app/services/epic/lookup_cache.py` | Short-lived phone-keyed PatientLookUp cache, also used by outbound click-to-dial context preload |
 | `openemr/patches/epic_cti/initiate_call.php` | PHP bridge for click-to-dial |
 | `openemr/patches/epic_cti/cti_subscriber.js` | Browser SSE consumer + `buildNavigation()` |
+| `openemr/patches/epic_cti/cti_phone_inject.js` | Shared phone-link click-to-call helper; skips demo seed `555-####` numbers |
 
 ---
 
@@ -216,13 +226,14 @@ ZCC CTI integration calls:
 
 From CLAUDE.md `Zoom ZCC — Open Engineering Items`:
 
-- **PatientLookUp not being called before ReceiveCommunication3** — ZCC sends
-  ReceiveCommunication3 directly with no preceding PatientLookUp. Our `_build_rc3_criteria`
-  helper works around this by doing direct search from whatever identifiers ZCC sends in
-  the ReceiveCommunication3 payload itself (DOB, SSN, MRN, phone).
+- **PatientLookUp / ReceiveCommunication3 sequencing** — confirm the exact ZCC Flow
+  configuration that drives PatientLookUp before ReceiveCommunication3 for inbound
+  calls. ReceiveCommunication3 can also search from direct criteria, but the intended
+  high-confidence path is PatientLookUp cache -> ReceiveCommunication3.
 
-- **Bearer token 401 not triggering re-auth** — Flask restart clears in-memory bearer
-  token store; ZCC doesn't auto-retry on 401.
+- **Screen-pop cache scaling** — the PatientLookUp cache is process-local and
+  consistent with the current one-worker Gunicorn deployment. Multi-worker or
+  multi-replica deployments need a shared cache or different correlation strategy.
 
 ---
 
@@ -231,8 +242,8 @@ From CLAUDE.md `Zoom ZCC — Open Engineering Items`:
 - [x] S11-QA01 — Click-to-dial confirmation across CTI surfaces (c5cd79e)
 - [x] S11-QA03 — Close calendar modal on screen pop
 - [x] S11-QA04 — Auto-expand CTI panel on call
-- [ ] **S11-QA (current)** — Screen pop navigates to correct patient — **BROKEN, see above**
+- [x] **S11-QA (current)** — Screen pop navigates to correct patient for click-to-dial and manual dialing
 - [ ] Issue 2 — ZCC auth persists across OpenEMR user logins — not started
-- [ ] S11-10 — React `EpicZccTab` for SE configuration — not started
-- [ ] S11-11 — `epic_zcc` feature flag end-to-end — not started
+- [x] S11-10 — React `EpicZccTab` for SE configuration
+- [x] S11-11 — `epic_zcc` feature flag end-to-end
 - [ ] S11-12 — End-to-end QA — blocked on screen pop

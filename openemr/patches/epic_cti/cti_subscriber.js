@@ -421,6 +421,7 @@
             if (!td || td.querySelector("[data-zoomly-phone]")) { return; }
             var phone = (td.dataset.value || "").trim();
             if (!phone) { return; }
+            if (/555-\d{4}$/.test(phone)) { return; }
             var a = doc.createElement("a");
             a.href = "#";
             a.dataset.zoomlyPhone = "1";
@@ -444,6 +445,7 @@
             if (!td) { return; }
             var phone = (td.textContent || "").trim();
             if (!/^(\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}$/.test(phone)) { return; }
+            if (/555-\d{4}$/.test(phone)) { return; }
             var row = td.closest("tr[id^='pid_']");
             if (!row) { return; }
             var pid = row.id.replace("pid_", "");
@@ -456,8 +458,10 @@
         }, true);
     }
 
-    watchFrame("pat", injectDemographicsPhones);
-    watchFrame("fin", injectFinderPhones);
+    if (streams.length > 0) {
+        watchFrame("pat", injectDemographicsPhones);
+        watchFrame("fin", injectFinderPhones);
+    }
 
     // ─────────────────────────────────────────────────────────────────────────────
 

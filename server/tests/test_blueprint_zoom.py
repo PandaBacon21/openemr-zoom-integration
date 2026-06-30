@@ -201,6 +201,7 @@ def test_fetch_zoom_note_uses_account_writeback_mode(client, app, monkeypatch):
             SimpleNamespace(pid=1, provider_id=10, external_id="zoom_eid_999")
         ),
     )
+    monkeypatch.setattr("app.blueprints.zoom.zoom_routes.encounter_lock_target", lambda _encounter: None)
     monkeypatch.setattr(
         "app.blueprints.zoom.zoom_routes.get_zoom_clinical_note",
         lambda account, note_id: {
@@ -379,6 +380,7 @@ def _patch_manual_fetch_audit(monkeypatch, calls):
         "app.blueprints.zoom.zoom_route_helper.write_audit_log",
         lambda **kwargs: calls.append(kwargs),
     )
+    monkeypatch.setattr("app.blueprints.zoom.zoom_routes.encounter_lock_target", lambda _encounter: None)
 
 
 def _create_meeting_without_note(account_id: str):

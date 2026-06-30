@@ -2068,39 +2068,32 @@ $oemr_ui = new OemrUI($arrOeUiSettings);
             }
         });
     </script>
+<?php if (!empty($_SESSION['zoomly_is_zcc_agent'])): ?>
 <?php
-// Epic-ZCC CTI: make DEM phone fields clickable for click-to-dial.
 $_cti_pid  = js_escape((string)($pid ?? ''));
 $_cti_name = js_escape(trim(($result['fname'] ?? '') . ' ' . ($result['lname'] ?? '')));
 ?>
+<script src="<?php echo attr($GLOBALS['webroot']); ?>/interface/epic_cti/cti_phone_inject.js"></script>
 <script>
 (function () {
+    var zpi = window.ZoomlyPhoneInject;
+    if (!zpi) { return; }
     var pid  = <?php echo $_cti_pid; ?>;
     var name = <?php echo $_cti_name; ?>;
-    ['text_phone_home','text_phone_cell','text_phone_biz','text_phone_contact','text_em_number'].forEach(function (id) {
+    ["text_phone_home","text_phone_cell","text_phone_biz","text_phone_contact","text_em_number"].forEach(function (id) {
         var td = document.getElementById(id);
-        if (!td || td.querySelector('a[data-zoomly-phone]')) { return; }
-        var phone = (td.dataset.value || '').trim();
+        if (!td || td.querySelector("a[data-zoomly-phone]")) { return; }
+        var phone = (td.dataset.value || "").trim();
         if (!phone) { return; }
-        var a = document.createElement('a');
-        a.href = '#';
-        a.setAttribute('data-zoomly-phone', '1');
-        a.className = 'zoomly-cti-phone';
-        a.textContent = phone;
-        a.style.cursor = 'pointer';
-        a.addEventListener('click', function (e) {
-            e.preventDefault();
-            var cti = window.top && window.top.ZoomlyEpicCti;
-            if (!cti) { return; }
-            cti.showCallButton(a, document, function () {
-                cti.initiateCall(phone, {openemrPatientId: pid, patientName: name});
-            });
-        });
-        td.textContent = '';
+        var a = zpi.makePhoneAnchor(phone, document, {openemrPatientId: pid, patientName: name});
+        if (!a) { return; }
+        a.setAttribute("data-zoomly-phone", "1");
+        td.textContent = "";
         td.appendChild(a);
     });
 }());
 </script>
+<?php endif; ?>
 </body>
 <?php $ed->dispatch(new RenderEvent($pid), RenderEvent::EVENT_RENDER_POST_PAGELOAD); ?>
 </html>
