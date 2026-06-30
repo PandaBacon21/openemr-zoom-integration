@@ -95,7 +95,7 @@ def get_zcc_users(zoom_account: ZoomAccount) -> list[dict]:
 
     return [
         {
-            "zcc_user_id": user.get("user_id"),
+            "zcc_user_id": user.get("cc_user_id"),
             "zoom_user_id": user.get("user_id"),  # alias for convenience; same value as Zoom platform user
             "email": user.get("user_email"),
             "display_name": user.get("display_name") or user.get("user_email"),

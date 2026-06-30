@@ -197,7 +197,7 @@ def build_single_key_jwks(account) -> dict:
         )
         jwk = JsonWebKey.import_key(
             public_pem,  # type: ignore[arg-type]
-            {"kty": "RSA", "use": "sig", "kid": account.epic_kid},
+            {"kty": "RSA", "use": "sig", "kid": account.epic_kid, "alg": "RS384"},
         )
         return {"keys": [dict(jwk)]}
     except FileNotFoundError:

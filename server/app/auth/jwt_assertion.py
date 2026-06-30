@@ -17,6 +17,7 @@ def build_client_assertion(
     key_path: str,
     key_id: str,
     jku: str | None = None,
+    issuer: str | None = None,
 ) -> str:
     """
     Build and sign a JWT client assertion for SMART Backend Services.
@@ -26,6 +27,10 @@ def build_client_assertion(
     Used by the Epic-ZCC outbound flow (S11-09) so Zoom can resolve the kid
     against our per-account JWKS endpoint. Defaults to None for the existing
     OpenEMR SMART call sites that pre-register their JWKS URI out-of-band.
+
+    issuer: optional override for the `iss` claim. When omitted, `iss` defaults
+    to `client_id` (standard SMART Backend Services). The Epic-ZCC outbound flow
+    passes the customer auth endpoint URL here per the Epic → Zoom JWT spec.
     """
     private_key = load_private_key(key_path)
     assert isinstance(private_key, RSAPrivateKey)
@@ -33,12 +38,13 @@ def build_client_assertion(
     now = int(time.time())
 
     payload = {
-        "iss": client_id,           # Issuer — client ID in OpenEMR
-        "sub": client_id,           # Subject — same as issuer for backend services
-        "aud": audience,            # Audience — the token endpoint we're calling
-        "jti": str(uuid.uuid4()),   # Unique ID
-        "iat": now,                 # Issued at
-        "exp": now + 300,           # Expires in 5 minutes
+        "iss": issuer or client_id,  # Issuer — endpoint URL (Epic-ZCC) or client ID (SMART)
+        "sub": client_id,            # Subject — registered client ID
+        "aud": audience,             # Audience — the token endpoint we're calling
+        "jti": str(uuid.uuid4()),    # Unique ID
+        "iat": now,                  # Issued at
+        "nbf": now,                  # Not before
+        "exp": now + 300,            # Expires in 5 minutes
     }
 
     headers = {"kid": key_id}

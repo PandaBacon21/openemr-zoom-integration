@@ -14,16 +14,13 @@ from app.services.epic.request_parser import (
 )
 from app.services.epic.response_builders import (
     build_receive_communication_ack_json,
-    build_receive_communication_ack_xml,
     build_receive_communication_fault_json,
-    build_receive_communication_fault_xml,
 )
 
 
 logger = logging.getLogger(__name__)
 
 _JSON_CONTENT_TYPE = "application/json; charset=utf-8"
-_XML_CONTENT_TYPE = "application/xml; charset=utf-8"
 
 
 @epic_bp.route(
@@ -40,7 +37,6 @@ def receive_communication3(zoom_account_id: str):
 
     account = g.zoom_account
     raw_body = request.get_data()
-    wants_xml = raw_body.lstrip().startswith(b"<")
 
     try:
         payload = parse_receive_communication3_request(
@@ -59,8 +55,19 @@ def receive_communication3(zoom_account_id: str):
             detail={"reason": reason, "fault_code": e.fault_code},
             error_message=e.message,
         )
-        return _fault_response(e.fault_code, e.message, wants_xml=wants_xml)
+        return Response(
+            build_receive_communication_fault_json(e.fault_code, e.message),
+            status=400,
+            content_type=_JSON_CONTENT_TYPE,
+        )
 
+    logger.info(
+        "epic.receive_communication3 | received "
+        f"account_id={account.account_id} "
+        f"recipient_id={payload['recipient_id']!r} "
+        f"caller_number={payload.get('caller_number')!r} "
+        f"call_id={payload.get('call_id')!r}"
+    )
     write_audit_log(
         event_type="epic_zcc.receive_communication_received",
         success=True,
@@ -93,32 +100,8 @@ def receive_communication3(zoom_account_id: str):
             error_message=str(e),
         )
 
-    return _ack_response(payload.get("call_id"), wants_xml=wants_xml)
-
-
-def _ack_response(call_id: str | None, *, wants_xml: bool) -> Response:
-    if wants_xml:
-        return Response(
-            build_receive_communication_ack_xml(call_id),
-            status=200,
-            content_type=_XML_CONTENT_TYPE,
-        )
     return Response(
-        build_receive_communication_ack_json(call_id),
+        build_receive_communication_ack_json(payload.get("call_id")),
         status=200,
-        content_type=_JSON_CONTENT_TYPE,
-    )
-
-
-def _fault_response(code: str, message: str, *, wants_xml: bool) -> Response:
-    if wants_xml:
-        return Response(
-            build_receive_communication_fault_xml(code, message),
-            status=400,
-            content_type=_XML_CONTENT_TYPE,
-        )
-    return Response(
-        build_receive_communication_fault_json(code, message),
-        status=400,
         content_type=_JSON_CONTENT_TYPE,
     )

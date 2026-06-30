@@ -61,3 +61,4 @@ from app.blueprints.epic import patient_routes
 from app.blueprints.epic import practitioner_routes
 from app.blueprints.epic import communication_routes
 from app.blueprints.epic import screenpop_routes
+from app.blueprints.epic import outbound_routes

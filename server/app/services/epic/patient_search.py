@@ -23,8 +23,16 @@ logger = logging.getLogger(__name__)
 
 
 def _phone_digits(raw: str) -> str:
-    """Strip every non-digit so the digits-only comparison ignores formatting."""
-    return re.sub(r"\D", "", raw)
+    """Strip non-digits and normalize US E.164 country code to 10-digit local format.
+
+    ZCC sends E.164 (+13035550101 → 13035550101) while OpenEMR stores 10-digit
+    US local format (3035550101). Strip the leading 1 from 11-digit numbers so
+    both sides compare on the same 10-digit value.
+    """
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 11 and digits.startswith("1"):
+        return digits[1:]
+    return digits
 
 
 def search_patients(criteria: dict) -> tuple[list[dict], list[str]]:
@@ -120,6 +128,28 @@ def search_patients(criteria: dict) -> tuple[list[dict], list[str]]:
         row["_matched_on"] = _row_matched_fields(row, criteria)
 
     return rows, queried_fields
+
+
+def get_patient_by_pid(pid: str) -> dict | None:
+    """Fetch a single patient_data row by internal pid, or None if not found."""
+    sql = text("""
+        SELECT pid, pubpid, LOWER(HEX(uuid)) AS uuid_hex,
+               fname, mname, lname, title,
+               DOB, sex,
+               street, city, state, postal_code,
+               phone_cell, phone_home, email,
+               RIGHT(ss, 4) AS ssn_last4
+        FROM patient_data
+        WHERE pid = :pid
+        LIMIT 1
+    """)
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        result = conn.execute(sql, {"pid": pid})
+        row = result.fetchone()
+        if row is None:
+            return None
+        return dict(row._mapping)
 
 
 def _row_matched_fields(row: dict, criteria: dict) -> list[str]:

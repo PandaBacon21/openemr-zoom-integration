@@ -890,11 +890,11 @@ if ($patientid) {
      "FROM patient_data WHERE pid = ?", [$patientid]);
     $patientname = $prow['lname'] . ", " . $prow['fname'];
     if ($prow['phone_home']) {
-        $patienttitle['phone_home'] = xl("Home Phone") . ": " . $prow['phone_home'];
+        $patienttitle['phone_home'] = ['label' => xl("Home Phone"), 'phone' => $prow['phone_home']];
     }
 
     if ($prow['phone_biz']) {
-        $patienttitle['phone_biz'] = xl("Work Phone") . ": " . $prow['phone_biz'];
+        $patienttitle['phone_biz'] = ['label' => xl("Work Phone"), 'phone' => $prow['phone_biz']];
     }
 }
 
@@ -1426,9 +1426,13 @@ if (empty($_GET['prov']) && empty($_GET['group'])) { ?>
             <div>
         <span class="infobox text-danger" style='font-size: 0.75rem'>
         <?php
-        foreach ($patienttitle as $value) {
-            if ($value != "") {
-                echo text(trim($value));
+        foreach ($patienttitle as $entry) {
+            if (!empty($entry['phone'])) {
+                echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
+                    . ' data-phone="' . attr($entry['phone']) . '"'
+                    . ' data-pid="' . attr((string)$patientid) . '"'
+                    . ' data-name="' . attr($patientname) . '">'
+                    . text($entry['phone']) . '</a>';
             }
             if (count($patienttitle) > 1) {
                 echo "<br />";
@@ -1470,9 +1474,13 @@ if ($_GET['group'] === true && $have_group_global_enabled) { ?>
         <div class="col-sm form-group" style='font-size: 0.75rem'>
             <span class="infobox">
             <?php
-            foreach ($patienttitle as $value) {
-                if ($value != "") {
-                    echo trim($value);
+            foreach ($patienttitle as $entry) {
+                if (!empty($entry['phone'])) {
+                    echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
+                        . ' data-phone="' . attr($entry['phone']) . '"'
+                        . ' data-pid="' . attr((string)$patientid) . '"'
+                        . ' data-name="' . attr($patientname) . '">'
+                        . text($entry['phone']) . '</a>';
                 }
                 if (count($patienttitle) > 1) {
                     echo "<br />";
@@ -2108,6 +2116,21 @@ function SubmitForm() {
 
     return true;
 }
+</script>
+<script>
+document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.zoomly-cti-phone');
+    if (!a) { return; }
+    e.preventDefault();
+    var cti = window.top && window.top.ZoomlyEpicCti;
+    if (!cti) { return; }
+    cti.showCallButton(a, document, function () {
+        cti.initiateCall(a.dataset.phone, {
+            openemrPatientId: a.dataset.pid,
+            patientName: a.dataset.name
+        });
+    });
+});
 </script>
 </body>
 </html>

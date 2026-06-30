@@ -1,6 +1,7 @@
 """Tests for Epic ReceiveCommunication3 screen-pop dispatch."""
 
 import json
+from datetime import date
 
 import pytest
 
@@ -72,10 +73,15 @@ def _post(client, payload: dict, *, token: str | None):
     return client.post(COMMUNICATION_PATH, json=payload, headers=headers)
 
 
-def _cache_rows(rows: list[dict], queried_fields: list[str] | None = None) -> None:
+def _cache_rows(
+    rows: list[dict],
+    queried_fields: list[str] | None = None,
+    phone: str = "3035550101",
+) -> None:
+    """Seed the lookup cache keyed by normalized caller phone (not agent ID)."""
     lookup_cache.cache_lookup(
         TEST_ACCOUNT_ID,
-        TEST_OPENEMR_USER_ID,
+        phone,
         rows,
         queried_fields or ["phone"],
     )
@@ -173,21 +179,101 @@ def test_receive_communication_unknown_agent_returns_ack_and_audit(app, client):
     assert any(d.get("reason") == "unknown_agent" for d in failed)
 
 
-def test_receive_communication_no_cached_lookup_returns_ack_and_audit(app, client):
+def test_receive_communication_no_lookup_criteria_is_audited(app, client):
+    # No PatientLookUp cache, no LookupID, no phone — should fail gracefully.
     _seed_account(app)
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
-    resp = _post(client, _payload(), token=_mint_token())
+    resp = _post(
+        client,
+        _payload(LookupID=None, CallerPhoneNumber=None, DialedPhoneNumber=None),
+        token=_mint_token(),
+    )
 
     assert resp.status_code == 200
     assert q.empty()
     failed = _audit_details(app, "epic_zcc.receive_communication_failed")
-    assert any(d.get("reason") == "no_cached_lookup" for d in failed)
+    assert any(d.get("reason") == "no_lookup_criteria" for d in failed)
+
+
+def test_receive_communication_phone_no_match_dispatches_search_navigate(app, client, monkeypatch):
+    # No PatientLookUp cache, no LookupID; phone lookup returns no results — dispatches
+    # no_match navigate so JS can open the new patient entry form.
+    _seed_account(app)
+    monkeypatch.setattr(
+        "app.services.epic.communication.search_patients",
+        lambda criteria: ([], ["phone"]),
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(LookupID=None), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert "openemr_patient_id" not in event
+    assert "candidates" not in event
+    assert event["caller_number"] == "+13035550101"
+    assert event["matched_on"] == "no_match"
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "no_match"
+
+
+def test_receive_communication_phone_lookup_single_match_pops_patient(app, client, monkeypatch):
+    # No PatientLookUp cache, no LookupID; phone lookup returns exactly one match.
+    _seed_account(app)
+    monkeypatch.setattr(
+        "app.services.epic.communication.search_patients",
+        lambda criteria: ([_row(pid=100, _matched_on=["phone"])], ["phone"]),
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(LookupID=None), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "100"
+    assert event["matched_on"] == "phone"
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["recipient_id"] == TEST_ZCC_USER_ID
+
+
+def test_receive_communication_dob_lookup_pops_patient(app, client, monkeypatch):
+    # ZCC sends DOB via LookupInformation without calling PatientLookUp first.
+    # Should resolve patient by DOB and dispatch navigate.
+    _seed_account(app)
+    monkeypatch.setattr(
+        "app.services.epic.communication.search_patients",
+        lambda criteria: ([_row(pid=105, _matched_on=["dob"])], ["dob"]),
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(
+            LookupID=None,
+            LookupInformation="1985-03-15",
+            LookupInformationType="DOB",
+        ),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "105"
+    assert event["matched_on"] == "dob"
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "dob"
 
 
 def test_receive_communication_patient_not_in_cache_returns_ack_and_audit(app, client):
+    # Two candidates from PatientLookUp — RC3 must pick one. MRN "999" matches
+    # neither, so the call fails with patient_not_in_cache. (A single-candidate
+    # cache always uses the one row directly without discrimination.)
     _seed_account(app)
-    _cache_rows([_row(pid=100, pubpid="100")])
+    _cache_rows([_row(pid=100, pubpid="100"), _row(pid=101, pubpid="101", uuid_hex="b" * 32)])
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
     resp = _post(
@@ -221,3 +307,129 @@ def test_receive_communication_missing_recipient_returns_fault(app, client):
     assert resp.get_json()["ErrorCode"] == "NO-USER-ID"
     failed = _audit_details(app, "epic_zcc.receive_communication_failed")
     assert any(d.get("reason") == "missing_recipient" for d in failed)
+
+
+def test_receive_communication_dob_cache_discriminates_single_match(app, client):
+    # PatientLookUp ran with DOB+phone -> cache written keyed by phone.
+    # ZCC RC3 echoes DOB as the highest-priority identifier.
+    # _patient_id_matches must handle DOB type so the cached row is found.
+    _seed_account(app)
+    _cache_rows([_row(DOB=date(1991, 8, 27))])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(LookupID=None, LookupInformation="1991-08-27", LookupInformationType="DOB"),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "100"
+
+
+def test_receive_communication_ss_cache_discriminates_single_match(app, client):
+    # PatientLookUp ran with SS+phone -> cache written keyed by phone.
+    # ZCC RC3 echoes SS (last 4) as the highest-priority identifier.
+    # _patient_id_matches must handle SS type so the cached row is found.
+    _seed_account(app)
+    _cache_rows([_row(ssn_last4="6789")])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(LookupID=None, LookupInformation="6789", LookupInformationType="SS"),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "100"
+
+
+def test_receive_communication_multi_match_cache_dispatches_picker(app, client):
+    # Two PatientLookUp candidates both match phone — RC3 discriminator (PH) hits
+    # both rows. Picker event must carry both candidates with matched_fields.
+    _seed_account(app)
+    _cache_rows([
+        _row(pid=100, pubpid="100", phone_cell="+13035550101", _matched_on=["phone"]),
+        _row(pid=101, pubpid="101", uuid_hex="b" * 32, phone_cell="+13035550101", _matched_on=["phone"]),
+    ])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(LookupID={"ID": "+13035550101", "Type": "PH"}),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["matched_on"] == "multi_match"
+    assert "openemr_patient_id" not in event
+    candidates = event["candidates"]
+    assert len(candidates) == 2
+    assert {c["pid"] for c in candidates} == {"100", "101"}
+    for c in candidates:
+        assert c["matched_fields"] == ["phone"]
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "multi_match"
+    assert pushed[-1]["match_count"] == 2
+
+
+def test_receive_communication_direct_ambiguous_dispatches_picker(app, client, monkeypatch):
+    # No cache; direct phone search returns 2 matches — picker must be dispatched.
+    _seed_account(app)
+    rows = [
+        _row(pid=100, pubpid="100", phone_cell="+13035550101", _matched_on=["phone"]),
+        _row(pid=101, pubpid="101", uuid_hex="b" * 32, phone_cell="+13035550101", _matched_on=["phone"]),
+    ]
+    monkeypatch.setattr(
+        "app.services.epic.communication.search_patients",
+        lambda criteria: (rows, ["phone"]),
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(LookupID=None), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["matched_on"] == "multi_match"
+    assert "openemr_patient_id" not in event
+    candidates = event["candidates"]
+    assert len(candidates) == 2
+    assert {c["pid"] for c in candidates} == {"100", "101"}
+    for c in candidates:
+        assert c["matched_fields"] == ["phone"]
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["matched_on"] == "multi_match"
+
+
+def test_receive_communication_outbound_uses_caller_number_as_patient_phone(app, client):
+    # For ZCC outbound click-to-dial, CallerPhoneNumber is the patient's phone
+    # and DialedPhoneNumber is the ZCC agent-side number (semantics are inverted
+    # from what the field names suggest). Cache must be hit on CallerPhoneNumber.
+    _seed_account(app)
+    # Cache keyed by CallerPhoneNumber digits, NOT DialedPhoneNumber.
+    _cache_rows([_row()], phone="3035550101")
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(
+            LookupID=None,
+            ContactType="Outgoing",
+            CallerPhoneNumber="+13035550101",  # patient's phone
+            DialedPhoneNumber="+17195817290",  # ZCC agent number
+        ),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["type"] == "navigate"
+    assert event["openemr_patient_id"] == "100"

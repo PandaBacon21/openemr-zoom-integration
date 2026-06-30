@@ -1,4 +1,5 @@
 import logging
+import secrets
 from flask import request, jsonify, current_app
 
 from app.models import ZoomAccount
@@ -39,6 +40,16 @@ CONFIG_FIELDS = {
     "demo_patient_email_override",
     "demo_patient_phone_override",
     "note_writeback_mode",
+}
+EPIC_ZCC_CONFIG_FIELDS = {
+    "epic_zcc_enabled",
+    "epic_zcc_connection_name",
+    "epic_zcc_backend_url",
+    "epic_zcc_background_user_id",
+    "epic_zcc_background_user_id_type",
+    "epic_zcc_phone_system_id",
+    "epic_zcc_phone_system_id_type",
+    "epic_zcc_recipient_id_type",
 }
 
 
@@ -559,8 +570,86 @@ def set_ehr_context_credentials_route():
         return jsonify({"error": "Failed to update credentials", "detail": str(e)}), 500
 
 
+def _epic_zcc_response(account: ZoomAccount) -> dict:
+    config = account.config
+    instance_url = (
+        f"{current_app.config.get('APP_PUBLIC_URL', '')}"
+        f"/zoomly/{account.account_id}/interconnect-amcurprd-oauth"
+    )
+    return {
+        "zoom_account_id": account.account_id,
+        "epic_zcc_enabled": config.epic_zcc_enabled,
+        "epic_zcc_connection_name": config.epic_zcc_connection_name,
+        "epic_zcc_backend_url": config.epic_zcc_backend_url,
+        "epic_zcc_background_user_id": config.epic_zcc_background_user_id,
+        "epic_zcc_background_user_id_type": config.epic_zcc_background_user_id_type,
+        "epic_zcc_phone_system_id": config.epic_zcc_phone_system_id,
+        "epic_zcc_phone_system_id_type": config.epic_zcc_phone_system_id_type,
+        "epic_zcc_recipient_id_type": config.epic_zcc_recipient_id_type,
+        "epic_zcc_client_id": current_app.config.get("EPIC_ZCC_CLIENT_ID"),
+        "epic_kid": account.epic_kid,
+        "instance_url": instance_url,
+        "jwks_url": f"{instance_url}/oauth2/keys/1/{account.epic_kid}" if account.epic_kid else None,
+    }
+
+
+@config_bp.route("/account/<zoom_account_id>/epic-zcc", methods=["GET"])
+def get_epic_zcc_config(zoom_account_id: str):
+    account = ZoomAccount.query.filter_by(account_id=zoom_account_id, is_active=True).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+    return jsonify(_epic_zcc_response(account)), 200
+
+
+@config_bp.route("/account/<zoom_account_id>/epic-zcc", methods=["PATCH"])
+def update_epic_zcc_config(zoom_account_id: str):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    valid = {f for f in EPIC_ZCC_CONFIG_FIELDS if f in data}
+    if not valid:
+        return jsonify({"error": "No valid fields provided"}), 400
+
+    account = ZoomAccount.query.filter_by(account_id=zoom_account_id, is_active=True).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+
+    for field in valid:
+        setattr(account.config, field, data[field])
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"epic_zcc PATCH | Failed for {zoom_account_id}: {e}")
+        return jsonify({"error": "Update failed", "detail": str(e)}), 500
+
+    return jsonify(_epic_zcc_response(account)), 200
+
+
+@config_bp.route("/account/<zoom_account_id>/epic-zcc/initialize", methods=["POST"])
+def initialize_epic_zcc(zoom_account_id: str):
+    account = ZoomAccount.query.filter_by(account_id=zoom_account_id, is_active=True).first()
+    if not account:
+        return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
+
+    account.epic_kid = secrets.token_hex(16).upper()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"epic_zcc initialize | Failed for {zoom_account_id}: {e}")
+        return jsonify({"error": "Initialization failed", "detail": str(e)}), 500
+
+    return jsonify({
+        "zoom_account_id": zoom_account_id,
+        "epic_kid": account.epic_kid,
+    }), 200
+
+
 @config_bp.route("/features", methods=["GET"])
 def get_features():
     return jsonify({
         "db_browser": bool(current_app.config.get("ENABLE_DBGATE", False)),
+        "epic_zcc": bool(current_app.config.get("ENABLE_EPIC_ZCC", False)),
     }), 200

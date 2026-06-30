@@ -47,8 +47,11 @@ class ZoomAccount(db.Model):
     kid = db.Column(db.String(256), nullable=True)
 
     # Epic-ZCC CTI middleware credentials
-    epic_zcc_client_id = db.Column(db.String(64), nullable=True)
     epic_kid = db.Column(db.String(64), nullable=True)
+
+    # Epic-ZCC bearer token cache (persisted so tokens survive Flask restarts)
+    epic_zcc_bearer_token = db.Column(EncryptedType(db.Text, get_encryption_key, AesEngine, "pkcs5"), nullable=True)
+    epic_zcc_bearer_token_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -94,8 +97,9 @@ class ZoomAccount(db.Model):
             openemr_registration_client_uri: str | None = ...,
             private_key_path: str | None = ...,
             kid: str | None = ...,
-            epic_zcc_client_id: str | None = ...,
             epic_kid: str | None = ...,
+            epic_zcc_bearer_token: str | None = ...,
+            epic_zcc_bearer_token_expires_at: datetime | None = ...,
             key_version: int | None = ...,
             is_active: bool | None = ...,
         ) -> None: ...

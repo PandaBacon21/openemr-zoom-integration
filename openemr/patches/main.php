@@ -353,7 +353,7 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
     <script src="js/dialog_utils.js?v=<?php echo $v_js_includes; ?>"></script>
     <script src="js/shortcuts.js?v=<?php echo $v_js_includes; ?>"></script>
     <?php require_once(__DIR__ . "/../../epic_cti/cti_subscriber_inject.php"); ?>
-    <script src="<?php echo attr($webroot); ?>/interface/epic_cti/cti_subscriber.js?v=<?php echo attr($v_js_includes); ?>"></script>
+    <script src="<?php echo attr($webroot); ?>/interface/epic_cti/cti_subscriber.js?v=<?php echo attr($v_js_includes); ?>&zv=<?php echo filemtime(__DIR__ . '/../../epic_cti/cti_subscriber.js'); ?>"></script>
 
     <?php
     // Below code block is to prepare certain elements for deciding what links to show on the menu

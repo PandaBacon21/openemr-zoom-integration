@@ -1,4 +1,6 @@
 import jwt
+from datetime import datetime, timezone
+
 from flask import current_app, g, jsonify, request
 
 from app.services.audit import write_audit_log
@@ -53,6 +55,13 @@ def verify_bearer_token_in_store() -> None | tuple:
 
     token = auth_header.split(" ", 1)[1]
     account_id = validate_token(token)
+    if not account_id:
+        db_account = getattr(g, "zoom_account", None)
+        if (db_account
+                and db_account.epic_zcc_bearer_token == token
+                and db_account.epic_zcc_bearer_token_expires_at
+                and db_account.epic_zcc_bearer_token_expires_at > datetime.now(timezone.utc)):
+            account_id = db_account.account_id
     if not account_id:
         write_audit_log(
             event_type="epic_zcc.bearer_token_invalid",
