@@ -1,6 +1,5 @@
 import logging
 import secrets
-import uuid
 from flask import request, jsonify, current_app
 
 from app.models import ZoomAccount
@@ -587,7 +586,7 @@ def _epic_zcc_response(account: ZoomAccount) -> dict:
         "epic_zcc_phone_system_id": config.epic_zcc_phone_system_id,
         "epic_zcc_phone_system_id_type": config.epic_zcc_phone_system_id_type,
         "epic_zcc_recipient_id_type": config.epic_zcc_recipient_id_type,
-        "epic_zcc_client_id": account.epic_zcc_client_id,
+        "epic_zcc_client_id": current_app.config.get("EPIC_ZCC_CLIENT_ID"),
         "epic_kid": account.epic_kid,
         "instance_url": instance_url,
         "jwks_url": f"{instance_url}/oauth2/keys/1/{account.epic_kid}" if account.epic_kid else None,
@@ -634,7 +633,6 @@ def initialize_epic_zcc(zoom_account_id: str):
     if not account:
         return jsonify({"error": f"No active registration found for account {zoom_account_id}"}), 404
 
-    account.epic_zcc_client_id = str(uuid.uuid4())
     account.epic_kid = secrets.token_hex(16).upper()
     try:
         db.session.commit()
@@ -645,7 +643,6 @@ def initialize_epic_zcc(zoom_account_id: str):
 
     return jsonify({
         "zoom_account_id": zoom_account_id,
-        "epic_zcc_client_id": account.epic_zcc_client_id,
         "epic_kid": account.epic_kid,
     }), 200
 

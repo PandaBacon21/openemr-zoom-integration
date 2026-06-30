@@ -3,7 +3,7 @@ from app.extensions import db
 from app.models import AccountConfig, ZoomAccount
 
 
-def _create_account(app, account_id: str, *, epic_zcc_client_id=None, epic_kid=None) -> ZoomAccount:
+def _create_account(app, account_id: str, *, epic_kid=None) -> ZoomAccount:
     with app.app_context():
         account = ZoomAccount(
             account_id=account_id,
@@ -15,7 +15,6 @@ def _create_account(app, account_id: str, *, epic_zcc_client_id=None, epic_kid=N
             private_key_path=f"/tmp/keys/{account_id}/private.pem",
             kid=f"zoomly-{account_id}",
             tenant_id=f"t{account_id[-9:]}",
-            epic_zcc_client_id=epic_zcc_client_id,
             epic_kid=epic_kid,
             is_active=True,
         )
@@ -41,6 +40,7 @@ def test_get_epic_zcc_returns_404_for_unknown_account(client):
 def test_get_epic_zcc_returns_all_fields(client, app):
     _create_account(app, "acct-1")
     app.config["APP_PUBLIC_URL"] = "https://bridge.example.com"
+    app.config["EPIC_ZCC_CLIENT_ID"] = None
 
     response = client.get("/config/account/acct-1/epic-zcc", headers=AUTH_HEADERS)
 
@@ -64,13 +64,14 @@ def test_get_epic_zcc_returns_all_fields(client, app):
 
 
 def test_get_epic_zcc_computes_jwks_url_when_kid_set(client, app):
-    _create_account(app, "acct-2", epic_zcc_client_id="uuid-123", epic_kid="ABCD1234")
+    _create_account(app, "acct-2", epic_kid="ABCD1234")
     app.config["APP_PUBLIC_URL"] = "https://bridge.example.com"
+    app.config["EPIC_ZCC_CLIENT_ID"] = "fixed-client-id"
 
     response = client.get("/config/account/acct-2/epic-zcc", headers=AUTH_HEADERS)
 
     body = response.get_json()
-    assert body["epic_zcc_client_id"] == "uuid-123"
+    assert body["epic_zcc_client_id"] == "fixed-client-id"
     assert body["epic_kid"] == "ABCD1234"
     assert body["jwks_url"] == (
         "https://bridge.example.com/zoomly/acct-2/interconnect-amcurprd-oauth"
@@ -187,7 +188,7 @@ def test_initialize_epic_zcc_returns_404_for_unknown_account(client):
     assert "No active registration" in response.get_json()["error"]
 
 
-def test_initialize_epic_zcc_generates_and_persists_credentials(client, app):
+def test_initialize_epic_zcc_generates_and_persists_kid(client, app):
     _create_account(app, "acct-1")
 
     response = client.post(
@@ -198,8 +199,7 @@ def test_initialize_epic_zcc_generates_and_persists_credentials(client, app):
     assert response.status_code == 200
     body = response.get_json()
     assert body["zoom_account_id"] == "acct-1"
-    assert body["epic_zcc_client_id"] is not None
-    assert len(body["epic_zcc_client_id"]) == 36  # UUID format
+    assert "epic_zcc_client_id" not in body
     assert body["epic_kid"] is not None
     assert len(body["epic_kid"]) == 32  # secrets.token_hex(16).upper()
     assert body["epic_kid"] == body["epic_kid"].upper()
@@ -207,12 +207,11 @@ def test_initialize_epic_zcc_generates_and_persists_credentials(client, app):
     # Confirm persisted to DB
     with app.app_context():
         account = ZoomAccount.query.filter_by(account_id="acct-1").first()
-        assert account.epic_zcc_client_id == body["epic_zcc_client_id"]
         assert account.epic_kid == body["epic_kid"]
 
 
-def test_initialize_epic_zcc_regenerates_new_values(client, app):
-    _create_account(app, "acct-1", epic_zcc_client_id="old-uuid", epic_kid="OLDKID")
+def test_initialize_epic_zcc_regenerates_kid_only(client, app):
+    _create_account(app, "acct-1", epic_kid="OLDKID")
 
     response = client.post(
         "/config/account/acct-1/epic-zcc/initialize",
@@ -221,5 +220,4 @@ def test_initialize_epic_zcc_regenerates_new_values(client, app):
 
     assert response.status_code == 200
     body = response.get_json()
-    assert body["epic_zcc_client_id"] != "old-uuid"
     assert body["epic_kid"] != "OLDKID"

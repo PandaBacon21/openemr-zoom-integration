@@ -23,6 +23,7 @@ OUTBOUND_PATH = f"/zoomly/{TEST_ACCOUNT_ID}/interconnect-amcurprd-oauth/cti/init
 def configure_outbound(app):
     app.config["OPENEMR_FLASK_SECRET"] = "outbound-secret"
     app.config["APP_PUBLIC_URL"] = "https://bridge.example"
+    app.config["EPIC_ZCC_CLIENT_ID"] = "epic-client-id"
     screenpop_dispatch._subscribers.clear()
     yield
     screenpop_dispatch._subscribers.clear()
@@ -35,7 +36,6 @@ def _seed_account(
     with_mapping: bool = True,
     mapping_openemr_user_id: str = TEST_OPENEMR_USER_ID,
     mapping_zcc_user_id: str | None = TEST_ZCC_USER_ID,
-    epic_client_id: str | None = "epic-client-id",
     epic_kid: str | None = "ABCDEF0123456789ABCDEF0123456789",
 ) -> None:
     with app.app_context():
@@ -48,7 +48,6 @@ def _seed_account(
             openemr_client_id="openemr-client-id",
             private_key_path=private_key_path,
             kid=f"zoomly-{TEST_ACCOUNT_ID}",
-            epic_zcc_client_id=epic_client_id,
             epic_kid=epic_kid,
             is_active=True,
         ))

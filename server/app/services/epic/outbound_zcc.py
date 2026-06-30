@@ -61,9 +61,10 @@ def initiate_call(
     url = build_initiate_call_url(account)
     jku = _build_jku_url(account)
     iss = _build_issuer_url(account)
+    client_id = current_app.config.get("EPIC_ZCC_CLIENT_ID") or ""
     try:
         assertion = build_client_assertion(
-            client_id=account.epic_zcc_client_id,
+            client_id=client_id,
             audience=url,
             key_path=account.private_key_path,
             key_id=account.epic_kid,
@@ -169,8 +170,8 @@ def build_initiate_call_url(account) -> str:
 def _validate_account_config(account) -> None:
     if not (account.config and account.config.epic_zcc_backend_url):
         raise OutboundZccError("missing_backend_url", "epic_zcc_backend_url is required")
-    if not account.epic_zcc_client_id:
-        raise OutboundZccError("missing_client_id", "epic_zcc_client_id is required")
+    if not current_app.config.get("EPIC_ZCC_CLIENT_ID"):
+        raise OutboundZccError("missing_client_id", "EPIC_ZCC_CLIENT_ID env var is not set")
     if not account.epic_kid:
         raise OutboundZccError("missing_epic_kid", "epic_kid is required")
     if not account.private_key_path:

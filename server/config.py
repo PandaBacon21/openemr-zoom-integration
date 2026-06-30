@@ -89,6 +89,9 @@ class Config:
     # Default off
     ENABLE_EPIC_ZCC = os.environ.get("ENABLE_EPIC_ZCC", "false").lower() in ("true", "1")
 
+    # Fixed client ID registered in the Zoom App in Epic's Marketplace
+    EPIC_ZCC_CLIENT_ID = os.environ.get("EPIC_ZCC_CLIENT_ID")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

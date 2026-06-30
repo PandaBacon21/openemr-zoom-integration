@@ -370,7 +370,6 @@ export const updateEpicZccConfig = (
 export const initializeEpicZcc = (zoom_account_id: string) =>
   apiClient.post<{
     zoom_account_id: string;
-    epic_zcc_client_id: string;
     epic_kid: string;
   }>(`/config/account/${zoom_account_id}/epic-zcc/initialize`);
 

@@ -177,7 +177,7 @@ const EpicZccTab: React.FC<Props> = ({ account }) => {
     );
   }
 
-  const isInitialized = Boolean(config?.epic_zcc_client_id);
+  const isInitialized = Boolean(config?.epic_kid);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 700 }}>
@@ -216,17 +216,14 @@ const EpicZccTab: React.FC<Props> = ({ account }) => {
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
             CTI Credentials
           </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 2 }}>
+            <CopyField label="Client ID" value={config?.epic_zcc_client_id ?? null} />
+            <CopyField label="KID" value={config?.epic_kid ?? null} />
+          </Box>
           {!isInitialized && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Click Initialize CTI to generate a client ID and JWKS kid for
-              this account.
-            </Typography>
-          )}
-          {isInitialized && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Client ID: <strong>{config?.epic_zcc_client_id}</strong>
-              <br />
-              KID: <strong>{config?.epic_kid}</strong>
+              Click Initialize CTI to generate a JWKS KID for this account.
+              The Client ID is set globally in the server environment.
             </Typography>
           )}
           <Button
@@ -243,7 +240,7 @@ const EpicZccTab: React.FC<Props> = ({ account }) => {
             {initializing
               ? "Initializing…"
               : isInitialized
-                ? "Regenerate"
+                ? "Regenerate KID"
                 : "Initialize CTI"}
           </Button>
         </CardContent>
@@ -347,12 +344,12 @@ const EpicZccTab: React.FC<Props> = ({ account }) => {
 
       {/* Regenerate confirm dialog */}
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>Regenerate CTI Credentials?</DialogTitle>
+        <DialogTitle>Regenerate KID?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This will generate a new client ID and kid. You will need to update
-            the Zoom admin portal with the new values. The previous credentials
-            will stop working immediately.
+            This will generate a new KID and rotate the JWKS URL. You will need
+            to update the JWT Key Set URL in the Zoom admin portal. The Client
+            ID will not change. The previous KID will stop working immediately.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

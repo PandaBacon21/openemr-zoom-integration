@@ -38,12 +38,6 @@ def receive_communication3(zoom_account_id: str):
     account = g.zoom_account
     raw_body = request.get_data()
 
-    logger.info(
-        "epic.receive_communication3 | raw_body account_id=%s\n%s",
-        account.account_id,
-        raw_body.decode("utf-8", errors="replace"),
-    )
-
     try:
         payload = parse_receive_communication3_request(
             raw_body,
@@ -68,17 +62,11 @@ def receive_communication3(zoom_account_id: str):
         )
 
     logger.info(
-        "epic.receive_communication | parsed payload "
+        "epic.receive_communication3 | received "
         f"account_id={account.account_id} "
         f"recipient_id={payload['recipient_id']!r} "
-        f"recipient_id_type={payload.get('recipient_id_type')!r} "
-        f"patient_id={payload.get('patient_id')!r} "
-        f"patient_id_type={payload.get('patient_id_type')!r} "
-        f"communication_type={payload.get('communication_type')!r} "
         f"caller_number={payload.get('caller_number')!r} "
-        f"dialed_number={payload.get('dialed_number')!r} "
-        f"call_id={payload.get('call_id')!r} "
-        f"lookup_type={payload.get('lookup_type')!r}"
+        f"call_id={payload.get('call_id')!r}"
     )
     write_audit_log(
         event_type="epic_zcc.receive_communication_received",

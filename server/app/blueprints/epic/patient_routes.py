@@ -64,12 +64,6 @@ def patient_lookup(zoom_account_id: str):
         return _fault_response("INVALID-REQUEST", "empty body",
                                account_id=account.account_id, reason="empty_body")
 
-    logger.info(
-        "epic.patient_lookup | raw_body account_id=%s\n%s",
-        account.account_id,
-        raw_body.decode("utf-8", errors="replace"),
-    )
-
     try:
         criteria = parse_patient_lookup_request(raw_body)
     except InvalidEpicRequest as e:
@@ -81,32 +75,20 @@ def patient_lookup(zoom_account_id: str):
         return _fault_response(e.fault_code, e.message,
                                account_id=account.account_id, reason=reason)
 
-    queried_fields_from_criteria = [
-        k for k, v in (
-            ("patient_id", criteria.get("patient_id")),
-            ("dob", criteria.get("dob")),
-            ("ssn_last4", criteria.get("ssn_last4")),
-            ("phones", criteria.get("phones")),
-        )
-        if v
-    ]
-    logger.info(
-        "epic.patient_lookup | parsed criteria "
-        f"account_id={account.account_id} "
-        f"user_id={criteria['user_id']!r} "
-        f"user_id_type={criteria.get('user_id_type')!r} "
-        f"patient_id={criteria.get('patient_id')!r} "
-        f"patient_id_type={criteria.get('patient_id_type')!r} "
-        f"dob={criteria.get('dob')!r} "
-        f"ssn_last4={criteria.get('ssn_last4')!r} "
-        f"phones={criteria.get('phones')!r}"
-    )
     write_audit_log(
         event_type="epic_zcc.patient_lookup_received",
         success=True,
         zoom_account_id=account.account_id,
         detail={
-            "criteria_fields": queried_fields_from_criteria,
+            "criteria_fields": [
+                k for k, v in (
+                    ("patient_id", criteria.get("patient_id")),
+                    ("dob", criteria.get("dob")),
+                    ("ssn_last4", criteria.get("ssn_last4")),
+                    ("phones", criteria.get("phones")),
+                )
+                if v
+            ],
             "patient_id_type": criteria.get("patient_id_type"),
             "epic_service_user": criteria["user_id"],
         },
@@ -125,7 +107,6 @@ def patient_lookup(zoom_account_id: str):
         logger.info(
             "epic.patient_lookup | cache stored "
             f"account_id={account.account_id} "
-            f"raw_phone={phones[0]!r} "
             f"cache_key={cache_phone!r} "
             f"match_count={len(rows)} "
             f"queried_fields={queried_fields!r}"
