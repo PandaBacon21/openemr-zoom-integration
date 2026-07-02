@@ -1428,7 +1428,7 @@ if (empty($_GET['prov']) && empty($_GET['group'])) { ?>
         <?php
         foreach ($patienttitle as $entry) {
             if (!empty($entry['phone'])) {
-                if (!empty($_SESSION['zoomly_is_zcc_agent'])) {
+                if (!empty($_SESSION['zoomly_is_zcc_agent']) && !preg_match('/555-\d{4}$/', $entry['phone'])) {
                     echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
                         . ' data-phone="' . attr($entry['phone']) . '"'
                         . ' data-pid="' . attr((string)$patientid) . '"'
@@ -1480,7 +1480,7 @@ if ($_GET['group'] === true && $have_group_global_enabled) { ?>
             <?php
             foreach ($patienttitle as $entry) {
                 if (!empty($entry['phone'])) {
-                    if (!empty($_SESSION['zoomly_is_zcc_agent'])) {
+                    if (!empty($_SESSION['zoomly_is_zcc_agent']) && !preg_match('/555-\d{4}$/', $entry['phone'])) {
                         echo text($entry['label']) . ': <a class="zoomly-cti-phone" href="#" role="button"'
                             . ' data-phone="' . attr($entry['phone']) . '"'
                             . ' data-pid="' . attr((string)$patientid) . '"'
