@@ -56,6 +56,39 @@
         };
     }
 
+    // Address Book screen-pop for provider callers. Opens (or focuses) the
+    // Address Book tab — the same "adm" target OpenEMR's own menu uses — and,
+    // on a single provider match, opens that provider's entry in OpenEMR's
+    // native Address Book editor modal. Mirrors addrbook_list.php's
+    // doedclick_edit() dlgopen call, invoked here from the top frame with an
+    // absolute webroot URL.
+    function handleAddressBookPop(payload) {
+        navigate(webroot() + "/interface/usergroup/addrbook_list.php", "adm");
+        var userId = payload.openemr_provider_user_id;
+        if (userId) {
+            openAddrbookEditModal(userId);
+        }
+    }
+
+    function openAddrbookEditModal(userId) {
+        var url = webroot()
+            + "/interface/usergroup/addrbook_edit.php?userid="
+            + encodeURIComponent(userId);
+        var height = Math.round(((window.screen && window.screen.availHeight) || 800) * 0.75);
+        if (typeof window.restoreSession === "function") {
+            window.restoreSession();
+        }
+        if (typeof window.dlgopen === "function") {
+            window.dlgopen(url, "_blank", 650, height);
+        } else if (window.top && typeof window.top.dlgopen === "function") {
+            window.top.dlgopen(url, "_blank", 650, height);
+        } else {
+            // No dialog framework available — degrade to loading the editor
+            // into the Address Book tab itself.
+            navigate(url, "adm");
+        }
+    }
+
     function closeActiveModal() {
         var jq = window.jQuery || window.$;
         if (jq && typeof jq.fn.modal === "function") {
@@ -82,6 +115,10 @@
         }
         expandCtiPanel();
         closeActiveModal();
+        if (payload.target === "address_book") {
+            handleAddressBookPop(payload || {});
+            return;
+        }
         if (payload.matched_on === "multi_match" && Array.isArray(payload.candidates) && payload.candidates.length > 0) {
             showPickerModal(payload.candidates);
             return;

@@ -157,3 +157,45 @@ def test_reset_script_cleans_up_new_demo_auth_tables():
     assert "DELETE FROM users_secure" in text
     assert "DELETE FROM patient_access_onsite" in text
     assert "DELETE FROM gacl_aro" in text
+
+
+def test_seed_sets_default_open_tabs_layout():
+    """Seed enforces the Zoomly Default Open Tabs layout: Flow Board first
+    (seq 10, default + active), upserted so re-seeds don't duplicate rows."""
+    text = _demo_sql_text()
+
+    assert "list_id='default_open_tabs'" in text or "'default_open_tabs'" in text
+    # Flow Board leads, is the default tab, and is active.
+    assert re.search(
+        r"'default_open_tabs',\s*'flb',\s*'Flow Board',\s*10,\s*1,\s*1,",
+        text,
+    ), "Flow Board should be seq 10, active, default"
+    # Idempotent upsert on the composite PK.
+    assert "ON DUPLICATE KEY UPDATE" in text
+
+
+def test_seed_grants_physicians_address_book_acl():
+    """Seed extends the Physicians ('doc') group's view ACL to admin/practice
+    so providers can open the Address Book / receive the provider screen-pop."""
+    text = _demo_sql_text()
+
+    assert "gacl_aco_map" in text
+    assert "g.value = 'doc'" in text
+    assert "'admin', 'practice'" in text
+    # Guarded so a re-seed doesn't insert a duplicate map row.
+    assert "NOT EXISTS" in text
+
+
+def test_reset_reverts_default_open_tabs_and_address_book_acl():
+    """Full reset restores stock: Calendar-first tabs and Administrators-only
+    admin/practice (drops the Physicians Address Book grant)."""
+    text = _reset_script_text()
+
+    # Stock ordering leads with Calendar at seq 10.
+    assert re.search(
+        r"'default_open_tabs',\s*'cal',\s*'Calendar',\s*10,",
+        text,
+    ), "Reset should restore Calendar to seq 10 (stock)"
+    # The Physicians admin/practice grant is removed.
+    assert "DELETE FROM gacl_aco_map" in text
+    assert "g.value = 'doc'" in text

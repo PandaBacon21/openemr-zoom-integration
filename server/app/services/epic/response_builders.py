@@ -287,6 +287,17 @@ def _practitioner_identifiers(practitioner: dict) -> list[dict]:
             "value": npi,
         })
 
+    # Tax ID (EIN). Epic returns TIN with identifier type text "TIN" under
+    # OID 2.16.840.1.113883.4.4 (no dedicated system URL), starting Nov 2024.
+    tin = practitioner.get("tin")
+    if tin:
+        identifiers.append({
+            "use": "usual",
+            "type": {"text": "TIN"},
+            "system": "urn:oid:2.16.840.1.113883.4.4",
+            "value": tin,
+        })
+
     openemr_user_id = practitioner.get("openemr_user_id")
     if openemr_user_id is not None:
         identifiers.append({

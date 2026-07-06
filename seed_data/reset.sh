@@ -92,6 +92,34 @@ INSERT IGNORE INTO facility (id, name, color, inactive, service_location, billin
 VALUES (3, 'Your Clinic Name Here', '', 0, 1, 1, 1, 0);
 UPDATE users SET facility_id = 3 WHERE id = 1;
 
+-- Revert "Default Open Tabs" (list_options list_id='default_open_tabs') to
+-- OpenEMR 8.0.0 stock ordering/activity. The seed (01_globals.sql) leads with
+-- the Flow Board (default + active); stock leads with Calendar, has Flow Board
+-- inactive at seq 40, Message Inbox active, and no default tab.
+INSERT INTO list_options (list_id, option_id, title, seq, activity, is_default, notes) VALUES
+  ('default_open_tabs', 'cal', 'Calendar',             10, 1, 0, 'interface/main/main_info.php'),
+  ('default_open_tabs', 'pat', 'Patient Search / Add', 20, 0, 0, 'interface/new/new.php'),
+  ('default_open_tabs', 'fin', 'Patient Finder',       30, 0, 0, 'interface/main/finder/dynamic_finder.php'),
+  ('default_open_tabs', 'flb', 'Flow Board',           40, 0, 0, 'interface/patient_tracker/patient_tracker.php?skip_timeout_reset=1'),
+  ('default_open_tabs', 'msg', 'Message Inbox',        50, 1, 0, 'interface/main/messages/messages.php?form_active=1')
+ON DUPLICATE KEY UPDATE
+  title = VALUES(title), seq = VALUES(seq), activity = VALUES(activity),
+  is_default = VALUES(is_default), notes = VALUES(notes);
+
+-- Remove the Physicians-group Address Book grant added by 03_staff.sql
+-- (restore stock: only Administrators hold admin/practice).
+DELETE FROM gacl_aco_map
+WHERE section_value = 'admin' AND value = 'practice'
+  AND acl_id IN (
+    SELECT acl_id FROM (
+      SELECT m.acl_id
+      FROM gacl_aro_groups_map m
+      JOIN gacl_aro_groups g ON g.id = m.group_id
+      JOIN gacl_acl a        ON a.id = m.acl_id
+      WHERE g.value = 'doc' AND a.return_value = 'view'
+    ) x
+  );
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 SELECT 'Reset complete.' AS status;

@@ -56,3 +56,24 @@ UPDATE globals SET gl_value = '1' WHERE gl_name = 'esign_individual';
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'lock_esign_all';
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'lock_esign_individual';
 
+-- Default Open Tabs (List Editor -> "Default Open Tabs"): which tabs OpenEMR
+-- opens on login, in what order. Stored in list_options under
+-- list_id='default_open_tabs' — option_id=ID, seq=Order, activity=Active,
+-- is_default=Default, notes=URL. Stock OpenEMR opens Calendar first; the
+-- Zoomly demo leads with the Flow Board (default + active) so the telehealth
+-- lifecycle board is front-and-center, then Calendar and Patient Finder.
+-- Upsert by the (list_id, option_id) PK so a re-seed re-enforces the layout
+-- without duplicating rows. reset.sh reverts these five rows to stock.
+INSERT INTO list_options (list_id, option_id, title, seq, activity, is_default, notes) VALUES
+  ('default_open_tabs', 'flb', 'Flow Board',           10, 1, 1, 'interface/patient_tracker/patient_tracker.php?skip_timeout_reset=1'),
+  ('default_open_tabs', 'cal', 'Calendar',             20, 1, 0, 'interface/main/main_info.php'),
+  ('default_open_tabs', 'pat', 'Patient Search / Add', 30, 0, 0, 'interface/new/new.php'),
+  ('default_open_tabs', 'fin', 'Patient Finder',       40, 1, 0, 'interface/main/finder/dynamic_finder.php'),
+  ('default_open_tabs', 'msg', 'Message Inbox',        50, 0, 0, 'interface/main/messages/messages.php?form_active=1')
+ON DUPLICATE KEY UPDATE
+  title      = VALUES(title),
+  seq        = VALUES(seq),
+  activity   = VALUES(activity),
+  is_default = VALUES(is_default),
+  notes      = VALUES(notes);
+

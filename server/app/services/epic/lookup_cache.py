@@ -23,8 +23,11 @@ from threading import Lock
 from .constants import EPIC_LOOKUP_CACHE_TTL_SECONDS
 
 
-# (zoom_account_id, phone_digits) -> (cached_at, expires_at, payload)
-_cache: dict[tuple[str, str], tuple[float, float, dict]] = {}
+# (zoom_account_id, kind, phone_digits) -> (cached_at, expires_at, payload)
+# `kind` namespaces patient lookups (PatientLookUp) from provider lookups
+# (Practitioner.Search) so ReceiveCommunication3 can tell a provider caller
+# apart from a patient caller when reading by CallerPhoneNumber.
+_cache: dict[tuple[str, str, str], tuple[float, float, dict]] = {}
 _lock = Lock()
 
 
@@ -40,13 +43,16 @@ def cache_lookup(
     phone_digits: str,
     rows: list[dict],
     queried_fields: list[str],
+    kind: str = "patient",
 ) -> None:
     """Store the lookup result for later retrieval by ReceiveCommunication3.
 
-    `phone_digits` is the normalized 10-digit caller number from
-    PatientLookUp's Address.PhoneNumbers. ReceiveCommunication3 uses the same
-    number (CallerPhoneNumber) to read the cache, then picks the matching row.
-    `queried_fields` is kept alongside for downstream audit only.
+    `phone_digits` is the normalized 10-digit caller number. For patient
+    lookups it comes from PatientLookUp's Address.PhoneNumbers; for provider
+    lookups it is the matched provider's own stored phone (the ANI ZCC echoes
+    back). ReceiveCommunication3 uses CallerPhoneNumber to read the cache under
+    the matching `kind`, then picks the row. `queried_fields` is kept alongside
+    for downstream audit only.
 
     No-op when phone_digits is falsy — the lookup still runs and returns
     matches to ZCC, but the screen-pop path won't be reachable without a key.
@@ -56,39 +62,43 @@ def cache_lookup(
     now = time.time()
     with _lock:
         _sweep_expired(now)
-        _cache[(zoom_account_id, phone_digits)] = (
+        _cache[(zoom_account_id, kind, phone_digits)] = (
             now,
             now + EPIC_LOOKUP_CACHE_TTL_SECONDS,
             {"rows": rows, "queried_fields": queried_fields},
         )
 
 
-def get_cached_lookup(zoom_account_id: str, phone_digits: str) -> dict | None:
+def get_cached_lookup(
+    zoom_account_id: str, phone_digits: str, kind: str = "patient"
+) -> dict | None:
     """Return the cached lookup for a caller phone, or None if missing/expired."""
     if not phone_digits:
         return None
     now = time.time()
     with _lock:
-        record = _cache.get((zoom_account_id, phone_digits))
+        record = _cache.get((zoom_account_id, kind, phone_digits))
         if not record:
             return None
         _, expires_at, payload = record
         if expires_at <= now:
-            _cache.pop((zoom_account_id, phone_digits), None)
+            _cache.pop((zoom_account_id, kind, phone_digits), None)
             return None
     return payload
 
 
-def clear_cached_lookup(zoom_account_id: str, phone_digits: str) -> None:
+def clear_cached_lookup(
+    zoom_account_id: str, phone_digits: str, kind: str = "patient"
+) -> None:
     """Remove a cache entry after RC3 has consumed it — entries are single-use."""
     if not phone_digits:
         return
     with _lock:
-        _cache.pop((zoom_account_id, phone_digits), None)
+        _cache.pop((zoom_account_id, kind, phone_digits), None)
 
 
 def invalidate_for_account(zoom_account_id: str) -> int:
-    """Drop every cached lookup for an account (used when CTI is disabled)."""
+    """Drop every cached lookup for an account, all kinds (used when CTI is disabled)."""
     with _lock:
         to_drop = [k for k in _cache if k[0] == zoom_account_id]
         for k in to_drop:

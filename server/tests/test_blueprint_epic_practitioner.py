@@ -6,7 +6,7 @@ import pytest
 
 from app.extensions import db
 from app.models import AccountConfig, AuditLog, ZoomAccount
-from app.services.epic import token_store
+from app.services.epic import lookup_cache, token_store
 
 
 TEST_ACCOUNT_ID = "epic-practitioner-acct"
@@ -20,6 +20,13 @@ def reset_token_store():
     token_store._tokens.clear()
     yield
     token_store._tokens.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_lookup_cache():
+    lookup_cache._cache.clear()
+    yield
+    lookup_cache._cache.clear()
 
 
 def _seed_account(app, *, epic_enabled: bool = True) -> None:
@@ -257,3 +264,85 @@ def test_bearer_missing(app, client, monkeypatch):
     resp = _get(client, {"identifier": "1234567896"}, token=None)
 
     assert resp.status_code == 401
+
+
+def test_identifier_tax_id_oid_searches_federaltaxid_and_returns_tin(app, client, monkeypatch):
+    """TIN search via the Epic OID system matches federaltaxid (digits) and the
+    bundle returns a TIN identifier per spec."""
+    _seed_account(app)
+    engine = _patch_engine(monkeypatch, [_row(federaltaxid="84-1000016")])
+
+    resp = _get(
+        client,
+        {"identifier": "urn:oid:2.16.840.1.113883.4.4|84-1000016"},
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["total"] == 1
+    assert engine.last_conn.last_params["tin_digits"] == "841000016"
+    assert "REGEXP_REPLACE(u.federaltaxid" in engine.last_conn.last_sql
+    assert {
+        "use": "usual",
+        "type": {"text": "TIN"},
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "84-1000016",
+    } in body["entry"][0]["resource"]["identifier"]
+
+
+def test_identifier_tin_token_searches_federaltaxid(app, client, monkeypatch):
+    """The friendly TIN|<value> token form also targets federaltaxid."""
+    _seed_account(app)
+    engine = _patch_engine(monkeypatch, [_row(federaltaxid="84-1000016")])
+
+    resp = _get(client, {"identifier": "TIN|841000016"}, token=_mint_token())
+
+    assert resp.status_code == 200
+    assert engine.last_conn.last_params["tin_digits"] == "841000016"
+    assert "REGEXP_REPLACE(u.federaltaxid" in engine.last_conn.last_sql
+
+
+def test_lookup_caches_provider_by_own_phone(app, client, monkeypatch):
+    """A matched provider is cached under its own phone digits (kind='provider')
+    so ReceiveCommunication3 can resolve the pop by CallerPhoneNumber — even
+    though the search was by NPI (spec-faithful; no phone search param)."""
+    _seed_account(app)
+    _patch_engine(monkeypatch, [_row(phonecell="303-555-0199")])
+
+    resp = _get(client, {"identifier": "1234567896"}, token=_mint_token())
+
+    assert resp.status_code == 200
+    cached = lookup_cache.get_cached_lookup(TEST_ACCOUNT_ID, "3035550199", kind="provider")
+    assert cached is not None
+    assert len(cached["rows"]) == 1
+    assert str(cached["rows"][0]["openemr_user_id"]) == "16"
+    # Not stored under the patient namespace.
+    assert lookup_cache.get_cached_lookup(TEST_ACCOUNT_ID, "3035550199") is None
+
+    resolved = _audit_details(app, "epic_zcc.practitioner_lookup_resolved")
+    assert resolved[-1]["provider_cache_keys"] >= 1
+
+
+def test_lookup_without_provider_phone_caches_nothing(app, client, monkeypatch):
+    """No stored phone on the matched provider → no cache key (graceful)."""
+    _seed_account(app)
+    _patch_engine(monkeypatch, [_row()])
+
+    resp = _get(client, {"identifier": "1234567896"}, token=_mint_token())
+
+    assert resp.status_code == 200
+    resolved = _audit_details(app, "epic_zcc.practitioner_lookup_resolved")
+    assert resolved[-1]["provider_cache_keys"] == 0
+
+
+def test_phone_is_not_a_search_parameter(app, client, monkeypatch):
+    """Spec-faithful: phone alone is not a valid Practitioner.Search key, so it
+    falls through to the missing-parameters OperationOutcome."""
+    _seed_account(app)
+    _patch_engine(monkeypatch, [])
+
+    resp = _get(client, {"phone": "3035550142"}, token=_mint_token())
+
+    assert resp.status_code == 400
+    assert _outcome_code(resp.get_json()) == "4110"

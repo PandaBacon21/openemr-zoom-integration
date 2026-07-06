@@ -74,6 +74,16 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
         f"cache_key={normalized_caller_phone!r}"
     )
 
+    # Provider caller? When ZCC runs Practitioner.Search (instead of
+    # PatientLookUp) for this call, a 'provider'-namespaced cache entry exists
+    # under the caller's phone. Pop the OpenEMR Address Book for that provider
+    # rather than a patient chart, then stop — this is not a patient call.
+    provider_result = _try_provider_pop(
+        account, recipient_id, openemr_user_id, normalized_caller_phone, payload
+    )
+    if provider_result is not None:
+        return provider_result
+
     row = None
     cached = get_cached_lookup(account.account_id, normalized_caller_phone or "")
     if cached is not None:
@@ -260,6 +270,72 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
         pushed=True,
         openemr_user_id=openemr_user_id,
         openemr_patient_id=str(row["pid"]),
+        subscriber_count=subscriber_count,
+        event=event,
+    )
+
+
+def _try_provider_pop(
+    account,
+    recipient_id: str,
+    openemr_user_id: str,
+    caller_phone: str | None,
+    payload: dict,
+) -> ReceiveCommunicationResult | None:
+    """Pop the OpenEMR Address Book when the caller is a provider.
+
+    A provider call is recognized by a 'provider'-namespaced lookup cache entry
+    under the caller's phone, populated by Practitioner.Search (the provider
+    equivalent of PatientLookUp). Returns a result (screen-pop dispatched) when
+    this is a provider call, or None to let the normal patient path run.
+
+    Practitioner.Search only caches rows that carry a phone, so a cached entry
+    always has >=1 row. A single match pops that provider's Address Book entry;
+    an ambiguous (>1) match opens the Address Book list without a modal.
+    """
+    if not caller_phone:
+        return None
+    cached = get_cached_lookup(account.account_id, caller_phone, kind="provider")
+    if cached is None:
+        return None
+
+    # Single-use, mirroring the patient cache.
+    clear_cached_lookup(account.account_id, caller_phone, kind="provider")
+    rows = cached.get("rows") or []
+
+    if len(rows) == 1:
+        provider_user_id = str(rows[0].get("openemr_user_id") or "") or None
+        matched_on = "provider"
+    else:
+        provider_user_id = None
+        matched_on = "provider_ambiguous"
+
+    event = {
+        "type": "navigate",
+        "target": "address_book",
+        "matched_on": matched_on,
+        "openemr_provider_user_id": provider_user_id,
+        "caller_number": payload.get("caller_number"),
+    }
+    subscriber_count = dispatch(account.account_id, openemr_user_id, event)
+    write_audit_log(
+        event_type="epic_zcc.receive_communication_pushed",
+        success=True,
+        zoom_account_id=account.account_id,
+        openemr_user_id=openemr_user_id,
+        detail={
+            "recipient_id": recipient_id,
+            "subscriber_count": subscriber_count,
+            "matched_on": matched_on,
+            "target": "address_book",
+            "openemr_provider_user_id": provider_user_id,
+            "provider_match_count": len(rows),
+            "call_id": payload.get("call_id"),
+        },
+    )
+    return ReceiveCommunicationResult(
+        pushed=True,
+        openemr_user_id=openemr_user_id,
         subscriber_count=subscriber_count,
         event=event,
     )

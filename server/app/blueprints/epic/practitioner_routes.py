@@ -7,6 +7,8 @@ from flask import Response, g, request
 from app.blueprints.auth.auth_helpers import verify_bearer_token_in_store
 from app.blueprints.epic import epic_bp
 from app.services.audit import write_audit_log
+from app.services.epic.lookup_cache import cache_lookup
+from app.services.epic.patient_search import _phone_digits
 from app.services.epic.practitioner_search import (
     DEFAULT_PRACTITIONER_SEARCH_LIMIT,
     MAX_PRACTITIONER_SEARCH_LIMIT,
@@ -83,6 +85,8 @@ def practitioner_search(zoom_account_id: str):
             error_message=str(e),
         )
 
+    cache_keys = _cache_provider_lookup(account.account_id, criteria, practitioners)
+
     write_audit_log(
         event_type="epic_zcc.practitioner_lookup_resolved",
         success=True,
@@ -90,6 +94,7 @@ def practitioner_search(zoom_account_id: str):
         detail={
             "search_type": criteria["search_type"],
             "match_count": len(practitioners),
+            "provider_cache_keys": cache_keys,
         },
     )
 
@@ -99,6 +104,34 @@ def practitioner_search(zoom_account_id: str):
         practitioner_base_url=request.base_url,
     )
     return _fhir_response(body, status=200)
+
+
+_PROVIDER_PHONE_KEYS = ("phone_cell", "phone", "phone_work", "phone_work2")
+
+
+def _cache_provider_lookup(account_id: str, criteria: dict, practitioners: list[dict]) -> int:
+    """Cache the provider result so ReceiveCommunication3 can drive the pop.
+
+    Keyed by each matched provider's own stored phone digits — because when a
+    provider calls in, ZCC's CallerPhoneNumber is that provider's ANI. This
+    works no matter which spec field ZCC searched by (NPI / TIN / name), since
+    the phone→provider join happens here from the matched row, not from the
+    search input.
+
+    Returns the number of distinct phone keys written (for audit).
+    """
+    keys: set[str] = set()
+    for provider in practitioners:
+        for col in _PROVIDER_PHONE_KEYS:
+            digits = _phone_digits(provider.get(col) or "")
+            if digits:
+                keys.add(digits)
+
+    for key in keys:
+        cache_lookup(
+            account_id, key, practitioners, criteria["query_fields"], kind="provider"
+        )
+    return len(keys)
 
 
 def _parse_practitioner_search_args(args) -> dict:
