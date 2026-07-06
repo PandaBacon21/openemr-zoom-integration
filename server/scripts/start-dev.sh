@@ -18,10 +18,6 @@
 #     baked image works before deploying. No chmod block — the image already
 #     has correct ownership.
 #
-# Migrations are not run here — dev users `docker exec zoom-bridge uv run
-# alembic upgrade head` manually after editing migrations. start-staging.sh
-# and start-prod.sh handle migrations automatically.
-#
 # On a fresh clone: copy docker-compose.override.yml.example to
 # docker-compose.override.yml. Without that file, the default mode runs as
 # if --baked were passed (no patch shadowing, gunicorn) — the stack still
@@ -65,5 +61,8 @@ fi
 
 echo "Waiting for module init to complete..."
 docker wait zoomly-module-init
+
+echo "Running database migrations..."
+docker exec zoom-bridge uv run alembic upgrade head
 
 echo "Dev stack ready."

@@ -204,6 +204,39 @@ INSERT IGNORE INTO gacl_groups_aro_map (group_id, aro_id) VALUES
 -- Support staff → Clinicians
 (12,15),(12,17),(12,18),(12,32),(12,33),(12,34),(12,35),(12,36);
 
+-- Address Book access for the Physicians group.
+-- interface/usergroup/addrbook_list.php + addrbook_edit.php are gated by
+-- aclCheckCore('admin','practice') ("Practice Settings"). Stock OpenEMR grants
+-- that only to Administrators, so seeded providers can't open the provider
+-- directory (and can't receive the ZCC provider screen-pop). We extend the
+-- Physicians group's existing *view* ACL rule (gacl_aro_groups.value='doc') to
+-- include the admin/practice ACO, resolved dynamically so we don't depend on a
+-- hardcoded gacl_acl id. Idempotent — guarded by NOT EXISTS.
+--
+-- NOTE: OpenEMR's Address Book pages don't enforce view-vs-write, so providers
+-- can still edit entries even though this is a 'view' grant. Acceptable for the demo.
+SET @doc_practice_acl := (
+  SELECT m.acl_id
+  FROM gacl_aro_groups_map m
+  JOIN gacl_aro_groups g ON g.id = m.group_id
+  JOIN gacl_acl a        ON a.id = m.acl_id
+  WHERE g.value = 'doc' AND a.return_value = 'view' AND a.enabled = 1
+  ORDER BY m.acl_id
+  LIMIT 1
+);
+-- The NOT EXISTS subquery reads gacl_aco_map while we INSERT into it, so it
+-- must be wrapped in a derived table to avoid MariaDB error 1093 (can't
+-- reference the INSERT target in a subquery) — same pattern as reset.sh.
+INSERT INTO gacl_aco_map (acl_id, section_value, value)
+SELECT @doc_practice_acl, 'admin', 'practice' FROM DUAL
+WHERE @doc_practice_acl IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM (
+      SELECT acl_id FROM gacl_aco_map
+      WHERE section_value = 'admin' AND value = 'practice' AND acl_id = @doc_practice_acl
+    ) existing
+  );
+
 INSERT IGNORE INTO groups (name, user) VALUES
 -- Providers (Physicians group)
 ('Physicians', 'moconnor'),

@@ -628,18 +628,30 @@ def _attach_care_plan_form(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     try:
         with engine.begin() as conn:
-            result = conn.execute(
+            # form_care_plan.id is NOT auto_increment (bigint, no default) —
+            # unlike most form tables. OpenEMR's own care_plan/save.php assigns
+            # it via MAX(id)+1 and reuses that id as the forms-registry form_id,
+            # so a single form can carry multiple care-plan line rows under one
+            # id. We mirror that convention; running inside engine.begin() keeps
+            # the read-then-insert atomic for the serial hydrate pass. (This is
+            # the form's own id sequence — unrelated to the encounter-number
+            # `sequences` guardrail.)
+            new_id = conn.execute(
+                text("SELECT COALESCE(MAX(id), 0) + 1 FROM form_care_plan")
+            ).scalar()
+            conn.execute(
                 text("""
                     INSERT INTO form_care_plan (
-                        date, pid, encounter, user, groupname,
+                        id, date, pid, encounter, user, groupname,
                         authorized, activity, code, codetext, description,
                         care_plan_type
                     ) VALUES (
-                        :date, :pid, :encounter, :user, 'Default',
+                        :id, :date, :pid, :encounter, :user, 'Default',
                         1, 1, '', '', :description, 'plan'
                     )
                 """),
                 {
+                    "id": int(new_id),
                     "date": now,
                     "pid": int(pid),
                     "encounter": str(encounter),
@@ -647,11 +659,10 @@ def _attach_care_plan_form(
                     "description": body,
                 },
             )
-            form_specific_id = result.lastrowid
             _register_form(
                 conn, encounter, pid, provider_user_id, provider_username,
                 form_name="Care Plan", formdir="care_plan",
-                form_specific_id=int(form_specific_id) if form_specific_id else 0,
+                form_specific_id=int(new_id),
                 now=now,
             )
     except Exception as e:

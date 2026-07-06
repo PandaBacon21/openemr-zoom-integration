@@ -98,6 +98,19 @@ def _row(**overrides) -> dict:
     return base
 
 
+def _provider_row(**overrides) -> dict:
+    base = {"openemr_user_id": 16, "first_name": "Michael", "last_name": "Chen"}
+    base.update(overrides)
+    return base
+
+
+def _cache_provider_rows(rows: list[dict], phone: str = "3035550101") -> None:
+    """Seed the provider-namespaced cache (populated by Practitioner.Search)."""
+    lookup_cache.cache_lookup(
+        TEST_ACCOUNT_ID, phone, rows, ["identifier"], kind="provider"
+    )
+
+
 def _payload(**overrides) -> dict:
     base = {
         "RecipientID": TEST_ZCC_USER_ID,
@@ -145,6 +158,79 @@ def test_receive_communication_pushes_cached_match_to_subscriber(app, client):
     assert pushed[-1]["recipient_id"] == TEST_ZCC_USER_ID
     assert pushed[-1]["subscriber_count"] == 1
     assert other_account_q.empty()
+
+
+def test_receive_communication_provider_pop_opens_address_book(app, client):
+    _seed_account(app)
+    _cache_provider_rows([_provider_row(openemr_user_id=16)])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(), token=_mint_token())
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"EpicCallID": "call-123"}
+    event = q.get_nowait()
+    assert event == {
+        "type": "navigate",
+        "target": "address_book",
+        "matched_on": "provider",
+        "openemr_provider_user_id": "16",
+        "caller_number": "+13035550101",
+    }
+
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
+    assert pushed[-1]["target"] == "address_book"
+    assert pushed[-1]["openemr_provider_user_id"] == "16"
+    assert pushed[-1]["provider_match_count"] == 1
+
+
+def test_receive_communication_provider_ambiguous_opens_list_without_modal(app, client):
+    _seed_account(app)
+    _cache_provider_rows([
+        _provider_row(openemr_user_id=16),
+        _provider_row(openemr_user_id=17),
+    ])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["target"] == "address_book"
+    assert event["matched_on"] == "provider_ambiguous"
+    assert event["openemr_provider_user_id"] is None
+
+
+def test_receive_communication_provider_cache_takes_priority_over_patient(app, client):
+    # Both caches seeded under the same caller phone. The provider branch runs
+    # first and wins; the patient path is not taken (only one event dispatched).
+    _seed_account(app)
+    _cache_rows([_row()])
+    _cache_provider_rows([_provider_row(openemr_user_id=16)])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _payload(), token=_mint_token())
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["target"] == "address_book"
+    assert q.empty()
+
+
+def test_receive_communication_provider_cache_single_use(app, client):
+    # The provider cache entry is consumed on first RC3; a second RC3 for the
+    # same call falls through (no provider entry) — here to the patient path.
+    _seed_account(app)
+    _cache_provider_rows([_provider_row(openemr_user_id=16)])
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    first = _post(client, _payload(), token=_mint_token())
+    assert first.status_code == 200
+    assert q.get_nowait()["target"] == "address_book"
+
+    assert lookup_cache.get_cached_lookup(
+        TEST_ACCOUNT_ID, "3035550101", kind="provider"
+    ) is None
 
 
 def test_receive_communication_selects_patient_from_multi_match_cache(app, client):

@@ -6,6 +6,8 @@ Identifier takes priority and all other demographic/address filters are
 ignored when it is present, matching Epic's published behavior.
 """
 
+import re
+
 from sqlalchemy import text
 
 from app.extensions import get_openemr_db_engine
@@ -15,21 +17,40 @@ DEFAULT_PRACTITIONER_SEARCH_LIMIT = 50
 MAX_PRACTITIONER_SEARCH_LIMIT = 100
 
 _NPI_SYSTEM_MARKERS = ("us-npi", "737384")
+# Epic returns/searches Tax ID (EIN) under OID 2.16.840.1.113883.4.4 with
+# identifier type text "TIN". We also accept the friendlier tax/tin/ein tokens.
+_TIN_SYSTEM_MARKERS = ("tax", "tin", "ein", "2.16.840.1.113883.4.4")
 _FHIR_ID_TYPES = {"FHIR", "FHIRID", "FHIR ID"}
+
+
+def _digits_only(value: str) -> str:
+    """Strip every non-digit — used for Tax ID (EIN) comparison.
+
+    TINs are 9 digits and never carry a country code, so a plain digit strip
+    is correct here.
+    """
+    return re.sub(r"\D", "", value or "")
 
 
 def search_practitioners(criteria: dict) -> list[dict]:
     """Search active OpenEMR provider users for Epic FHIR Practitioner.Search.
 
-    Supported criteria keys:
+    Supported criteria keys (all Epic Practitioner.Search spec parameters —
+    phone is intentionally not a search key; Epic has no phone search param):
         search_type         — 'identifier' | '_id' | 'name' | 'family'
-        identifier          — token value after any `system|` prefix
+        identifier          — token value after any `system|` prefix; the
+                              system selects NPI, Tax ID (EIN), FHIR UUID, or
+                              internal user id (systemless/unknown matches any)
         identifier_system   — optional token system/type prefix
         fhir_id             — Practitioner FHIR id / OpenEMR users.uuid hex
         name                — free-text name fragment
         family              — last-name fragment
         given               — optional first/middle-name fragment
         count               — result limit, already parsed and bounded by caller
+
+    Each result carries the provider's stored phone numbers (phone/cell/work)
+    so the caller (the practitioner route) can key the screen-pop cache by the
+    provider's own ANI — the number ReceiveCommunication3 echoes back.
 
     Empty result is a normal outcome. DB errors propagate so routes can audit
     and emit FHIR OperationOutcome diagnostics.
@@ -87,6 +108,11 @@ def search_practitioners(criteria: dict) -> list[dict]:
                u.title,
                u.email,
                u.npi,
+               u.federaltaxid,
+               u.phone,
+               u.phonecell,
+               u.phonew1,
+               u.phonew2,
                u.active,
                u.facility_id,
                f.name AS facility_name,
@@ -114,13 +140,23 @@ def _identifier_clause(identifier: str, system: str | None) -> tuple[str, dict[s
     identifiers we expose in the Bundle so ZCC can use customer-specific ID
     types during setup without needing another code path.
     """
-    params: dict[str, object] = {"identifier_value": identifier}
+    params: dict[str, object] = {
+        "identifier_value": identifier,
+        "tin_digits": _digits_only(identifier),
+    }
+    # Broad match used when no system is given or the system is unrecognized:
+    # NPI, internal user id, FHIR UUID, or Tax ID (EIN, digits-compared). The
+    # `:tin_digits != ''` guard keeps a non-numeric identifier from matching a
+    # NULL/blank federaltaxid, and NPI (10 digits) never collides with a TIN
+    # (9 digits) so including both here is safe.
+    any_id_clause = (
+        "u.npi = :identifier_value "
+        "OR CAST(u.id AS CHAR) = :identifier_value "
+        "OR LOWER(HEX(u.uuid)) = LOWER(:identifier_value) "
+        "OR (:tin_digits != '' AND REGEXP_REPLACE(u.federaltaxid, '[^0-9]', '') = :tin_digits)"
+    )
     if not system:
-        return (
-            "u.npi = :identifier_value "
-            "OR CAST(u.id AS CHAR) = :identifier_value "
-            "OR LOWER(HEX(u.uuid)) = LOWER(:identifier_value)"
-        ), params
+        return any_id_clause, params
 
     system_clean = system.strip()
     system_lower = system_clean.lower()
@@ -130,16 +166,16 @@ def _identifier_clause(identifier: str, system: str | None) -> tuple[str, dict[s
         marker in system_lower for marker in _NPI_SYSTEM_MARKERS
     ):
         return "u.npi = :identifier_value", params
+    if system_upper in {"TAX", "TIN", "EIN"} or any(
+        marker in system_lower for marker in _TIN_SYSTEM_MARKERS
+    ):
+        return "REGEXP_REPLACE(u.federaltaxid, '[^0-9]', '') = :tin_digits", params
     if system_upper in _FHIR_ID_TYPES or "fhir" in system_lower:
         return "LOWER(HEX(u.uuid)) = LOWER(:identifier_value)", params
     if system_upper in {"INTERNAL", "USER", "USERID", "OPENEMR"}:
         return "CAST(u.id AS CHAR) = :identifier_value", params
 
-    return (
-        "u.npi = :identifier_value "
-        "OR CAST(u.id AS CHAR) = :identifier_value "
-        "OR LOWER(HEX(u.uuid)) = LOWER(:identifier_value)"
-    ), params
+    return any_id_clause, params
 
 
 def _like(value: str) -> str:
@@ -162,6 +198,11 @@ def _normalize_row(row: dict) -> dict:
         "title": (row.get("title") or "").strip(),
         "email": (row.get("email") or "").strip(),
         "npi": (row.get("npi") or "").strip(),
+        "tin": (row.get("federaltaxid") or "").strip(),
+        "phone": (row.get("phone") or "").strip(),
+        "phone_cell": (row.get("phonecell") or "").strip(),
+        "phone_work": (row.get("phonew1") or "").strip(),
+        "phone_work2": (row.get("phonew2") or "").strip(),
         "facility_id": row.get("facility_id") or None,
         "facility_name": row.get("facility_name") or None,
         "physician_type": (row.get("physician_type") or "").strip(),
