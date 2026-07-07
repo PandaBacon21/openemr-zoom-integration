@@ -30,15 +30,23 @@ read_dotenv_value() {
 DOTENV_MYSQL_ROOT_PASSWORD="$(read_dotenv_value MYSQL_ROOT_PASSWORD)"
 DOTENV_MARIADB_CONTAINER="$(read_dotenv_value MARIADB_CONTAINER)"
 DOTENV_OPENEMR_DB_NAME="$(read_dotenv_value OPENEMR_DB_NAME)"
+DOTENV_OPENEMR_PUBLIC_URL="$(read_dotenv_value OPENEMR_PUBLIC_URL)"
 
 DB_ROOT_PASS=${MYSQL_ROOT_PASSWORD:-${DOTENV_MYSQL_ROOT_PASSWORD:-change-me-db-root}}
 DB_CONTAINER=${MARIADB_CONTAINER:-${DOTENV_MARIADB_CONTAINER:-mariadb-emr}}
 DB_NAME=${OPENEMR_DB_NAME:-${DOTENV_OPENEMR_DB_NAME:-openemr}}
+# Public OpenEMR URL drives environment-specific globals (e.g. the patient
+# portal address). Falls back to the dev host port so a bare local seed still
+# produces a working (if non-TLS) portal link.
+OPENEMR_PUBLIC_URL=${OPENEMR_PUBLIC_URL:-${DOTENV_OPENEMR_PUBLIC_URL:-http://localhost:8300}}
 
 echo "Seeding demo data into $DB_CONTAINER..."
 # Seed is split into 7 ordered files (01_globals.sql through 07_clinical_data.sql).
 # Cat them in order into a single mariadb session so SQL session variables
 # (@zoom_*_catid, @recurrspec, @location) persist across file boundaries.
-cat "$SCRIPT_DIR"/0[1-7]_*.sql | docker exec -i "$DB_CONTAINER" mariadb -u root -p"$DB_ROOT_PASS" "$DB_NAME"
+# Prepend a session variable so the ordered SQL files (which run in one mariadb
+# session) can build environment-specific globals from the deployment domain.
+{ printf "SET @openemr_public_url = '%s';\n" "$OPENEMR_PUBLIC_URL"; cat "$SCRIPT_DIR"/0[1-7]_*.sql; } \
+  | docker exec -i "$DB_CONTAINER" mariadb -u root -p"$DB_ROOT_PASS" "$DB_NAME"
 
 echo "Done."

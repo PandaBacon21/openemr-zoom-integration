@@ -228,7 +228,10 @@ UPDATE patient_data SET street='200 SW Salmon Street',    city='Portland',     s
 
 UPDATE globals SET gl_value = '1' WHERE gl_name = 'portal_onsite_two_enable';
 UPDATE globals SET gl_value = '0' WHERE gl_name = 'use_email_for_portal_username';
-UPDATE globals SET gl_value = 'https://openemr-dev.theloosemoose.us/portal' WHERE gl_name = 'portal_onsite_two_address';
+-- Portal URL follows the deployment domain. seed.sh injects @openemr_public_url
+-- from OPENEMR_PUBLIC_URL in .env (falls back to a localhost default there), so
+-- dev/staging/prod each get their own portal address instead of a hardcoded one.
+UPDATE globals SET gl_value = CONCAT(@openemr_public_url, '/portal') WHERE gl_name = 'portal_onsite_two_address';
 
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'james.harrison' WHERE pid = 100;
 UPDATE patient_data SET allow_patient_portal = 'YES', cmsportal_login = 'sofia.reyes'    WHERE pid = 101;
