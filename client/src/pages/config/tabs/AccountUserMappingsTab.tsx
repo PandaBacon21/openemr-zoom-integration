@@ -74,7 +74,7 @@ const labelForSkipReason = (reason: string): string => {
   }
 };
 
-const AccountProvidersTab: React.FC<Props> = ({
+const AccountUserMappingsTab: React.FC<Props> = ({
   account,
   mappings,
   onMappingsChanged,
@@ -941,4 +941,4 @@ const AccountProvidersTab: React.FC<Props> = ({
   );
 };
 
-export default AccountProvidersTab;
+export default AccountUserMappingsTab;

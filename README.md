@@ -2,6 +2,8 @@
 
 Lightweight Flask backend for linking Zoom account data with OpenEMR workflows.
 
+Status: current go-live / production-candidate release. Sized to serve ~20-30 concurrent users (realistic typical load 1-5) on a single Gunicorn gevent worker (1 worker / 100 connections), single replica. Each online CTI agent holds one long-lived SSE screen-pop connection.
+
 Current implemented areas:
 
 - Zoom account registration, update, and deregistration
@@ -20,7 +22,12 @@ Current implemented areas:
 - Paginated audit log API for the admin UI
 - Per-account config records for timezone, clinical note writeback mode, demo patient contact overrides, and Epic-ZCC behavior/settings
 - Zoom EHR Context auth and appointment lookup endpoints
-- Epic-style ZCC CTI middleware, gated by `ENABLE_EPIC_ZCC`, including OAuth/JWKS, PatientLookUp, Practitioner.Search, ReceiveCommunication3 screen-pop dispatch, OpenEMR SSE screen-pop bootstrap, ZCC user lookup, and outbound click-to-dial plumbing with ZCC-agent-only OpenEMR controls
+- Epic-style ZCC CTI middleware, gated by `ENABLE_EPIC_ZCC`, covering both directions and both patient and provider screen-pop:
+  - Patient inbound — PatientLookUp + ReceiveCommunication3 drive a screen pop with single-match (open chart), multi-match (picker), and no-match (Patient Finder) handling
+  - Patient outbound — click-to-dial → initiate-call → ZCC → ReceiveCommunication3 chart navigation
+  - Provider inbound — ReceiveCommunication3 with `LookupType="Provider"` resolves NPI / Tax ID directly from the RC3 LookupID against OpenEMR's Address Book population (internal clinicians and external providers); single match pops that entry's `addrbook_edit.php` modal, no match opens the Address Book list (NPI is unique, so there is no provider multi-match). Does not depend on Practitioner.Search, which still exists as a directory endpoint
+  - Plus OAuth/JWKS, OpenEMR SSE screen-pop bootstrap, ZCC user lookup, and ZCC-agent-only OpenEMR controls
+- Epic-ZCC bearer-token model is one reusable account-level token — `/oauth2/token` returns the account's existing valid token (re-minting only within ~60s of expiry) rather than minting per request, so all agents authenticate the ZCC→Zoomly call at the account level (agent identity comes from `RecipientID`)
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper

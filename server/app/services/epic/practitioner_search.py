@@ -131,6 +131,60 @@ def search_practitioners(criteria: dict) -> list[dict]:
         return [_normalize_row(dict(row._mapping)) for row in result]
 
 
+def find_address_book_providers(identifier: str, id_type: str | None = None) -> list[dict]:
+    """Find OpenEMR Address Book entries matching a provider identifier.
+
+    Backs the ZCC provider screen-pop (ReceiveCommunication3 LookupType=
+    Provider). Matches the SAME population OpenEMR's Address Book shows — active
+    internal clinicians AND external providers (blank username) — by NPI or Tax
+    ID (EIN), so the resolved users.id can be popped into addrbook_edit.php.
+    Intentionally broader than search_practitioners (the FHIR clinician
+    directory), because an inbound provider may be an external contact.
+
+    id_type selects the field: 'NPI' -> users.npi; 'TAX'/'TIN'/'EIN' (or the
+    Epic TIN OID) -> users.federaltaxid (digits-compared). Any other/blank type
+    matches either. Empty result is normal; DB errors propagate. Returns raw
+    row dicts (the caller only needs openemr_user_id).
+    """
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return []
+
+    id_type_lower = (id_type or "").strip().lower()
+    digits = _digits_only(identifier)
+
+    npi_clause = "u.npi = :identifier"
+    tin_clause = "(:digits != '' AND REGEXP_REPLACE(u.federaltaxid, '[^0-9]', '') = :digits)"
+    if id_type_lower in {"npi", "npiid"}:
+        id_clause = npi_clause
+    elif any(marker in id_type_lower for marker in _TIN_SYSTEM_MARKERS):
+        id_clause = tin_clause
+    else:
+        id_clause = f"({npi_clause} OR {tin_clause})"
+
+    sql = text(f"""
+        SELECT u.id AS openemr_user_id,
+               u.fname,
+               u.mname,
+               u.lname,
+               u.title,
+               u.npi,
+               u.federaltaxid,
+               u.abook_type
+        FROM users u
+        WHERE u.active = 1
+          AND (u.authorized = 1 OR u.username = '' OR u.username IS NULL)
+          AND {id_clause}
+        ORDER BY u.lname, u.fname, u.id
+        LIMIT {MAX_PRACTITIONER_SEARCH_LIMIT}
+    """)
+
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        result = conn.execute(sql, {"identifier": identifier, "digits": digits})
+        return [dict(row._mapping) for row in result]
+
+
 def _identifier_clause(identifier: str, system: str | None) -> tuple[str, dict[str, object]]:
     """Build the WHERE fragment for a FHIR token identifier search.
 

@@ -1,7 +1,8 @@
 # Zoomly — Architecture & Deployment Handoff
 
 > Scope: documents the **current docker-compose state** (dev, staging, and
-> production-shaped local runs) as of Sprint 13.
+> production-shaped local runs). This is the current go-live /
+> production-candidate version.
 
 ---
 
@@ -185,7 +186,7 @@ client  ──HTTPS──►  edge ── HTTPS ──►  NPM  ── HTTP ─�
                                         via DNS challenge)
 ```
 
-**Cloudflare** (`theloosemoose.us`) is the authoritative DNS provider for the
+**Cloudflare** (`zoomlyhealth.com`) is the authoritative DNS provider for the
 domain _and_ runs in proxied mode (orange-cloud) for the Zoomly hostnames.
 That means Cloudflare's edge terminates the public TLS connection, applies
 WAF / DDoS / rate-limiting at the edge, and then forwards traffic over HTTPS
@@ -214,10 +215,10 @@ Implications worth knowing:
   would also work, but the current operational posture assumes Cloudflare is
   present.
 
-| Public hostname (dev / staging)                                             | Upstreams to                                                                                                                                        |
+| Public hostname (dev / staging+prod)                                        | Upstreams to                                                                                                                                        |
 | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openemr-dev.theloosemoose.us` / `openemr-staging.theloosemoose.us`         | `openemr:80` on host port `:8300`                                                                                                                   |
-| `zoom-bridge-dev.theloosemoose.us` / `zoom-bridge-staging.theloosemoose.us` | `zoom-bridge:5000` on host port `:5000`                                                                                                             |
+| `zhr-dev.zoomlyhealth.com` / `zhr.zoomlyhealth.com`                         | `openemr:80` on host port `:8300`                                                                                                                   |
+| `bridge-dev.zoomlyhealth.com` / `bridge.zoomlyhealth.com`                   | `zoom-bridge:5000` on host port `:5000`                                                                                                             |
 | _(none for dbgate)_                                                         | DbGate is never NPM-exposed. Internal access is via the Flask reverse proxy at `/admin/db`, which itself is gated behind the React app's JWT login. |
 
 The `OPENEMR_PUBLIC_URL` env var on `zoom-bridge` carries the public hostname
@@ -332,8 +333,8 @@ sequenceDiagram
 
     ZCC->>Flask: POST /oauth2/token<br/>(Zoom-signed JWT assertion)
     Flask->>Flask: verify assertion against Zoom JWKS
-    Flask->>Postgres: store encrypted Epic-ZCC bearer token
-    Flask-->>ZCC: bearer token
+    Flask->>Postgres: reuse/persist one encrypted<br/>account-level bearer token
+    Flask-->>ZCC: bearer token (existing valid token)
 
     ZCC->>Flask: PatientLookUp(2012)<br/>(phone/DOB/MRN/SSN criteria)
     Flask->>MariaDB: search OpenEMR patients
@@ -362,6 +363,29 @@ Operational notes:
 - Demo seed phone numbers ending in `555-####` are intentionally not made
   clickable by the shared OpenEMR phone-link helper or the legacy frame
   injector, so synthetic demo numbers are not sent to ZCC.
+- The bearer token is **one reusable account-level token**, not a fresh
+  token minted per request. `POST /oauth2/token` returns the account's
+  existing valid token (re-minting only within ~60s of expiry). The token
+  authenticates the ZCC→Zoomly call at the **account** level — agent identity
+  comes from the RC3 `RecipientID`, not the token — so all agents share the
+  one account token, which supports many concurrent agents. It is persisted
+  encrypted on the `zoom_accounts` row to survive restarts; the bearer guard
+  validates against the in-memory store with a DB-token fallback.
+- The diagram shows the **patient inbound** path. There is also a **provider
+  inbound** path: when ReceiveCommunication3 arrives with
+  `LookupType="Provider"`, Flask resolves the NPI or Tax ID directly from the
+  RC3 `LookupID` against OpenEMR's Address Book population (internal clinicians
+  and external providers, via `find_address_book_providers`) — no
+  Practitioner.Search cache dependency, since ZCC does not call
+  Practitioner.Search during a call. A single match pops that entry's
+  `addrbook_edit.php` modal; no match opens the Address Book list. NPI is
+  unique, so there is no provider multi-match. The Practitioner.Search FHIR
+  endpoint still exists as a spec-compliant directory; its cache is a fallback
+  only.
+- Screen-pop delivery is SSE from Flask to the OpenEMR browser. The RC3
+  `RecipientID` resolves via `UserMapping` (`is_zcc_agent`) → `openemr_user_id`
+  → that agent's SSE stream. Each online CTI agent holds one long-lived SSE
+  screen-pop connection (the server→browser push channel for pops).
 - PatientLookUp results are held in a short process-local cache keyed by
   account + normalized caller phone number. The cache is single-use once
   consumed by ReceiveCommunication3 and uses the same short TTL as
@@ -370,10 +394,14 @@ Operational notes:
   ZCC accepts `initiate-call`, Zoomly preloads the PatientLookUp cache with
   the known OpenEMR patient under the normalized dialed phone number and marks
   the cached row with `matched_on=outbound_context`.
-- Gunicorn currently runs one worker, so the process-local cache is
-  consistent inside one Flask process. A future multi-worker or multi-replica
-  deployment would need a shared cache or a different screen-pop correlation
-  strategy.
+- The app is designed to serve ~20-30 concurrent users (realistic typical
+  load 1-5) on the single Gunicorn gevent worker / single replica. Three
+  pieces of state are process-local and in-memory: the Epic-ZCC bearer token
+  store, the screen-pop SSE subscriber registry, and the phone→patient lookup
+  cache. All three are consistent **because** there is exactly one worker and
+  one replica. A future multi-worker or multi-replica deployment would need a
+  shared store (and a different screen-pop correlation strategy) for all of
+  them.
 
 ---
 
@@ -388,7 +416,7 @@ application logs.
 | Volume          | Container path                       | Contents                                                                                                                                                                 | Blast radius if lost                                                        |
 | --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `db_data`       | `mariadb:/var/lib/mysql`             | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                                           | Total demo loss; re-seed required                                           |
-| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, user mappings, meeting records, clinical note records, audit log, Epic-ZCC token cache, encryption-at-rest ciphertexts for stored secrets | All Zoom integrations break; re-registration required for each account      |
+| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, user mappings, meeting records, clinical note records, audit log, the reusable Epic-ZCC account bearer token (encrypted), encryption-at-rest ciphertexts for stored secrets | All Zoom integrations break; re-registration required for each account      |
 | `openemr_sites` | `openemr:/var/www/.../openemr/sites` | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                                                        | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
 | `openemr_logs`  | `openemr:/var/log`                   | OpenEMR Apache + PHP error logs                                                                                                                                          | Diagnostic data only — non-load-bearing                                     |
 
@@ -463,8 +491,8 @@ Secrets are flagged. Everything else is operational config.
 | `OPENEMR_BASE_URL`                    | `http://openemr:80`                              | no                | Internal OpenEMR HTTP endpoint                                              |
 | `OPENEMR_FHIR_BASE_URL`               | `http://openemr:80/apis/default/fhir`            | no                | Internal OpenEMR FHIR endpoint                                              |
 | `OPENEMR_SCOPES`                      | `system/Patient.read ...`                        | no                | SMART Backend Services scopes requested during OpenEMR dynamic registration |
-| `OPENEMR_PUBLIC_URL`                  | `https://openemr-dev.theloosemoose.us`           | no                | Used only for OAuth2 `aud` claims                                           |
-| `APP_PUBLIC_URL`                      | `https://zoom-bridge-dev.theloosemoose.us`       | no                | Used for webhook callback URLs sent to Zoom                                 |
+| `OPENEMR_PUBLIC_URL`                  | `https://zhr-dev.zoomlyhealth.com`               | no                | Used only for OAuth2 `aud` claims                                           |
+| `APP_PUBLIC_URL`                      | `https://bridge-dev.zoomlyhealth.com`            | no                | Used for webhook callback URLs sent to Zoom                                 |
 | `APP_INTERNAL_URL`                    | `http://zoom-bridge:5000`                        | no                | Internal self-reference for the admin proxy                                 |
 
 #### Application secrets
@@ -501,8 +529,9 @@ Secrets are flagged. Everything else is operational config.
 Not env vars — stored encrypted in Postgres `zoom_accounts` and
 `account_configs`. Includes: Zoom client ID/secret, Zoom webhook secret,
 OpenEMR client ID/secret, EHR context creds, timezone, behavioral toggles
-(`note_writeback_mode`, demo overrides, Epic-ZCC behavior/settings). Epic-ZCC
-bearer-token cache fields live on `zoom_accounts`. All encryption-at-rest uses
+(`note_writeback_mode`, demo overrides, Epic-ZCC behavior/settings). The
+reusable Epic-ZCC account-level bearer token is persisted encrypted on
+`zoom_accounts` so it survives restarts. All encryption-at-rest uses
 `ENCRYPTION_KEY` above.
 
 ---
@@ -549,10 +578,13 @@ concurrent greenlets**. This shape:
 - Matches the single-replica scheduler architecture (§9a) — exactly one
   `BackgroundScheduler` exists across the entire pod, so per-webhook jobs
   fire once and any future startup-scheduled cron job would fire once.
-- Handles the I/O-bound traffic shape comfortably. Demo traffic is bursty
-  but mostly idle; 100 greenlets handle 30+ concurrent SE sessions plus
-  CCSE screen-pop lookups, EHR FHIR calls, and Zoom API requests without
-  saturating.
+- Handles the I/O-bound traffic shape comfortably. The app is designed to
+  serve ~20-30 concurrent users (realistic typical load 1-5). Demo traffic is
+  bursty but mostly idle; 100 greenlets handle that plus CCSE screen-pop
+  lookups, EHR FHIR calls, and Zoom API requests without saturating. Note
+  that the Epic-ZCC bearer token store, screen-pop SSE subscriber registry,
+  and phone→patient lookup cache are all process-local — consistent only at
+  the current one worker / one replica (see §6c).
 - Avoids the "multiple workers each running their own scheduler" pattern
   that would duplicate startup cron jobs (no such jobs exist today, but
   the architecture is now safe against that footgun).

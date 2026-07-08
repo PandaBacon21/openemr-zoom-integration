@@ -11,6 +11,7 @@ from app.services.epic.communication import process_receive_communication
 from app.services.epic.request_parser import (
     InvalidEpicRequest,
     parse_receive_communication3_request,
+    raw_body_snapshot,
 )
 from app.services.epic.response_builders import (
     build_receive_communication_ack_json,
@@ -52,7 +53,11 @@ def receive_communication3(zoom_account_id: str):
             event_type="epic_zcc.receive_communication_failed",
             success=False,
             zoom_account_id=account.account_id,
-            detail={"reason": reason, "fault_code": e.fault_code},
+            detail={
+                "reason": reason,
+                "fault_code": e.fault_code,
+                "raw_request": raw_body_snapshot(raw_body),
+            },
             error_message=e.message,
         )
         return Response(
@@ -74,10 +79,18 @@ def receive_communication3(zoom_account_id: str):
         zoom_account_id=account.account_id,
         detail={
             "recipient_id": payload["recipient_id"],
+            "recipient_id_type": payload.get("recipient_id_type"),
+            # Actual values ZCC sent — lookup_type + the provider/patient id
+            # drive the RC3 branch; captured here for debugging mismatches.
+            "lookup_type": payload.get("lookup_type"),
+            "contact_type": payload.get("contact_type"),
+            "patient_id": payload.get("patient_id"),
             "patient_id_type": payload.get("patient_id_type"),
-            "has_patient_id": bool(payload.get("patient_id")),
             "communication_type": payload.get("communication_type"),
+            "caller_number": payload.get("caller_number"),
+            "dialed_number": payload.get("dialed_number"),
             "call_id": payload.get("call_id"),
+            "raw_request": raw_body_snapshot(raw_body),
         },
     )
 

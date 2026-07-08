@@ -57,10 +57,15 @@ def verify_bearer_token_in_store() -> None | tuple:
     account_id = validate_token(token)
     if not account_id:
         db_account = getattr(g, "zoom_account", None)
+        db_expires_at = getattr(db_account, "epic_zcc_bearer_token_expires_at", None)
+        # Stored timestamp can be timezone-naive depending on the DB/driver;
+        # treat naive as UTC so the comparison never mixes aware/naive datetimes.
+        if db_expires_at is not None and db_expires_at.tzinfo is None:
+            db_expires_at = db_expires_at.replace(tzinfo=timezone.utc)
         if (db_account
                 and db_account.epic_zcc_bearer_token == token
-                and db_account.epic_zcc_bearer_token_expires_at
-                and db_account.epic_zcc_bearer_token_expires_at > datetime.now(timezone.utc)):
+                and db_expires_at
+                and db_expires_at > datetime.now(timezone.utc)):
             account_id = db_account.account_id
     if not account_id:
         write_audit_log(
