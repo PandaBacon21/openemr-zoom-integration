@@ -160,12 +160,22 @@ def test_receive_communication_pushes_cached_match_to_subscriber(app, client):
     assert other_account_q.empty()
 
 
-def test_receive_communication_provider_pop_opens_address_book(app, client):
+def _provider_payload(**overrides) -> dict:
+    """RC3 payload for a provider call: LookupType=Provider + an NPI LookupID."""
+    base = _payload(LookupType="Provider", LookupID={"ID": "1223334444", "Type": "NPI"})
+    base.update(overrides)
+    return base
+
+
+def test_provider_lookup_npi_match_pops_address_book(app, client, monkeypatch):
     _seed_account(app)
-    _cache_provider_rows([_provider_row(openemr_user_id=16)])
+    monkeypatch.setattr(
+        "app.services.epic.communication.find_address_book_providers",
+        lambda identifier, id_type=None: [{"openemr_user_id": 42, "lname": "OConnor"}],
+    )
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
-    resp = _post(client, _payload(), token=_mint_token())
+    resp = _post(client, _provider_payload(), token=_mint_token())
 
     assert resp.status_code == 200
     assert resp.get_json() == {"EpicCallID": "call-123"}
@@ -174,63 +184,101 @@ def test_receive_communication_provider_pop_opens_address_book(app, client):
         "type": "navigate",
         "target": "address_book",
         "matched_on": "provider",
-        "openemr_provider_user_id": "16",
+        "openemr_provider_user_id": "42",
         "caller_number": "+13035550101",
     }
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")[-1]
+    assert pushed["identifier_type"] == "NPI"
+    assert pushed["lookup_source"] == "rc3_identifier"
+    assert pushed["provider_match_count"] == 1
 
-    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")
-    assert pushed[-1]["target"] == "address_book"
-    assert pushed[-1]["openemr_provider_user_id"] == "16"
-    assert pushed[-1]["provider_match_count"] == 1
 
-
-def test_receive_communication_provider_ambiguous_opens_list_without_modal(app, client):
+def test_provider_lookup_no_match_opens_address_book(app, client, monkeypatch):
     _seed_account(app)
-    _cache_provider_rows([
-        _provider_row(openemr_user_id=16),
-        _provider_row(openemr_user_id=17),
-    ])
+    monkeypatch.setattr(
+        "app.services.epic.communication.find_address_book_providers",
+        lambda identifier, id_type=None: [],
+    )
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
-    resp = _post(client, _payload(), token=_mint_token())
+    resp = _post(
+        client,
+        _provider_payload(LookupID={"ID": "9999999999", "Type": "NPI"}),
+        token=_mint_token(),
+    )
 
     assert resp.status_code == 200
     event = q.get_nowait()
     assert event["target"] == "address_book"
-    assert event["matched_on"] == "provider_ambiguous"
+    assert event["matched_on"] == "provider_no_match"
     assert event["openemr_provider_user_id"] is None
 
 
-def test_receive_communication_provider_cache_takes_priority_over_patient(app, client):
-    # Both caches seeded under the same caller phone. The provider branch runs
-    # first and wins; the patient path is not taken (only one event dispatched).
+def test_provider_lookup_missing_identifier_skips_search(app, client, monkeypatch):
+    # ZCC serializes a missing NPI as the literal string "undefined" — treat it
+    # as no identifier: no DB search, just open the Address Book.
     _seed_account(app)
-    _cache_rows([_row()])
+    calls = {"n": 0}
+
+    def _fake_find(identifier, id_type=None):
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(
+        "app.services.epic.communication.find_address_book_providers", _fake_find
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _provider_payload(LookupID={"ID": "undefined", "Type": "NPI"}),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["target"] == "address_book"
+    assert event["matched_on"] == "provider_no_match"
+    assert calls["n"] == 0
+
+
+def test_provider_lookup_falls_back_to_cache_when_no_identifier(app, client):
+    # No usable RC3 identifier, but the provider cache (Practitioner.Search,
+    # future) has an entry under the caller phone -> use it.
+    _seed_account(app)
     _cache_provider_rows([_provider_row(openemr_user_id=16)])
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
-    resp = _post(client, _payload(), token=_mint_token())
+    resp = _post(
+        client,
+        _provider_payload(LookupID={"ID": "undefined", "Type": "NPI"}),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event["target"] == "address_book"
+    assert event["matched_on"] == "provider"
+    assert event["openemr_provider_user_id"] == "16"
+
+
+def test_provider_lookup_type_skips_patient_path(app, client, monkeypatch):
+    # LookupType=Provider takes the Address Book path even if a patient cache
+    # entry exists for the caller — a provider call is never a chart pop.
+    _seed_account(app)
+    _cache_rows([_row()])
+    monkeypatch.setattr(
+        "app.services.epic.communication.find_address_book_providers",
+        lambda identifier, id_type=None: [{"openemr_user_id": 42}],
+    )
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(client, _provider_payload(), token=_mint_token())
 
     assert resp.status_code == 200
     event = q.get_nowait()
     assert event["target"] == "address_book"
     assert q.empty()
-
-
-def test_receive_communication_provider_cache_single_use(app, client):
-    # The provider cache entry is consumed on first RC3; a second RC3 for the
-    # same call falls through (no provider entry) — here to the patient path.
-    _seed_account(app)
-    _cache_provider_rows([_provider_row(openemr_user_id=16)])
-    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
-
-    first = _post(client, _payload(), token=_mint_token())
-    assert first.status_code == 200
-    assert q.get_nowait()["target"] == "address_book"
-
-    assert lookup_cache.get_cached_lookup(
-        TEST_ACCOUNT_ID, "3035550101", kind="provider"
-    ) is None
 
 
 def test_receive_communication_selects_patient_from_multi_match_cache(app, client):
@@ -251,6 +299,29 @@ def test_receive_communication_selects_patient_from_multi_match_cache(app, clien
     event = q.get_nowait()
     assert event["openemr_patient_id"] == "151"
     assert event["matched_on"] == "mrn"
+
+
+def test_received_audit_captures_lookup_type_and_raw_request(app, client, monkeypatch):
+    """The receive_communication_received audit records LookupType + the caller
+    number and the verbatim body — the values driving the RC3 provider branch."""
+    _seed_account(app)
+    # Isolate the route's intake audit from the handler (no DB search needed).
+    monkeypatch.setattr(
+        "app.blueprints.epic.communication_routes.process_receive_communication",
+        lambda *a, **k: None,
+    )
+
+    resp = _post(
+        client,
+        _payload(LookupType="Provider", CallerPhoneNumber="+13035550142"),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    received = _audit_details(app, "epic_zcc.receive_communication_received")[-1]
+    assert received["lookup_type"] == "Provider"
+    assert received["caller_number"] == "+13035550142"
+    assert "Provider" in received["raw_request"]
 
 
 def test_receive_communication_unknown_agent_returns_ack_and_audit(app, client):

@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # describe a client-id / configuration problem rather than a bad assertion.
 _INVALID_CLIENT_REASONS = {"iss_sub_mismatch"}
 
+# Re-mint the account token only once it's within this margin of expiring;
+# otherwise a token request returns the account's existing token so all agents
+# share one. Small margin keeps the rotation-overlap window tiny.
+_TOKEN_REFRESH_MARGIN = timedelta(seconds=60)
+
 
 def _oauth_error(error: str, reason: str, account_id: str | None, message: str = ""):
     write_audit_log(
@@ -71,11 +76,31 @@ def token(zoom_account_id: str):
         oauth_err = "invalid_client" if e.reason in _INVALID_CLIENT_REASONS else "invalid_grant"
         return _oauth_error(oauth_err, e.reason, account.account_id, str(e))
 
-    access_token, expires_in = issue_token(account.account_id)
-
-    account.epic_zcc_bearer_token = access_token
-    account.epic_zcc_bearer_token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    db.session.commit()
+    # The bearer token authenticates the ZCC->Zoomly call at the ACCOUNT level
+    # (agent identity comes from RecipientID, not the token). So reuse the
+    # account's current token instead of minting a fresh one per client — every
+    # agent's ZCC client converges on one account token, which also survives a
+    # restart via the persisted field + the guard's DB fallback. Only mint when
+    # there's no token or it's within the refresh margin of expiring.
+    now = datetime.now(timezone.utc)
+    existing = account.epic_zcc_bearer_token
+    existing_exp = account.epic_zcc_bearer_token_expires_at
+    # Stored value can come back timezone-naive depending on the DB/driver;
+    # treat a naive timestamp as UTC so the arithmetic never mixes tz-aware and
+    # tz-naive datetimes.
+    if existing_exp is not None and existing_exp.tzinfo is None:
+        existing_exp = existing_exp.replace(tzinfo=timezone.utc)
+    reused = bool(
+        existing and existing_exp and (existing_exp - now) > _TOKEN_REFRESH_MARGIN
+    )
+    if reused:
+        access_token = existing
+        expires_in = int((existing_exp - now).total_seconds())
+    else:
+        access_token, expires_in = issue_token(account.account_id)
+        account.epic_zcc_bearer_token = access_token
+        account.epic_zcc_bearer_token_expires_at = now + timedelta(seconds=expires_in)
+        db.session.commit()
 
     write_audit_log(
         event_type="epic_zcc.token_issued",
@@ -85,6 +110,7 @@ def token(zoom_account_id: str):
             "iss": claims.get("iss"),
             "jti": claims.get("jti"),
             "expires_in": expires_in,
+            "reused": reused,
         },
     )
 

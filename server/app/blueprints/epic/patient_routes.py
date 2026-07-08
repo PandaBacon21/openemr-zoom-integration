@@ -19,7 +19,11 @@ from app.blueprints.epic import epic_bp
 from app.services.audit import write_audit_log
 from app.services.epic.lookup_cache import cache_lookup
 from app.services.epic.patient_search import _phone_digits, search_patients
-from app.services.epic.request_parser import InvalidEpicRequest, parse_patient_lookup_request
+from app.services.epic.request_parser import (
+    InvalidEpicRequest,
+    parse_patient_lookup_request,
+    raw_body_snapshot,
+)
 from app.services.epic.response_builders import build_fault_xml, build_patient_lookup_response_xml
 
 
@@ -33,12 +37,22 @@ def _xml_response(body: bytes, status: int = 200) -> Response:
     return Response(body, status=status, mimetype=_XML_CONTENT_TYPE)
 
 
-def _fault_response(code: str, message: str, *, account_id: str | None, reason: str) -> Response:
+def _fault_response(
+    code: str,
+    message: str,
+    *,
+    account_id: str | None,
+    reason: str,
+    raw_request: str | None = None,
+) -> Response:
+    detail = {"reason": reason, "fault_code": code}
+    if raw_request is not None:
+        detail["raw_request"] = raw_request
     write_audit_log(
         event_type="epic_zcc.patient_lookup_failed",
         success=False,
         zoom_account_id=account_id,
-        detail={"reason": reason, "fault_code": code},
+        detail=detail,
         error_message=message,
     )
     return _xml_response(build_fault_xml(code, message), status=400)
@@ -73,7 +87,8 @@ def patient_lookup(zoom_account_id: str):
             "INVALID-REQUEST": "malformed_xml",
         }.get(e.fault_code, "malformed_xml")
         return _fault_response(e.fault_code, e.message,
-                               account_id=account.account_id, reason=reason)
+                               account_id=account.account_id, reason=reason,
+                               raw_request=raw_body_snapshot(raw_body))
 
     write_audit_log(
         event_type="epic_zcc.patient_lookup_received",
@@ -89,8 +104,14 @@ def patient_lookup(zoom_account_id: str):
                 )
                 if v
             ],
+            # Actual values ZCC sent, for debugging screen-pop mismatches.
+            "patient_id": criteria.get("patient_id"),
             "patient_id_type": criteria.get("patient_id_type"),
+            "dob": criteria.get("dob"),
+            "ssn_last4": criteria.get("ssn_last4"),
+            "phones": criteria.get("phones"),
             "epic_service_user": criteria["user_id"],
+            "raw_request": raw_body_snapshot(raw_body),
         },
     )
 

@@ -30,6 +30,29 @@ class InvalidEpicRequest(Exception):
         self.message = message
 
 
+_RAW_BODY_LOG_LIMIT = 8192
+
+
+def raw_body_snapshot(raw_body: bytes | None, limit: int = _RAW_BODY_LOG_LIMIT) -> str:
+    """Decode an inbound request body verbatim for audit/debug visibility.
+
+    Returns exactly what ZCC sent as UTF-8 text (lossy on bad bytes), truncated
+    to `limit` chars with a marker so the audit row stays bounded. Empty string
+    for an empty body.
+
+    NOTE: for the demo this captures synthetic patient identifiers (DOB, phone,
+    SSN-last-4) into the Postgres audit log. That's fine against seed data, but
+    if ZCC is ever pointed at real PHI this should be gated behind a debug flag
+    or redacted before it lands in the audit log.
+    """
+    if not raw_body:
+        return ""
+    text = raw_body.decode("utf-8", errors="replace")
+    if len(text) > limit:
+        return text[:limit] + f"...[truncated {len(text) - limit} chars]"
+    return text
+
+
 def _normalize_ssn_last4(raw: str | None) -> str | None:
     """Pull the last 4 digits out of a NationalIdentifier value.
 

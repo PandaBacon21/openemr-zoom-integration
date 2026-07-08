@@ -67,7 +67,14 @@ def practitioner_search(zoom_account_id: str):
             "search_type": criteria["search_type"],
             "query_fields": criteria["query_fields"],
             "identifier_system": criteria.get("identifier_system"),
+            # Actual search values ZCC sent, for debugging.
+            "identifier": criteria.get("identifier"),
+            "fhir_id": criteria.get("fhir_id"),
+            "name": criteria.get("name"),
+            "family": criteria.get("family"),
+            "given": criteria.get("given"),
             "count": criteria["count"],
+            "query_string": request.query_string.decode("utf-8", "replace"),
         },
     )
 

@@ -226,6 +226,25 @@ def test_dob_only(app, client, monkeypatch):
     assert resolved[-1]["queried_fields"] == ["dob"]
 
 
+def test_received_audit_captures_actual_values_and_raw_request(app, client, monkeypatch):
+    """The patient_lookup_received audit records the real values ZCC sent plus
+    the verbatim body, so screen-pop mismatches can be debugged."""
+    _seed_account(app)
+    _patch_engine(monkeypatch, [_row()])
+
+    resp = _post(client, {
+        "UserID": "zoomineer",
+        "DateOfBirth": "1978-03-14",
+        "Address": {"PhoneNumbers": ["+13035550101"]},
+    }, token=_mint_token())
+
+    assert resp.status_code == 200
+    received = _audit_details(app, "epic_zcc.patient_lookup_received")[-1]
+    assert received["dob"] == "1978-03-14"
+    assert received["phones"] == ["+13035550101"]
+    assert "1978-03-14" in received["raw_request"]
+
+
 def test_patient_id_as_mrn(app, client, monkeypatch):
     _seed_account(app)
     engine = _patch_engine(monkeypatch, [_row()])

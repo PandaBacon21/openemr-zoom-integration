@@ -7,6 +7,7 @@ from app.models import UserMapping
 from app.services.audit import write_audit_log
 from app.services.epic.lookup_cache import clear_cached_lookup, get_cached_lookup
 from app.services.epic.patient_search import _phone_digits, search_patients
+from app.services.epic.practitioner_search import find_address_book_providers
 from app.services.epic.screenpop_dispatch import dispatch
 
 
@@ -74,15 +75,13 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
         f"cache_key={normalized_caller_phone!r}"
     )
 
-    # Provider caller? When ZCC runs Practitioner.Search (instead of
-    # PatientLookUp) for this call, a 'provider'-namespaced cache entry exists
-    # under the caller's phone. Pop the OpenEMR Address Book for that provider
-    # rather than a patient chart, then stop — this is not a patient call.
-    provider_result = _try_provider_pop(
-        account, recipient_id, openemr_user_id, normalized_caller_phone, payload
-    )
-    if provider_result is not None:
-        return provider_result
+    # Provider caller? ZCC sets LookupType="Provider" and sends the provider's
+    # NPI (or Tax ID) in the RC3 LookupID. Resolve it directly against OpenEMR
+    # and pop the Address Book — a provider call is never a patient chart pop.
+    if (payload.get("lookup_type") or "").strip().lower() == "provider":
+        return _handle_provider_lookup(
+            account, recipient_id, openemr_user_id, normalized_caller_phone, payload
+        )
 
     row = None
     cached = get_cached_lookup(account.account_id, normalized_caller_phone or "")
@@ -275,40 +274,64 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
     )
 
 
-def _try_provider_pop(
+# ZCC serializes a missing IVR value as one of these literal strings.
+_MISSING_IDENTIFIER_VALUES = {"", "undefined", "null", "none"}
+
+
+def _clean_identifier(raw: str | None) -> str | None:
+    """Return a usable identifier, or None if ZCC sent a missing-value sentinel."""
+    value = (raw or "").strip()
+    return None if value.lower() in _MISSING_IDENTIFIER_VALUES else value
+
+
+def _handle_provider_lookup(
     account,
     recipient_id: str,
     openemr_user_id: str,
     caller_phone: str | None,
     payload: dict,
-) -> ReceiveCommunicationResult | None:
-    """Pop the OpenEMR Address Book when the caller is a provider.
+) -> ReceiveCommunicationResult:
+    """Pop the OpenEMR Address Book for a provider caller (LookupType=Provider).
 
-    A provider call is recognized by a 'provider'-namespaced lookup cache entry
-    under the caller's phone, populated by Practitioner.Search (the provider
-    equivalent of PatientLookUp). Returns a result (screen-pop dispatched) when
-    this is a provider call, or None to let the normal patient path run.
+    ZCC sends the provider's identifier (NPI or Tax ID) in the RC3 LookupID, so
+    we resolve it directly against OpenEMR — no Practitioner.Search cache needed.
+    A single match pops that provider's Address Book entry; anything else (no
+    identifier sent, no match, or an ambiguous multi-match) opens the Address
+    Book with no modal.
 
-    Practitioner.Search only caches rows that carry a phone, so a cached entry
-    always has >=1 row. A single match pops that provider's Address Book entry;
-    an ambiguous (>1) match opens the Address Book list without a modal.
+    The provider cache remains a fallback: if ZCC is ever configured to call
+    Practitioner.Search (which populates it), we honor a cache hit when RC3
+    carries no usable identifier of its own.
     """
-    if not caller_phone:
-        return None
-    cached = get_cached_lookup(account.account_id, caller_phone, kind="provider")
-    if cached is None:
-        return None
+    id_value = _clean_identifier(payload.get("patient_id"))
+    id_type = (payload.get("patient_id_type") or "").strip()
 
-    # Single-use, mirroring the patient cache.
-    clear_cached_lookup(account.account_id, caller_phone, kind="provider")
-    rows = cached.get("rows") or []
+    providers: list[dict] = []
+    source = "no_identifier"
+    if id_value:
+        source = "rc3_identifier"
+        try:
+            providers = find_address_book_providers(id_value, id_type)
+        except Exception as e:
+            logger.error(
+                "epic.receive_communication | provider lookup failed "
+                f"account_id={account.account_id} id_type={id_type!r}: {e}",
+                exc_info=True,
+            )
+            providers = []
+    elif caller_phone:
+        cached = get_cached_lookup(account.account_id, caller_phone, kind="provider")
+        if cached is not None:
+            clear_cached_lookup(account.account_id, caller_phone, kind="provider")
+            providers = cached.get("rows") or []
+            source = "provider_cache"
 
-    if len(rows) == 1:
-        provider_user_id = str(rows[0].get("openemr_user_id") or "") or None
+    if len(providers) == 1:
+        provider_user_id = str(providers[0].get("openemr_user_id") or "") or None
         matched_on = "provider"
     else:
         provider_user_id = None
-        matched_on = "provider_ambiguous"
+        matched_on = "provider_no_match" if not providers else "provider_ambiguous"
 
     event = {
         "type": "navigate",
@@ -329,7 +352,9 @@ def _try_provider_pop(
             "matched_on": matched_on,
             "target": "address_book",
             "openemr_provider_user_id": provider_user_id,
-            "provider_match_count": len(rows),
+            "provider_match_count": len(providers),
+            "identifier_type": id_type or None,
+            "lookup_source": source,
             "call_id": payload.get("call_id"),
         },
     )
