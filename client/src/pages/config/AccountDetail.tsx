@@ -15,7 +15,7 @@ import type { Registration, UserMapping } from "../../api/config";
 import { verifyAccount, getUserMappings } from "../../api/config";
 import { useFeatures } from "../../context/FeaturesContext";
 import AccountConfigTab from "./tabs/AccountConfigTab";
-import AccountProvidersTab from "./tabs/AccountProvidersTab";
+import AccountUserMappingsTab from "./tabs/AccountUserMappingsTab";
 import AccountDashboardTab from "./tabs/AccountDashboardTab";
 import EpicZccTab from "./tabs/EpicZccTab";
 
@@ -177,7 +177,7 @@ const AccountDetail: React.FC<Props> = ({
         />
       )}
       {tab === 1 && isVerified && (
-        <AccountProvidersTab
+        <AccountUserMappingsTab
           account={account}
           mappings={mappings}
           onMappingsChanged={setMappings}
