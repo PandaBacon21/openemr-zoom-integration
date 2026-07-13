@@ -206,10 +206,11 @@ def test_initiate_call_requires_backend_url(app, client):
     assert failed[-1]["reason"] == "missing_backend_url"
 
 
-def test_initiate_call_with_patient_id_preloads_lookup_cache(app, client, monkeypatch):
-    # When openemr_patient_id is present and the ZCC call succeeds, the patient row
-    # must be pre-loaded into the lookup cache so RC3 can navigate directly even
-    # when multiple patients share the same phone number.
+def test_initiate_call_does_not_preload_lookup_cache(app, client, monkeypatch):
+    # Outbound RC3 (ContactType=Outgoing) now drives the small "Calling…" modal
+    # instead of a chart pop, so initiate-call no longer pre-loads the patient
+    # lookup cache (which also avoids a stale entry mis-matching a later inbound
+    # call from the same number).
     lookup_cache._cache.clear()
     _seed_account(app)
 
@@ -217,27 +218,11 @@ def test_initiate_call_with_patient_id_preloads_lookup_cache(app, client, monkey
         "app.services.epic.outbound_zcc.requests.post",
         lambda url, json, headers, timeout: _FakeResponse(202, '{"PhoneSystemCallID":"call-xyz"}'),
     )
-    patient_row = {
-        "pid": 100, "pubpid": "100", "uuid_hex": "a" * 32,
-        "fname": "James", "mname": None, "lname": "Harrison", "title": None,
-        "DOB": None, "sex": None,
-        "street": None, "city": None, "state": None, "postal_code": None,
-        "phone_cell": "+13035550101", "phone_home": None, "email": None,
-        "ssn_last4": None,
-    }
-    monkeypatch.setattr(
-        "app.blueprints.epic.outbound_routes.get_patient_by_pid",
-        lambda pid: patient_row if pid == "100" else None,
-    )
 
     resp = _signed_post(client, app, _payload())
 
     assert resp.status_code == 200
-    cached = lookup_cache.get_cached_lookup(TEST_ACCOUNT_ID, "3035550101")
-    assert cached is not None
-    assert len(cached["rows"]) == 1
-    assert cached["rows"][0]["pid"] == 100
-    assert cached["rows"][0]["_matched_on"] == ["outbound_context"]
+    assert lookup_cache.get_cached_lookup(TEST_ACCOUNT_ID, "3035550101") is None
 
     lookup_cache._cache.clear()
 

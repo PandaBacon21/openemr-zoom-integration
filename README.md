@@ -24,7 +24,7 @@ Current implemented areas:
 - Zoom EHR Context auth and appointment lookup endpoints
 - Epic-style ZCC CTI middleware, gated by `ENABLE_EPIC_ZCC`, covering both directions and both patient and provider screen-pop:
   - Patient inbound — PatientLookUp + ReceiveCommunication3 drive a screen pop with single-match (open chart), multi-match (picker), and no-match (Patient Finder) handling
-  - Patient outbound — click-to-dial → initiate-call → ZCC → ReceiveCommunication3 chart navigation
+  - Patient outbound — Demographics click-to-dial → `/cti/initiate-call` → ZCC → ReceiveCommunication3 (`ContactType=Outgoing`) → a small "Calling…" confirmation modal (no chart navigation)
   - Provider inbound — ReceiveCommunication3 with `LookupType="Provider"` resolves NPI / Tax ID directly from the RC3 LookupID against OpenEMR's Address Book population (internal clinicians and external providers); single match pops that entry's `addrbook_edit.php` modal, no match opens the Address Book list (NPI is unique, so there is no provider multi-match). Does not depend on Practitioner.Search, which still exists as a directory endpoint
   - Plus OAuth/JWKS, OpenEMR SSE screen-pop bootstrap, ZCC user lookup, and ZCC-agent-only OpenEMR controls
 - Epic-ZCC bearer-token model is one reusable account-level token — `/oauth2/token` returns the account's existing valid token (re-minting only within ~60s of expiry) rather than minting per request, so all agents authenticate the ZCC→Zoomly call at the account level (agent identity comes from `RecipientID`)
@@ -99,7 +99,7 @@ Set required values. The most load-bearing ones:
 - `ENABLE_DBGATE` — set to `true` in dev/staging to enable the DbGate database browser proxied at `/admin/db`. Leave unset or `false` in production. See [ARCHITECTURE.md §13](ARCHITECTURE.md) for the three-layer gating model.
 - `ENABLE_EPIC_ZCC` — set to `true` only when configuring Epic-style ZCC CTI demos. When false, Flask does not register the Epic-ZCC runtime blueprints and the React UI hides the Epic ZCC tab.
 - `EPIC_ZCC_CLIENT_ID` — global client ID shown in the Epic ZCC config tab and expected by ZCC CTI auth when Epic-ZCC is enabled.
-- `ZOOMLY_EPIC_ZCC_CLIENT_URL` — optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell. The OpenEMR callbar, SSE subscriber, and click-to-call phone links render only for logged-in users whose bootstrap request returns an active ZCC-agent stream.
+- `ZOOMLY_EPIC_ZCC_CLIENT_URL` — optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell. The OpenEMR callbar and SSE subscriber render only for logged-in users whose bootstrap request returns an active ZCC-agent stream; click-to-call phone links render only on the patient Demographics contact section for those sessions.
 
 See [docs/internal/implementation-setup-guide.md](docs/internal/implementation-setup-guide.md) for the full env-var reference (what each variable does, where to source it, and rollback semantics for registration secrets).
 
@@ -279,7 +279,7 @@ Epic-ZCC CTI endpoints:
 - OpenEMR-facing bootstrap base: `/zoomly/epic-zcc`
 - `POST /screenpop/bootstrap`
 
-OpenEMR click-to-call controls are intentionally session-gated. Non-ZCC users see plain phone numbers and no callbar/subscriber assets. Demo seed phone numbers ending in `555-####` are also left unlinked so synthetic demo numbers are not dialed through ZCC.
+OpenEMR click-to-call controls are intentionally session-gated, and click-to-call phone links render only on the patient Demographics contact section (the Patient Finder and calendar event popout no longer expose them). Non-ZCC users see plain phone numbers and no callbar/subscriber assets. Demo seed phone numbers ending in `555-####` are also left unlinked so synthetic demo numbers are not dialed through ZCC.
 
 Inbound webhook endpoints:
 

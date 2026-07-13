@@ -105,6 +105,72 @@
         try { window.localStorage.setItem("zoomlyEpicCtiCollapsed", "0"); } catch (e) {}
     }
 
+    function formatPhone(raw) {
+        var d = String(raw || "").replace(/\D/g, "");
+        if (d.length === 11 && d.charAt(0) === "1") { d = d.slice(1); }
+        if (d.length === 10) {
+            return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
+        }
+        return String(raw || "");
+    }
+
+    // Outbound click-to-dial confirmation. ZCC echoes an RC3 with
+    // ContactType=Outgoing after placing the call; Flask pushes an
+    // {target:"outbound_call"} event and we show a small "Ring, ring!" dialog
+    // (mirrors Epic). Deliberately tiny — just the number — unlike the inbound
+    // multi-match picker.
+    function showCallingModal(number) {
+        var existing = document.getElementById("zoomly-cti-calling");
+        if (existing && existing.parentNode) { existing.parentNode.removeChild(existing); }
+
+        var overlay = document.createElement("div");
+        overlay.id = "zoomly-cti-calling";
+        overlay.setAttribute("role", "dialog");
+        overlay.setAttribute("aria-modal", "true");
+        overlay.style.cssText = [
+            "position:fixed", "inset:0",
+            "background:rgba(0,0,0,0.5)",
+            "z-index:9999",
+            "display:flex", "align-items:center", "justify-content:center",
+            "font-family:inherit",
+        ].join(";");
+
+        var modal = document.createElement("div");
+        modal.style.cssText = [
+            "background:#fff", "border-radius:8px", "padding:20px 24px",
+            "min-width:240px", "max-width:320px",
+            "box-shadow:0 4px 24px rgba(0,0,0,0.25)",
+        ].join(";");
+
+        var title = document.createElement("div");
+        title.textContent = "Ring, ring!";
+        title.style.cssText = "font-weight:600;font-size:15px;margin-bottom:10px;";
+        modal.appendChild(title);
+
+        var body = document.createElement("div");
+        body.textContent = "Calling " + formatPhone(number) + "…";
+        body.style.cssText = "font-size:14px;color:#333;margin-bottom:16px;";
+        modal.appendChild(body);
+
+        var footer = document.createElement("div");
+        footer.style.cssText = "text-align:right;";
+        var ok = document.createElement("button");
+        ok.type = "button";
+        ok.textContent = "OK";
+        ok.style.cssText = [
+            "background:#0B5CFF", "color:#fff", "border:none", "border-radius:4px",
+            "padding:4px 18px", "font-size:13px", "cursor:pointer",
+        ].join(";");
+        function dismiss() { if (overlay.parentNode) { overlay.parentNode.removeChild(overlay); } }
+        ok.addEventListener("click", dismiss);
+        footer.appendChild(ok);
+        modal.appendChild(footer);
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        overlay.addEventListener("click", function (e) { if (e.target === overlay) { dismiss(); } });
+    }
+
     function handleNavigate(event) {
         var payload;
         try {
@@ -115,6 +181,10 @@
         }
         expandCtiPanel();
         closeActiveModal();
+        if (payload.target === "outbound_call") {
+            showCallingModal(payload.caller_number);
+            return;
+        }
         if (payload.target === "address_book") {
             handleAddressBookPop(payload || {});
             return;
@@ -399,105 +469,6 @@
         setTimeout(function () {
             doc.addEventListener("click", onDocClick, true);
         }, 0);
-    }
-
-    document.addEventListener("click", function (event) {
-        var link = event.target && event.target.closest ? event.target.closest("a[href^='tel:']") : null;
-        if (!link || streams.length !== 1) {
-            return;
-        }
-        var href = link.getAttribute("href") || "";
-        var phone = phoneFromTelHref(href);
-        if (!phone) {
-            return;
-        }
-        event.preventDefault();
-        showCallButton(link, document, function () {
-            initiateCall(phone).catch(function (error) {
-                console.error("[ZoomlyEpicCti] Click-to-dial failed", error);
-                window.location.href = href;
-            });
-        });
-    });
-
-    // ── Top-frame phone injection into same-origin content iframes ──────────────
-
-    function watchFrame(name, onLoad) {
-        var selector = 'iframe[name="' + name + '"]';
-        function attachLoad(iframe) {
-            if (iframe._zoomlyPhoneWatched) { return; }
-            iframe._zoomlyPhoneWatched = true;
-            iframe.addEventListener("load", function () {
-                try { onLoad(iframe); } catch (err) {}
-            });
-        }
-        document.querySelectorAll(selector).forEach(attachLoad);
-        var obs = new window.MutationObserver(function (mutations) {
-            mutations.forEach(function (m) {
-                m.addedNodes.forEach(function (node) {
-                    if (node.nodeType === 1 && node.tagName === "IFRAME" && node.name === name) {
-                        attachLoad(node);
-                    }
-                });
-            });
-        });
-        obs.observe(document.body || document.documentElement, {childList: true, subtree: true});
-    }
-
-    function injectDemographicsPhones(iframe) {
-        var doc = iframe.contentDocument;
-        var win = iframe.contentWindow;
-        var pid = "";
-        try {
-            var params = new URL(win.location.href).searchParams;
-            pid = params.get("set_pid") || params.get("pid") || "";
-        } catch (err) {}
-        var phoneIds = ["text_phone_home", "text_phone_cell", "text_phone_biz", "text_phone_contact", "text_em_number"];
-        phoneIds.forEach(function (id) {
-            var td = doc.getElementById(id);
-            if (!td || td.querySelector("[data-zoomly-phone]")) { return; }
-            var phone = (td.dataset.value || "").trim();
-            if (!phone) { return; }
-            if (/555-\d{4}$/.test(phone)) { return; }
-            var a = doc.createElement("a");
-            a.href = "#";
-            a.dataset.zoomlyPhone = "1";
-            a.textContent = phone;
-            a.style.cursor = "pointer";
-            a.addEventListener("click", function (e) {
-                e.preventDefault();
-                showCallButton(a, doc, function () {
-                    initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
-                });
-            });
-            td.textContent = "";
-            td.appendChild(a);
-        });
-    }
-
-    function injectFinderPhones(iframe) {
-        var doc = iframe.contentDocument;
-        doc.addEventListener("click", function (e) {
-            var td = e.target.closest && e.target.closest("#pt_table td");
-            if (!td) { return; }
-            var phone = (td.textContent || "").trim();
-            if (!/^(\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}$/.test(phone)) { return; }
-            if (/555-\d{4}$/.test(phone)) { return; }
-            var row = td.closest("tr[id^='pid_']");
-            if (!row) { return; }
-            var pid = row.id.replace("pid_", "");
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            showCallButton(td, doc, function () {
-                initiateCall(phone, {openemrPatientId: pid}).catch(function () {});
-            });
-        }, true);
-    }
-
-    if (streams.length > 0) {
-        watchFrame("pat", injectDemographicsPhones);
-        watchFrame("fin", injectFinderPhones);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

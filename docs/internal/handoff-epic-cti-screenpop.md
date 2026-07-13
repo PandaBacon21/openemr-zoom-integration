@@ -1,5 +1,14 @@
 # Epic-ZCC CTI Screen Pop — Handoff (Sprint 11 QA)
 
+> **SUPERSEDED (2026-07).** This is a point-in-time debugging handoff kept for
+> historical context. Current behavior has since changed: outbound RC3
+> (`ContactType=Outgoing`) now pops a small "Calling…" confirmation modal —
+> there is no outbound patient chart navigation, and the PatientLookUp cache
+> preload (`matched_on=outbound_context`) was removed. Click-to-call is
+> restricted to the patient Demographics contact section, and
+> `dynamic_finder.php` was deleted (reverted to stock OpenEMR). The rest of
+> this doc is left as-is for historical reference.
+
 > Written: 2026-06-24 for context continuation. The immediate priority is diagnosing
 > why `ReceiveCommunication3` phone lookup returns 0 matches even after the E.164 fix.
 

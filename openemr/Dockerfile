@@ -78,13 +78,10 @@ COPY --chown=apache:apache --chmod=644 \
      openemr/patches/epic_cti/cti_phone_inject.js \
      /var/www/localhost/htdocs/openemr/interface/epic_cti/
 
-# ─── Patient Dashboard / Finder CTI phone links ──────────────────────────────
+# ─── Patient Dashboard demographics CTI phone links ──────────────────────────
 COPY --chown=apache:apache --chmod=644 \
      openemr/patches/demographics.php \
      /var/www/localhost/htdocs/openemr/interface/patient_file/summary/demographics.php
-COPY --chown=apache:apache --chmod=644 \
-     openemr/patches/dynamic_finder.php \
-     /var/www/localhost/htdocs/openemr/interface/main/finder/dynamic_finder.php
 
 # ─── Patient Flow Board patches (Telehealth column + Zoom button) ────────────
 COPY --chown=apache:apache --chmod=644 \
