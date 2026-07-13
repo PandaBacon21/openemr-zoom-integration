@@ -447,7 +447,7 @@ External ZCC/Epic-shaped endpoints:
 - `GET /api/FHIR/R4/Practitioner` — FHIR R4 Practitioner search by `identifier`, `_id`, `name`, or `family`/`given`.
 - `POST /api/epic/2023/Common/Utility/RECEIVECOMMUNICATION3/ReceiveCommunication3` — accepts XML or JSON, resolves the ZCC recipient through `UserMapping`, and dispatches OpenEMR screen-pop events.
 - `GET /screenpop/stream` — account/user-scoped SSE stream for browser navigation events.
-- `POST /cti/initiate-call` — OpenEMR HMAC-signed click-to-dial route that calls ZCC's Epic initiate-call API and preloads the PatientLookUp cache with the known patient under the normalized dialed phone number for the later ReceiveCommunication3 event.
+- `POST /cti/initiate-call` — OpenEMR HMAC-signed click-to-dial route (invoked from the Demographics contact section) that calls ZCC's Epic initiate-call API. The resulting outbound RC3 (`ContactType=Outgoing`) pops a small "Calling…" confirmation modal for the dialing agent — no PatientLookUp cache preload, no chart navigation.
 
 OpenEMR-facing helper:
 
@@ -455,10 +455,10 @@ OpenEMR-facing helper:
 
 Operational notes:
 
-- OpenEMR click-to-call controls are session-gated. `cti_subscriber_inject.php` writes `$_SESSION['zoomly_is_zcc_agent']` from the bootstrap result; `main.php`, `cti_panel.php`, appointment-card phone links, demographics, and patient finder phone columns only load or render CTI controls for sessions with active ZCC-agent streams. Non-ZCC users see plain phone numbers.
-- Demo seed phone numbers ending in `555-####` are intentionally left unlinked by `cti_phone_inject.js` and the legacy frame injector, preventing synthetic demo numbers from being dialed through ZCC.
+- OpenEMR click-to-call controls are session-gated. `cti_subscriber_inject.php` writes `$_SESSION['zoomly_is_zcc_agent']` from the bootstrap result; `main.php`/`cti_panel.php` load the CTI assets, and click-to-call phone links render only on the patient **Demographics contact section** for sessions with active ZCC-agent streams. Click-to-call was removed from the Patient Finder and the calendar event popout. Non-ZCC users see plain phone numbers.
+- Demo seed phone numbers ending in `555-####` are intentionally left unlinked by `cti_phone_inject.js`, preventing synthetic demo numbers from being dialed through ZCC.
 - PatientLookUp results are held in a short process-local cache for ReceiveCommunication3. The cache is keyed by account + normalized phone number, is single-use once consumed by ReceiveCommunication3, and uses the same short TTL as PatientLookUp.
-- Outbound click-to-dial does not use a separate outbound-call cache. After ZCC accepts the initiate-call request, the route preloads the PatientLookUp cache with the known OpenEMR patient under the normalized dialed phone number and marks the cached row with `matched_on=outbound_context`.
+- Outbound click-to-dial does not preload any cache. After ZCC accepts the initiate-call request it echoes an RC3 with `ContactType=Outgoing`, which Zoomly turns into an `outbound_call` SSE event → a small "Calling…" confirmation modal for the dialing agent (no chart navigation).
 - Gunicorn currently runs one worker, so the process-local cache is consistent inside one Flask process. A future multi-worker or multi-replica deployment would need a shared cache or a different screen-pop correlation strategy.
 
 ## OpenEMR Patch Module (PHP)
