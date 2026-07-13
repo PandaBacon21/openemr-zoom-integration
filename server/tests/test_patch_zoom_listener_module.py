@@ -66,9 +66,10 @@ def test_epic_cti_subscriber_uses_eventsource_and_openemr_tabs():
     assert "/interface/patient_file/summary/demographics.php?set_pid=" in text
     assert "/interface/main/finder/dynamic_finder.php?search_any=" in text
     assert "/interface/epic_cti/initiate_call.php" in text
-    assert "a[href^='tel:']" in text
-    assert "streams.length !== 1" in text
     assert "window.navigateTab" in text
+    # Outbound click-to-dial confirmation modal (RC3 ContactType=Outgoing).
+    assert 'payload.target === "outbound_call"' in text
+    assert "Ring, ring!" in text
 
 
 def test_epic_cti_initiate_call_php_signs_account_scoped_route():

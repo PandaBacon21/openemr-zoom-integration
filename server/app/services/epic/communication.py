@@ -59,6 +59,13 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
             openemr_user_id=None,
         )
 
+    # Outbound click-to-dial: ZCC echoes an RC3 with ContactType=Outgoing after
+    # placing the call. It is not a patient/provider lookup — pop the small
+    # "Calling…" confirmation modal (mirrors Epic) for the agent who dialed and
+    # stop; do not navigate to a chart.
+    if (payload.get("contact_type") or "").strip().lower() == "outgoing":
+        return _handle_outbound_call(account, recipient_id, openemr_user_id, payload)
+
     patient_id = (payload.get("patient_id") or "").strip()
     patient_id_type = (payload.get("patient_id_type") or "").strip()
 
@@ -269,6 +276,48 @@ def process_receive_communication(account, payload: dict) -> ReceiveCommunicatio
         pushed=True,
         openemr_user_id=openemr_user_id,
         openemr_patient_id=str(row["pid"]),
+        subscriber_count=subscriber_count,
+        event=event,
+    )
+
+
+def _handle_outbound_call(
+    account,
+    recipient_id: str,
+    openemr_user_id: str,
+    payload: dict,
+) -> ReceiveCommunicationResult:
+    """Pop the small outbound "Calling…" confirmation for a click-to-dial.
+
+    For an outbound call the dialed (patient) number is in CallerPhoneNumber.
+    We only push a modal event to the agent who placed the call — no patient
+    resolution, no chart navigation.
+    """
+    dialed_number = payload.get("caller_number")
+    event = {
+        "type": "navigate",
+        "target": "outbound_call",
+        "matched_on": "outbound_call",
+        "caller_number": dialed_number,
+    }
+    subscriber_count = dispatch(account.account_id, openemr_user_id, event)
+    write_audit_log(
+        event_type="epic_zcc.receive_communication_pushed",
+        success=True,
+        zoom_account_id=account.account_id,
+        openemr_user_id=openemr_user_id,
+        detail={
+            "recipient_id": recipient_id,
+            "subscriber_count": subscriber_count,
+            "matched_on": "outbound_call",
+            "target": "outbound_call",
+            "caller_number": dialed_number,
+            "call_id": payload.get("call_id"),
+        },
+    )
+    return ReceiveCommunicationResult(
+        pushed=True,
+        openemr_user_id=openemr_user_id,
         subscriber_count=subscriber_count,
         event=event,
     )

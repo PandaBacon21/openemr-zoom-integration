@@ -281,6 +281,32 @@ def test_provider_lookup_type_skips_patient_path(app, client, monkeypatch):
     assert q.empty()
 
 
+def test_outbound_call_pops_calling_modal(app, client):
+    # ContactType=Outgoing (click-to-dial) pops the small "Calling…" modal for
+    # the dialing agent and does NOT navigate to a chart — no patient lookup.
+    _seed_account(app)
+    q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
+
+    resp = _post(
+        client,
+        _payload(ContactType="Outgoing", LookupID=None, CallerPhoneNumber="+13032413176"),
+        token=_mint_token(),
+    )
+
+    assert resp.status_code == 200
+    event = q.get_nowait()
+    assert event == {
+        "type": "navigate",
+        "target": "outbound_call",
+        "matched_on": "outbound_call",
+        "caller_number": "+13032413176",
+    }
+    assert q.empty()
+    pushed = _audit_details(app, "epic_zcc.receive_communication_pushed")[-1]
+    assert pushed["target"] == "outbound_call"
+    assert pushed["caller_number"] == "+13032413176"
+
+
 def test_receive_communication_selects_patient_from_multi_match_cache(app, client):
     _seed_account(app)
     _cache_rows([
@@ -566,12 +592,11 @@ def test_receive_communication_direct_ambiguous_dispatches_picker(app, client, m
     assert pushed[-1]["matched_on"] == "multi_match"
 
 
-def test_receive_communication_outbound_uses_caller_number_as_patient_phone(app, client):
-    # For ZCC outbound click-to-dial, CallerPhoneNumber is the patient's phone
-    # and DialedPhoneNumber is the ZCC agent-side number (semantics are inverted
-    # from what the field names suggest). Cache must be hit on CallerPhoneNumber.
+def test_outbound_ignores_patient_cache_and_pops_calling_modal(app, client):
+    # Even with a patient cache entry for the caller phone, an outbound
+    # click-to-dial (ContactType=Outgoing) pops the "Calling…" modal and never
+    # navigates to a chart.
     _seed_account(app)
-    # Cache keyed by CallerPhoneNumber digits, NOT DialedPhoneNumber.
     _cache_rows([_row()], phone="3035550101")
     q = screenpop_dispatch.subscribe(TEST_ACCOUNT_ID, TEST_OPENEMR_USER_ID)
 
@@ -580,13 +605,15 @@ def test_receive_communication_outbound_uses_caller_number_as_patient_phone(app,
         _payload(
             LookupID=None,
             ContactType="Outgoing",
-            CallerPhoneNumber="+13035550101",  # patient's phone
-            DialedPhoneNumber="+17195817290",  # ZCC agent number
+            CallerPhoneNumber="+13035550101",  # dialed patient number
+            DialedPhoneNumber="+17195817290",  # ZCC agent-side number
         ),
         token=_mint_token(),
     )
 
     assert resp.status_code == 200
     event = q.get_nowait()
-    assert event["type"] == "navigate"
-    assert event["openemr_patient_id"] == "100"
+    assert event["target"] == "outbound_call"
+    assert event["caller_number"] == "+13035550101"
+    assert "openemr_patient_id" not in event
+    assert q.empty()

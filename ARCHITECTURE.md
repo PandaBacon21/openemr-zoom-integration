@@ -357,8 +357,9 @@ Operational notes:
 - OpenEMR ZCC controls are gated by the same bootstrap result used for screen
   pops. `cti_subscriber_inject.php` stores whether the logged-in OpenEMR user
   received any active ZCC-agent streams in `$_SESSION['zoomly_is_zcc_agent']`;
-  `main.php`, `cti_panel.php`, appointment-card phone links, demographics, and
-  patient finder phone links only render CTI controls for those sessions.
+  `main.php` and `cti_panel.php` render CTI controls for those sessions, and
+  click-to-call phone links render only on the patient Demographics contact
+  section (the Patient Finder and calendar event popout no longer expose them).
   Non-ZCC users see plain phone numbers and no callbar/subscriber assets.
 - Demo seed phone numbers ending in `555-####` are intentionally not made
   clickable by the shared OpenEMR phone-link helper or the legacy frame
@@ -390,10 +391,11 @@ Operational notes:
   account + normalized caller phone number. The cache is single-use once
   consumed by ReceiveCommunication3 and uses the same short TTL as
   PatientLookUp.
-- Outbound click-to-dial does not use a separate outbound-call cache. After
-  ZCC accepts `initiate-call`, Zoomly preloads the PatientLookUp cache with
-  the known OpenEMR patient under the normalized dialed phone number and marks
-  the cached row with `matched_on=outbound_context`.
+- Outbound click-to-dial does not preload any cache. After ZCC accepts
+  `initiate-call`, ZCC echoes a ReceiveCommunication3 with
+  `ContactType=Outgoing`, which Zoomly dispatches as an `outbound_call` SSE
+  event that drives a small "Calling…" confirmation modal for the dialing
+  agent — there is no patient chart navigation for outbound.
 - The app is designed to serve ~20-30 concurrent users (realistic typical
   load 1-5) on the single Gunicorn gevent worker / single replica. Three
   pieces of state are process-local and in-memory: the Epic-ZCC bearer token
@@ -458,7 +460,7 @@ The full set of PHP files baked into the OpenEMR image is enumerated in
 `openemr/Dockerfile`. Notable patches: `AuthorizationController.php` (DELETE
 column-name fix), `RsaSha384Signer.php` (multi-client JWT kid lookup),
 the four `zoom_appointment_listener` module files,`clinical_note_fetcher/`,
-`epic_cti/`, patient dashboard/finder CTI linkpatches, Flow Board patches,
+`epic_cti/`, the demographics-only patient dashboard CTI link patch, Flow Board patches,
 and `library/zoomly/ZoomBridge.php` (shared HMAC signing helper).
 
 ### 7c. K8s notes on persistence
@@ -632,10 +634,10 @@ image. See §7b. Two things worth knowing:
 3. **Epic-ZCC phone controls are session-gated.** The screen-pop bootstrap
    returns SSE streams only for active `UserMapping.is_zcc_agent` mappings.
    OpenEMR stores that result in `$_SESSION['zoomly_is_zcc_agent']`, and the
-   callbar/subscriber plus demographics, patient finder, and appointment-card
-   phone links render only when that flag is set. `cti_phone_inject.js`
-   centralizes click-to-call anchoring and suppresses demo seed phone numbers
-   ending in `555-####`.
+   callbar/subscriber render only when that flag is set; click-to-call phone
+   links render only on the patient Demographics contact section for those
+   sessions. `cti_phone_inject.js` centralizes click-to-call anchoring and
+   suppresses demo seed phone numbers ending in `555-####`.
 
 ---
 
@@ -882,8 +884,7 @@ OpenEMR-Integration/
 │       ├── patient_tracker.php
 │       ├── clinical_note_fetcher/        ← forms.php, fetch_zoom_note.php, complete_zoom_note.php
 │       ├── epic_cti/                     ← CTI panel, click-to-dial proxy, SSE subscriber/stream helper, phone-link helper
-│       ├── demographics.php              ← ZCC-agent-gated patient dashboard CTI phone links
-│       ├── dynamic_finder.php            ← ZCC-agent-gated patient finder CTI phone links
+│       ├── demographics.php              ← ZCC-agent-gated patient dashboard CTI phone links (demographics-only)
 │       ├── main.php                      ← Top-nav patch that loads Epic-ZCC assets/panel
 │       ├── library/zoomly/ZoomBridge.php ← Shared HMAC helper
 │       ├── post_calendar/                ← day/week/month ajax_template.html
