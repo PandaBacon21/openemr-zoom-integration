@@ -13,6 +13,7 @@ export default defineConfig({
       "/webhooks": "http://localhost:5000",
       "/audit": "http://localhost:5000",
       "/rest": "http://localhost:5000",
+      "/veradigm": "http://localhost:5000",
     },
   },
   build: {

@@ -72,6 +72,11 @@ Key shapes to internalize:
 - **Epic-ZCC CTI is feature gated.** When `ENABLE_EPIC_ZCC=false`, Flask does
   not register the `/zoomly/<account>/interconnect-amcurprd-oauth/*` or
   `/zoomly/epic-zcc/*` blueprints and the React UI hides the Epic ZCC tab.
+- **Veradigm telehealth is always registered** (no feature flag). It's a lean,
+  read-only demo style: appointment-type split, an external Zoom-branded
+  appointment page (standalone EHR-launch route + admin Config tab), and a
+  provider-gated OpenEMR nav icon. Meetings are minted on demand into an
+  isolated `VeradigmMeeting` table, never touching the Epic note/status pipeline.
 - **`zoom-module-init`** is a one-shot container that runs during stack
   startup and exits. Omitted from this diagram — it has no runtime data flow.
   (The previous `branding` init container was retired when patches + branding
@@ -418,7 +423,7 @@ application logs.
 | Volume          | Container path                       | Contents                                                                                                                                                                 | Blast radius if lost                                                        |
 | --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `db_data`       | `mariadb:/var/lib/mysql`             | OpenEMR's MariaDB datafiles — every patient, encounter, appointment, OAuth client registration                                                                           | Total demo loss; re-seed required                                           |
-| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, user mappings, meeting records, clinical note records, audit log, the reusable Epic-ZCC account bearer token (encrypted), encryption-at-rest ciphertexts for stored secrets | All Zoom integrations break; re-registration required for each account      |
+| `postgres_data` | `postgres:/var/lib/postgresql/data`  | Zoomly app DB — Zoom accounts, user mappings (incl. `AppointmentTypeFilter.integration`), meeting records, Veradigm meeting map (isolated from the Epic pipeline), clinical note records, audit log, the reusable Epic-ZCC account bearer token (encrypted), encryption-at-rest ciphertexts for stored secrets | All Zoom integrations break; re-registration required for each account      |
 | `openemr_sites` | `openemr:/var/www/.../openemr/sites` | OpenEMR's per-site config: SMART app registrations, uploaded patient docs, site-specific settings                                                                        | OAuth client registrations lost; SMART on FHIR breaks until re-registration |
 | `openemr_logs`  | `openemr:/var/log`                   | OpenEMR Apache + PHP error logs                                                                                                                                          | Diagnostic data only — non-load-bearing                                     |
 
@@ -525,6 +530,7 @@ Secrets are flagged. Everything else is operational config.
 | Var                          | Default | Purpose                                                                 |
 | ---------------------------- | ------- | ----------------------------------------------------------------------- |
 | `ZOOMLY_EPIC_ZCC_CLIENT_URL` | unset   | Optional OpenEMR top-nav CTI iframe URL for the Epic-ZCC callbar shell. |
+| `ZOOMLY_BRIDGE_PUBLIC_URL`   | `${APP_PUBLIC_URL}` | Public HTTPS URL of the Flask bridge. Used by the Veradigm nav icon to build the browser-facing (cross-origin) `/veradigm/launch` link. |
 
 #### Per-account values
 
@@ -638,6 +644,17 @@ image. See §7b. Two things worth knowing:
    links render only on the patient Demographics contact section for those
    sessions. `cti_phone_inject.js` centralizes click-to-call anchoring and
    suppresses demo seed phone numbers ending in `555-####`.
+
+4. **Veradigm nav icon is provider-gated.** `openemr/patches/veradigm/` adds a
+   top-right nav icon (styled like the CTI phone icon, "V" glyph). A
+   `nav_inject` bootstrap calls `/veradigm/nav-bootstrap` (HMAC-signed) and sets
+   `$_SESSION['zoomly_is_provider']` only for users with an active provider-role
+   `UserMapping`; the `nav_button` renders the icon for those sessions and links
+   (browser-facing, cross-origin) to `ZOOMLY_BRIDGE_PUBLIC_URL` `/veradigm/launch`,
+   which sets the `veradigm_session` cookie and redirects to the external
+   appointment page. Unlike the Epic path, Veradigm adds **no** OpenEMR writeback
+   patch — the existing calendar Zoom-icon/writeback stays off Veradigm
+   appointments because it keys on `pc_website`, which Veradigm never writes.
 
 ---
 

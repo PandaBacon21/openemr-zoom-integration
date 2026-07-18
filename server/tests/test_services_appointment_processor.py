@@ -58,11 +58,14 @@ def _create_user_mapping(
     return mapping
 
 
-def _create_type_filter(account: ZoomAccount, type_id: str) -> AppointmentTypeFilter:
+def _create_type_filter(
+    account: ZoomAccount, type_id: str, integration: str = "epic"
+) -> AppointmentTypeFilter:
     f = AppointmentTypeFilter(
         zoom_account_id=account.account_id,
         openemr_type_id=type_id,
         openemr_type_name=f"Type {type_id}",
+        integration=integration,
     )
     db.session.add(f)
     db.session.commit()
@@ -143,3 +146,70 @@ def test_filter_appointment_event_skips_mapping_when_account_inactive(app):
 
     assert matches == []
     assert reason == "account_inactive"
+
+
+# ---------------------------------------------------------------------------
+# Veradigm integration split — Veradigm types are hard-dropped from the Epic
+# pipeline, and only 'epic' rows count toward the Epic allowlist / default-open.
+# ---------------------------------------------------------------------------
+
+def test_filter_drops_veradigm_typed_appointment(app):
+    with app.app_context():
+        account = _create_account("acct-1", is_active=True)
+        _create_user_mapping(account, provider_id="10")
+        _create_type_filter(account, "27", integration="epic")
+        _create_type_filter(account, "90", integration="veradigm")
+
+        payload = dict(BASE_PAYLOAD)
+        payload["category_id"] = 90  # Veradigm category
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+
+    assert matches == []
+    assert reason == "veradigm_excluded"
+
+
+def test_filter_drops_veradigm_type_even_with_no_epic_filters(app):
+    """The Veradigm hard-drop beats default-open (no Epic rows configured)."""
+    with app.app_context():
+        account = _create_account("acct-1", is_active=True)
+        _create_user_mapping(account, provider_id="10")
+        _create_type_filter(account, "90", integration="veradigm")
+
+        payload = dict(BASE_PAYLOAD)
+        payload["category_id"] = 90
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+
+    assert matches == []
+    assert reason == "veradigm_excluded"
+
+
+def test_filter_epic_allowlist_ignores_veradigm_rows(app):
+    """A non-Veradigm category not in the Epic allowlist is a type_mismatch;
+    the Veradigm row must not make the account default-open."""
+    with app.app_context():
+        account = _create_account("acct-1", is_active=True)
+        _create_user_mapping(account, provider_id="10")
+        _create_type_filter(account, "27", integration="epic")
+        _create_type_filter(account, "90", integration="veradigm")
+
+        payload = dict(BASE_PAYLOAD)
+        payload["category_id"] = 55  # neither Epic-allowed nor Veradigm
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+
+    assert matches == []
+    assert reason == "type_mismatch"
+
+
+def test_filter_epic_category_still_matches_alongside_veradigm_row(app):
+    with app.app_context():
+        account = _create_account("acct-1", is_active=True)
+        _create_user_mapping(account, provider_id="10")
+        _create_type_filter(account, "27", integration="epic")
+        _create_type_filter(account, "90", integration="veradigm")
+
+        payload = dict(BASE_PAYLOAD)
+        payload["category_id"] = 27  # Epic-allowed
+        matches, reason = appointment_processor.filter_appointment_event(payload)
+
+    assert len(matches) == 1
+    assert reason is None

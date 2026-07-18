@@ -115,3 +115,65 @@ def test_delete_appointment_filter_deletes_entry(app):
         deleted = AppointmentTypeFilter.query.filter_by(id=entry.id).first()
 
     assert deleted is None
+
+
+# --- integration split -----------------------------------------------------
+
+_LOG = __import__("logging").getLogger("test")
+
+
+def test_create_appointment_filter_defaults_to_epic(app):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        entry = appointment_filters._create_appointment_filter(
+            zoom_account_id="acct-1",
+            openemr_type_id="27",
+            openemr_type_name="Epic Type",
+            logger=_LOG,
+        )
+        assert entry.integration == "epic"
+
+
+def test_create_appointment_filter_stores_veradigm_integration(app):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        entry = appointment_filters._create_appointment_filter(
+            zoom_account_id="acct-1",
+            openemr_type_id="90",
+            openemr_type_name="Veradigm Type",
+            logger=_LOG,
+            integration="veradigm",
+        )
+        assert entry.integration == "veradigm"
+
+
+def test_create_appointment_filter_rejects_invalid_integration(app):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        with pytest.raises(ValueError, match="Invalid integration"):
+            appointment_filters._create_appointment_filter(
+                zoom_account_id="acct-1",
+                openemr_type_id="1",
+                openemr_type_name="Bad",
+                logger=_LOG,
+                integration="cerner",
+            )
+
+
+def test_get_appointment_filters_filters_by_integration(app):
+    with app.app_context():
+        _create_account("acct-1", is_active=True)
+        appointment_filters._create_appointment_filter(
+            zoom_account_id="acct-1", openemr_type_id="27",
+            openemr_type_name="Epic", logger=_LOG, integration="epic",
+        )
+        appointment_filters._create_appointment_filter(
+            zoom_account_id="acct-1", openemr_type_id="90",
+            openemr_type_name="Veradigm", logger=_LOG, integration="veradigm",
+        )
+
+        veradigm = appointment_filters._get_appointment_filters("acct-1", integration="veradigm")
+        all_rows = appointment_filters._get_appointment_filters("acct-1")
+
+    assert [f.openemr_type_id for f in veradigm] == ["90"]
+    assert len(all_rows) == 2

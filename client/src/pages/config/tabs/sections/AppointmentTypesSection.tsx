@@ -27,9 +27,33 @@ import type {
 
 interface Props {
   zoomAccountId: string;
+  integration?: "epic" | "veradigm";
 }
 
-const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
+const COPY = {
+  epic: {
+    title: "Epic Appointment Types",
+    description:
+      "Only appointments matching these types trigger Zoom meeting creation and clinical-note writeback. If no Epic types are configured, all non-Veradigm types are processed.",
+    emptyEnabled:
+      "No Epic types configured — all non-Veradigm appointment types will be processed",
+  },
+  veradigm: {
+    title: "Veradigm Appointment Types",
+    description:
+      "Appointments matching these types appear only on the external Veradigm appointment page — no Zoom meeting is auto-created and no clinical notes are written back to the EHR.",
+    emptyEnabled: "No Veradigm types configured",
+  },
+} as const;
+
+const AppointmentTypesSection: React.FC<Props> = ({
+  zoomAccountId,
+  integration = "epic",
+}) => {
+  const copy = COPY[integration];
+  // `enabled` holds ALL filters (both integrations) so we can exclude types
+  // already used by the other section (a category is Epic OR Veradigm, never
+  // both). Only this section's integration is displayed/added.
   const [enabled, setEnabled] = useState<AppointmentType[]>([]);
   const [allTypes, setAllTypes] = useState<OpenEMRAppointmentType[]>([]);
   const [selected, setSelected] = useState<OpenEMRAppointmentType[]>([]);
@@ -57,7 +81,10 @@ const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
       .finally(() => setLoadingAll(false));
   }, [zoomAccountId]);
 
+  // Exclude any type already used by EITHER section from the add list.
   const enabledIds = new Set(enabled.map((e) => e.openemr_type_id));
+  // Only this integration's rows are shown as chips.
+  const displayed = enabled.filter((e) => e.integration === integration);
 
   const availableToAdd = allTypes.filter((t) => !enabledIds.has(t.id));
 
@@ -72,6 +99,7 @@ const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
           zoom_account_id: zoomAccountId,
           openemr_type_id: type.id,
           openemr_type_name: type.name,
+          integration,
         });
         setEnabled((prev) => [...prev, res.data]);
       }
@@ -107,11 +135,10 @@ const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
     <Card>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
-          Appointment Types
+          {copy.title}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Only appointments matching these types will trigger Zoom meeting
-          creation. If none are configured, all types will be processed.
+          {copy.description}
         </Typography>
 
         {isLoading ? (
@@ -142,17 +169,16 @@ const AppointmentTypesSection: React.FC<Props> = ({ zoomAccountId }) => {
                   minHeight: 40,
                 }}
               >
-                {enabled.length === 0 ? (
+                {displayed.length === 0 ? (
                   <Typography
                     variant="body2"
                     color="text.secondary"
                     sx={{ fontStyle: "italic" }}
                   >
-                    No types configured — all appointment types will be
-                    processed
+                    {copy.emptyEnabled}
                   </Typography>
                 ) : (
-                  enabled.map((type) => (
+                  displayed.map((type) => (
                     <Chip
                       key={type.openemr_type_id}
                       label={`${type.openemr_type_name} : ${type.openemr_type_id}`}

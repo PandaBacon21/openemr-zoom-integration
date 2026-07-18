@@ -41,6 +41,8 @@ services:
       - ./openemr/patches/main.php:/var/www/localhost/htdocs/openemr/interface/main/tabs/main.php:ro
       # Epic-ZCC CTI screen-pop subscriber + top-nav iframe shell + same-origin SSE proxy
       - ./openemr/patches/epic_cti:/var/www/localhost/htdocs/openemr/interface/epic_cti:ro
+      # Veradigm telehealth nav icon (top-right, provider-gated)
+      - ./openemr/patches/veradigm:/var/www/localhost/htdocs/openemr/interface/veradigm:ro
       # Patient dashboard demographics CTI phone links
       - ./openemr/patches/demographics.php:/var/www/localhost/htdocs/openemr/interface/patient_file/summary/demographics.php:ro
       # Patient Flow Board patches

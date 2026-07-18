@@ -14,8 +14,8 @@
 -- facility_id=3 by default — facility_id has no FK constraint, so the
 -- DELETE leaves admin briefly dangling, but the UPDATE below restores them.
 --
--- Also delete id=5 in case a prior seed run (before the 4→3, 5→4 renumber)
--- left a stale Central-MO row at id=5.
+-- id=5 is the Veradigm-style facility (inserted below); delete it first so the
+-- insert is idempotent and to clear any stale pre-renumber row at that id.
 DELETE FROM `facility` WHERE `id` IN (3, 5);
 
 INSERT INTO `facility` (
@@ -40,7 +40,15 @@ INSERT INTO `facility` (
 (4, UNHEX(REPLACE(UUID(), '-', '')),
  'Zoomly Medical Center - MO', '816-555-0100',
  '456 Truman Road',      'Kansas City',   'MO', '64106', 'USA',
- '1234567893', '#f7f2e3', 1, 1, 1, 1, 0);
+ '1234567893', '#f7f2e3', 1, 1, 1, 1, 0),
+-- EHR-integration-style facility: appointments scheduled here represent the
+-- Veradigm telehealth demo. Pickup for the external Veradigm appointment page
+-- is by appointment TYPE (not facility), so this facility is the demo-context
+-- marker / schedulable location for Veradigm-style visits.
+(5, UNHEX(REPLACE(UUID(), '-', '')),
+ 'Zoomly Veradigm Clinic', '888-555-0100',
+ '1 Integration Way',    'Chicago',       'IL', '60601', 'USA',
+ '1234567894', '#8E24AA', 1, 1, 1, 1, 0);
 
 UPDATE `users` SET `facility_id` = 1 WHERE `id` = 1;
 

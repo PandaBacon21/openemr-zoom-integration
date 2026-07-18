@@ -831,12 +831,6 @@ SELECT
         SELECT 1 AS seq UNION ALL SELECT 2 UNION ALL SELECT 3
   ) visit;
 
--- =============================================================================
--- f) pc_facility + pc_billing_location retarget — every row above was inserted
--- with pc_facility=1 hardcoded. Set it to the provider's home facility so
--- the calendar's facility filter actually scopes correctly. pc_billing_location
--- matches the same facility (visit billing flows through the visit's facility).
--- =============================================================================
 
 UPDATE openemr_postcalendar_events e
 JOIN users u ON u.id = CAST(e.pc_aid AS UNSIGNED)

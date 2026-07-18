@@ -18,6 +18,7 @@ import AccountConfigTab from "./tabs/AccountConfigTab";
 import AccountUserMappingsTab from "./tabs/AccountUserMappingsTab";
 import AccountDashboardTab from "./tabs/AccountDashboardTab";
 import EpicZccTab from "./tabs/EpicZccTab";
+import VeradigmTab from "./tabs/VeradigmTab";
 
 interface Props {
   account: Registration;
@@ -160,10 +161,15 @@ const AccountDetail: React.FC<Props> = ({
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-          <Tab label="Config" />
-          <Tab label="User Mappings" disabled={!isVerified || loadingMappings} />
-          <Tab label="Dashboard" disabled={!isVerified} />
-          {features.epic_zcc && <Tab label="Epic ZCC" />}
+          <Tab label="Config" value={0} />
+          <Tab
+            label="User Mappings"
+            value={1}
+            disabled={!isVerified || loadingMappings}
+          />
+          <Tab label="Dashboard" value={2} disabled={!isVerified} />
+          {features.epic_zcc && <Tab label="Epic ZCC" value={3} />}
+          <Tab label="Veradigm" value={4} disabled={!isVerified} />
         </Tabs>
       </Box>
 
@@ -185,6 +191,7 @@ const AccountDetail: React.FC<Props> = ({
       )}
       {tab === 2 && isVerified && <AccountDashboardTab account={account} />}
       {tab === 3 && features.epic_zcc && <EpicZccTab account={account} />}
+      {tab === 4 && isVerified && <VeradigmTab account={account} />}
     </Box>
   );
 };

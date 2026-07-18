@@ -399,6 +399,9 @@ const AccountUserMappingsTab: React.FC<Props> = ({
                   {hydrateSummary.meetings_backfilled}; skipped{" "}
                   {hydrateSummary.providers_skipped.length} providers.
                   <br />
+                  Veradigm: created{" "}
+                  {hydrateSummary.veradigm_appointments_created} appts.
+                  <br />
                   Past encounters:{" "}
                   {hydrateSummary.past_encounters_skipped_today
                     ? "already seeded today (one per day)"

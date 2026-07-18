@@ -41,6 +41,21 @@ INSERT INTO `openemr_postcalendar_categories` (
 ('Zoom Preventive',        '#00ACC1', 'Preventive / wellness video touchpoint',
  1800, 0, 1, 80, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'zoom_preventive');
 
+-- Veradigm telehealth category (lean Veradigm demo). Appointments scheduled
+-- with this category are surfaced ONLY on the external Veradigm appointment
+-- page. They are deliberately excluded from the Epic appointment-type allowlist
+-- (and hard-dropped by the appointment filter), so they never create a Zoom
+-- meeting / MeetingRecord and never trigger clinical-note writeback.
+INSERT INTO `openemr_postcalendar_categories` (
+    `pc_catname`, `pc_catcolor`, `pc_catdesc`,
+    `pc_duration`, `pc_cattype`, `pc_active`, `pc_seq`,
+    `pc_recurrtype`, `pc_recurrfreq`, `pc_end_date_flag`,
+    `pc_end_date_freq`, `pc_end_all_day`, `pc_dailylimit`,
+    `aco_spec`, `pc_constant_id`
+) VALUES
+('Veradigm Telehealth Visit', '#8E24AA', 'Veradigm-sourced telehealth video visit (external appointment page only)',
+ 1800, 0, 1, 90, 0, 0, 0, 0, 0, 0, 'encounters|notes', 'veradigm_telehealth');
+
 -- =============================================================================
 -- CATEGORY ID VARIABLES
 -- Custom types: looked up by name after insert
@@ -56,6 +71,8 @@ SET @zoom_mat_catid               = (SELECT pc_catid FROM openemr_postcalendar_c
 SET @zoom_new_patient_catid       = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom New Patient');
 SET @zoom_preventive_catid        = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Preventive');
 SET @zoom_established_patient_catid = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Zoom Established Patient');
+
+SET @veradigm_telehealth_catid    = (SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = 'Veradigm Telehealth Visit');
 
 -- OpenEMR built-in category IDs (verified from openemr_postcalendar_categories)
 SET @office_visit_catid     = 5;   -- Office Visit (15 min)

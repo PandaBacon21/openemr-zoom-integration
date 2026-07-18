@@ -28,10 +28,16 @@ Current implemented areas:
   - Provider inbound — ReceiveCommunication3 with `LookupType="Provider"` resolves NPI / Tax ID directly from the RC3 LookupID against OpenEMR's Address Book population (internal clinicians and external providers); single match pops that entry's `addrbook_edit.php` modal, no match opens the Address Book list (NPI is unique, so there is no provider multi-match). Does not depend on Practitioner.Search, which still exists as a directory endpoint
   - Plus OAuth/JWKS, OpenEMR SSE screen-pop bootstrap, ZCC user lookup, and ZCC-agent-only OpenEMR controls
 - Epic-ZCC bearer-token model is one reusable account-level token — `/oauth2/token` returns the account's existing valid token (re-minting only within ~60s of expiry) rather than minting per request, so all agents authenticate the ZCC→Zoomly call at the account level (agent identity comes from `RecipientID`)
+- Veradigm-style telehealth demo (always registered) — a deliberately lean, read-only contrast to the embedded Epic path:
+  - Appointment-type split via `AppointmentTypeFilter.integration` (`epic` | `veradigm`). Epic types drive the Zoom-meeting + note-writeback pipeline; Veradigm types are hard-dropped from that pipeline (`veradigm_excluded`) and surface only on the external page. Admin config UI splits into Epic vs Veradigm appointment-type sections
+  - External Zoom-branded appointment page (Today / Future [This/Next week] / Past filters, provider directory search, per-row Start/Join, More menu). One React component rendered two ways: a standalone EHR-launch route and a per-account admin Config tab
+  - Dual-context auth: OpenEMR nav icon → `ZoomBridge`-signed `/veradigm/launch` → short-lived `veradigm_session` cookie (EHR context, provider-defaulted); admin Config tab uses the admin JWT (all providers). Unauthenticated standalone access 302s to the OpenEMR login
+  - Meetings minted on demand into an isolated `VeradigmMeeting` table (never `MeetingRecord`), so Veradigm never enters the Epic note/status pipeline or writes `pc_website`
+  - Dedicated `Zoomly Veradigm Clinic` facility (id 5); Hydrate Demo Data creates 2 Veradigm appointments per mapped provider (no Zoom meeting)
 - OpenEMR listener patch module wiring for `AppointmentSetEvent` and `AppointmentDialogCloseEvent`
 - OpenEMR provider + appointment type lookup helpers
 - Zoom user lookup helper
-- Protected admin/config endpoints via JWT bearer auth
+- Protected admin/config endpoints via JWT bearer auth; the admin UI treats an expired JWT as logged-out (decodes `exp`) and redirects to login
 - JWKS endpoint for per-account key usage
 
 ## Internal Developer Reference
@@ -220,8 +226,8 @@ User/provider mapping management (JWT bearer protected):
 
 Appointment filter management (JWT bearer protected):
 
-- `POST /config/appointment-types`
-- `GET /config/appointment-types?zoom_account_id=...`
+- `POST /config/appointment-types` — body may include `integration` (`epic` default | `veradigm`)
+- `GET /config/appointment-types?zoom_account_id=...[&integration=epic|veradigm]`
 - `DELETE /config/appointment-types/<type_id>?zoom_account_id=...`
 
 OpenEMR and Zoom lookup helpers (JWT bearer protected):
@@ -263,7 +269,15 @@ OpenEMR-signed note endpoints:
 
 Demo hydration (JWT bearer protected):
 
-- `POST /config/demo/hydrate` — idempotent backfill of the next-2-weekdays × 2-slots-per-day appointment + Zoom meeting grid for every active provider-role user mapping on the account
+- `POST /config/demo/hydrate` — idempotent backfill of the next-2-weekdays × 2-slots-per-day appointment + Zoom meeting grid for every active provider-role user mapping on the account. Also creates 2 Veradigm-typed appointments per mapped provider (no Zoom meeting)
+
+Veradigm telehealth (always registered; dual-context auth — EHR `veradigm_session` cookie or admin JWT):
+
+- `GET /veradigm/launch?u=&ts=&sig=` — verifies the OpenEMR-signed launch URL, sets the session cookie, 302s to the SPA page (or to the OpenEMR login when invalid/expired)
+- `GET /veradigm/ehr-login` — public redirect back to the OpenEMR login
+- `GET /veradigm/appointments[?zoom_account_id=]` — provider-scoped (EHR) or account-wide (admin); returns `today`, `default_provider_id`, `providers[]`, `appointments[]`
+- `POST /veradigm/appointments/<eid>/meeting` — mint-or-reuse a Zoom meeting (`VeradigmMeeting`)
+- `POST /veradigm/nav-bootstrap` — OpenEMR HMAC-signed; drives nav-icon visibility for provider-mapped users
 
 Epic-ZCC CTI endpoints:
 

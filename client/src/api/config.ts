@@ -98,6 +98,7 @@ export interface AppointmentType {
   zoom_account_id: number;
   openemr_type_id: string;
   openemr_type_name: string;
+  integration: string; // "epic" | "veradigm"
   created_at: string;
 }
 
@@ -266,6 +267,7 @@ export interface HydrateSummary {
   appointments_created: number;
   meetings_created: number;
   meetings_backfilled: number;
+  veradigm_appointments_created: number;
   errors: HydrateError[];
   past_encounters_created: number;
   past_encounters_skipped_today: boolean;
@@ -277,15 +279,20 @@ export const hydrateDemoData = (zoom_account_id: string) =>
   apiClient.post<HydrateSummary>("/config/demo/hydrate", { zoom_account_id });
 
 // Appointment types
-export const getAppointmentFilters = (zoom_account_id: string) =>
+export const getAppointmentFilters = (
+  zoom_account_id: string,
+  integration?: string,
+) =>
   apiClient.get<{ count: number; appointment_types: AppointmentType[] }>(
-    `/config/appointment-types?zoom_account_id=${zoom_account_id}`,
+    `/config/appointment-types?zoom_account_id=${zoom_account_id}` +
+      (integration ? `&integration=${integration}` : ""),
   );
 
 export const createAppointmentFilter = (data: {
   zoom_account_id: string;
   openemr_type_id: string;
   openemr_type_name: string;
+  integration?: string;
 }) => apiClient.post<AppointmentType>("/config/appointment-types", data);
 
 export const deleteAppointmentFilter = (

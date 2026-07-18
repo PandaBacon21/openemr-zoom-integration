@@ -7,6 +7,13 @@ populated with appointments + Zoom meetings. Idempotent — re-running tops up
 any slot missing an appointment, or backfills a Zoom meeting on an existing
 appointment that lacks a MeetingRecord.
 
+For each mapped provider-role UserMapping it also creates two Veradigm-typed
+appointments (one per weekday, in the Veradigm facility) with NO Zoom meeting —
+the external Veradigm appointment page mints a meeting on demand, so these never
+enter the Epic note/status pipeline. This is why the seed does not pre-create
+Veradigm appointments: like the Epic Zoom appointments, they belong to
+mapped providers, which only exist at runtime.
+
 Respects each account's AppointmentTypeFilter — if the SE has narrowed
 allowed appointment types, hydration only considers categories that are
 both (a) compatible with the provider's specialty and (b) in the account's
@@ -48,6 +55,14 @@ logger = logging.getLogger(__name__)
 # Two slots per weekday — first morning, mid-afternoon.
 _SLOT_TIMES = [time(9, 0), time(14, 0)]
 
+# Veradigm hydration: two Veradigm-typed appointments per mapped provider (one
+# per weekday) at a time that doesn't collide with the Epic slots above. No Zoom
+# meeting is created — the external Veradigm page mints one on demand via
+# Start/Join. Appointments land in the Veradigm-style facility.
+_VERADIGM_CATEGORY_NAME = "Veradigm Telehealth Visit"
+_VERADIGM_FACILITY_NAME = "Zoomly Veradigm Clinic"
+_VERADIGM_SLOT_TIME = time(11, 0)
+
 
 def hydrate_future_meetings(account: ZoomAccount) -> dict:
     """
@@ -78,6 +93,7 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
         "appointments_created": 0,
         "meetings_created": 0,
         "meetings_backfilled": 0,
+        "veradigm_appointments_created": 0,
         "errors": [],
     }
 
@@ -85,6 +101,8 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
     slot_grid = [(d, t) for d in slot_dates for t in _SLOT_TIMES]
 
     category_id_map = _load_category_id_map()
+    veradigm_category_id = category_id_map.get(_VERADIGM_CATEGORY_NAME)
+    veradigm_facility_id = _veradigm_facility_id()
 
     filter_rows = AppointmentTypeFilter.query.filter_by(
         zoom_account_id=account.account_id
@@ -100,6 +118,17 @@ def hydrate_future_meetings(account: ZoomAccount) -> dict:
 
     for mapping in mappings:
         provider_user_id = int(mapping.openemr_user_id)
+
+        # Veradigm appointments — provider-role mappings only, independent of the
+        # Epic specialty/type gating below. Never gets a Zoom meeting.
+        if mapping.is_provider and veradigm_category_id is not None:
+            _hydrate_veradigm_appointments(
+                account=account,
+                provider_user_id=provider_user_id,
+                veradigm_category_id=veradigm_category_id,
+                veradigm_facility_id=veradigm_facility_id,
+                summary=summary,
+            )
 
         skip_reason, effective_categories, patients = _evaluate_provider(
             provider_user_id, category_id_map, filter_type_ids
@@ -336,6 +365,82 @@ def _next_two_weekdays(start: date) -> list[date]:
         if candidate.weekday() < 5:  # 0=Mon..4=Fri
             result.append(candidate)
     return result
+
+
+def _hydrate_veradigm_appointments(
+    *, account, provider_user_id, veradigm_category_id, veradigm_facility_id, summary,
+) -> None:
+    """Ensure the mapped provider has two Veradigm-typed appointments across the
+    next two weekdays (one each at 11:00, in the Veradigm facility). Idempotent
+    per (date, 11:00) slot. No Zoom meeting is created — the external Veradigm
+    page mints one on demand, so these never enter the Epic note/status pipeline.
+    """
+    patients = get_provider_patients(provider_user_id)
+    if not patients:
+        return
+
+    slot_dates = _next_two_weekdays(date.today())
+    facility_id = veradigm_facility_id or _lookup_provider_facility(provider_user_id)
+    existing = get_provider_appointments_in_window(
+        provider_user_id, slot_dates[0], slot_dates[-1]
+    )
+
+    for i, slot_date in enumerate(slot_dates):
+        # Idempotency is Veradigm-specific: only skip if a Veradigm appointment
+        # already sits in this slot. An Epic appointment at the same time doesn't
+        # block it — they live in different facilities, so no calendar collision.
+        already = any(
+            a["pc_eventDate"] == slot_date
+            and a["pc_startTime"] == _VERADIGM_SLOT_TIME
+            and int(a.get("pc_catid") or 0) == int(veradigm_category_id)
+            for a in existing
+        )
+        if already:
+            continue  # already hydrated this Veradigm slot
+        patient = patients[i % len(patients)]
+        new_eid = generate_future_appointment(
+            zoom_account_id=account.account_id,
+            provider_user_id=provider_user_id,
+            facility_id=facility_id,
+            patient_pid=int(patient["pid"]),
+            category_id=veradigm_category_id,
+            category_name=_VERADIGM_CATEGORY_NAME,
+            slot_date=slot_date,
+            slot_time=_VERADIGM_SLOT_TIME,
+            title=_VERADIGM_CATEGORY_NAME,
+        )
+        if new_eid is None:
+            summary["errors"].append({
+                "stage": "generate_veradigm_appointment",
+                "openemr_user_id": str(provider_user_id),
+                "slot": f"{slot_date.isoformat()}T{_VERADIGM_SLOT_TIME.isoformat()}",
+            })
+            continue
+        summary["veradigm_appointments_created"] += 1
+        write_audit_log(
+            event_type="demo.veradigm_appointment_created",
+            success=True,
+            zoom_account_id=account.account_id,
+            openemr_user_id=str(provider_user_id),
+            openemr_patient_id=str(patient["pid"]),
+            openemr_appointment_id=str(new_eid),
+            detail={
+                "slot_date": slot_date.isoformat(),
+                "slot_time": _VERADIGM_SLOT_TIME.isoformat(),
+                "facility_id": facility_id,
+            },
+        )
+
+
+def _veradigm_facility_id() -> int | None:
+    """The id of the Veradigm-style facility, or None if it isn't seeded."""
+    engine = get_openemr_db_engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT id FROM facility WHERE name = :name LIMIT 1"),
+            {"name": _VERADIGM_FACILITY_NAME},
+        ).fetchone()
+    return int(row.id) if row else None
 
 
 def _load_category_id_map() -> dict[str, int]:

@@ -464,13 +464,15 @@ def create_appointment_filter():
         entry = _create_appointment_filter(
             zoom_account_id=data["zoom_account_id"],
             openemr_type_id=data["openemr_type_id"],
-            openemr_type_name=data["openemr_type_name"], 
-            logger=logger
+            openemr_type_name=data["openemr_type_name"],
+            logger=logger,
+            integration=data.get("integration", "epic"),
         )
         return jsonify({
             "id": entry.id,
             "openemr_type_id": entry.openemr_type_id,
             "openemr_type_name": entry.openemr_type_name,
+            "integration": entry.integration,
             "created_at": entry.created_at.isoformat()
         }), 201
     except ValueError as e:
@@ -485,8 +487,10 @@ def list_appointment_filters():
     if not zoom_account_id:
         return jsonify({"error": "zoom_account_id query parameter is required"}), 400
 
+    integration = request.args.get("integration")
+
     try:
-        filters = _get_appointment_filters(zoom_account_id)
+        filters = _get_appointment_filters(zoom_account_id, integration=integration)
         return jsonify({
             "count": len(filters),
             "appointment_types": [
@@ -494,6 +498,7 @@ def list_appointment_filters():
                     "id": f.id,
                     "openemr_type_id": f.openemr_type_id,
                     "openemr_type_name": f.openemr_type_name,
+                    "integration": f.integration,
                     "created_at": f.created_at.isoformat()
                 }
                 for f in filters

@@ -8,12 +8,34 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * True only when a stored admin token exists AND is not expired. Decodes the
+ * JWT `exp` client-side so an expired token is treated as logged-out — the
+ * ProtectedRoute then redirects to /login immediately (no flash of a protected
+ * page, no reliance on an API 401 to bounce). The server still enforces auth on
+ * every request; this is a UX guard only.
+ */
+const hasValidToken = (): boolean => {
+  const token = localStorage.getItem("zoomly_token");
+  if (!token) return false;
+  try {
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(part));
+    if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+      localStorage.removeItem("zoomly_token");
+      return false;
+    }
+    return true;
+  } catch {
+    localStorage.removeItem("zoomly_token");
+    return false;
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    () => !!localStorage.getItem("zoomly_token"),
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(hasValidToken);
 
   const login = useCallback(async (password: string): Promise<boolean> => {
     try {

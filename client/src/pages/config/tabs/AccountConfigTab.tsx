@@ -27,7 +27,16 @@ const AccountConfigTab: React.FC<Props> = ({
         onAccountUpdated={onAccountUpdated}
       />
       {isVerified && (
-        <AppointmentTypesSection zoomAccountId={account.zoom_account_id} />
+        <AppointmentTypesSection
+          zoomAccountId={account.zoom_account_id}
+          integration="epic"
+        />
+      )}
+      {isVerified && (
+        <AppointmentTypesSection
+          zoomAccountId={account.zoom_account_id}
+          integration="veradigm"
+        />
       )}
       <SettingsSection account={account} onAccountUpdated={onAccountUpdated} />
       <DeleteRegistration
