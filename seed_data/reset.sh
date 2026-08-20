@@ -36,6 +36,7 @@ DELETE FROM facility WHERE id IN (1, 2, 3, 4, 5);
 DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 207;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname LIKE 'Zoom %';
+DELETE FROM openemr_postcalendar_categories WHERE pc_catname = 'Veradigm Telehealth Visit';
 
 -- Sprint 12 master data
 DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 220 OR id BETWEEN 300 AND 303;

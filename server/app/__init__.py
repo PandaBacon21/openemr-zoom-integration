@@ -70,6 +70,7 @@ def _register_blueprints(app: Flask) -> None:
     from .blueprints.config import config_bp
     from .blueprints.audit import audit_bp
     from .blueprints.ehr_context import ehr_context_bp
+    from .blueprints.veradigm import veradigm_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(webhooks_bp)
@@ -78,6 +79,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(config_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(ehr_context_bp)
+    app.register_blueprint(veradigm_bp)
 
     # DbGate proxy is non-prod only. When ENABLE_DBGATE is false (prod default),
     # the blueprint isn't registered so /admin/db/* returns 404.

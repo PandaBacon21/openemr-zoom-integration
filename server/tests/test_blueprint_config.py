@@ -881,6 +881,7 @@ def test_create_appointment_filter_success(client, monkeypatch):
         id=33,
         openemr_type_id="5",
         openemr_type_name="Telehealth Follow-up",
+        integration="epic",
         created_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
     )
     monkeypatch.setattr("app.blueprints.config.config_routes._create_appointment_filter", lambda **kwargs: fake_filter)
@@ -900,6 +901,7 @@ def test_create_appointment_filter_success(client, monkeypatch):
         "id": 33,
         "openemr_type_id": "5",
         "openemr_type_name": "Telehealth Follow-up",
+        "integration": "epic",
         "created_at": "2026-01-04T00:00:00+00:00",
     }
 
@@ -956,10 +958,11 @@ def test_list_appointment_filters_success(client, monkeypatch):
             id=44,
             openemr_type_id="7",
             openemr_type_name="New Patient Consult",
+            integration="epic",
             created_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
         )
     ]
-    monkeypatch.setattr("app.blueprints.config.config_routes._get_appointment_filters", lambda account_id: fake_filters)
+    monkeypatch.setattr("app.blueprints.config.config_routes._get_appointment_filters", lambda *args, **kwargs: fake_filters)
 
     response = client.get(
         "/config/appointment-types",
@@ -975,6 +978,7 @@ def test_list_appointment_filters_success(client, monkeypatch):
                 "id": 44,
                 "openemr_type_id": "7",
                 "openemr_type_name": "New Patient Consult",
+                "integration": "epic",
                 "created_at": "2026-01-05T00:00:00+00:00",
             }
         ],
@@ -984,7 +988,7 @@ def test_list_appointment_filters_success(client, monkeypatch):
 def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
     monkeypatch.setattr(
         "app.blueprints.config.config_routes._get_appointment_filters",
-        lambda account_id: (_ for _ in ()).throw(ValueError("not found")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("not found")),
     )
 
     response = client.get(
@@ -1000,7 +1004,7 @@ def test_list_appointment_filters_maps_value_error_to_404(client, monkeypatch):
 def test_list_appointment_filters_maps_unexpected_error_to_500(client, monkeypatch):
     monkeypatch.setattr(
         "app.blueprints.config.config_routes._get_appointment_filters",
-        lambda account_id: (_ for _ in ()).throw(RuntimeError("db down")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
     response = client.get(

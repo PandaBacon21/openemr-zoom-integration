@@ -275,6 +275,14 @@ class AppointmentTypeFilter(db.Model):
     openemr_type_id = db.Column(db.String(128), nullable=False)
     openemr_type_name = db.Column(db.String(256), nullable=False)
 
+    # Which integration style this appointment-type belongs to:
+    #   'epic'     — drives the existing Zoom-meeting + clinical-note writeback pipeline
+    #   'veradigm' — surfaced only on the external Veradigm appointment page; never
+    #                enters the Epic pipeline (excluded from the Epic allowlist and
+    #                hard-dropped by filter_appointment_event)
+    # Defaults to 'epic' so pre-existing rows keep today's behavior.
+    integration = db.Column(db.String(16), nullable=False, default="epic", server_default="epic")
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc)
@@ -287,10 +295,11 @@ class AppointmentTypeFilter(db.Model):
             zoom_account_id: str | None = ...,
             openemr_type_id: str | None = ...,
             openemr_type_name: str | None = ...,
+            integration: str | None = ...,
         ) -> None: ...
 
     def __repr__(self):
-        return f"<AppointmentTypeFilter {self.openemr_type_name} ({self.openemr_type_id})>"
+        return f"<AppointmentTypeFilter {self.openemr_type_name} ({self.openemr_type_id}) [{self.integration}]>"
 
 
 class MeetingRecord(db.Model):
@@ -442,6 +451,50 @@ class ClinicalNoteRecord(db.Model):
 
     def __repr__(self):
         return f"<ClinicalNoteRecord {self.zoom_note_id}>"
+
+
+class VeradigmMeeting(db.Model):
+    """Maps an OpenEMR appointment to a Zoom meeting for the lean Veradigm demo.
+
+    Deliberately isolated from MeetingRecord: the Epic note-writeback pipeline
+    and appointment-status state machine key off MeetingRecord, so Veradigm
+    meetings live in their own table and never enter those flows. Minted on
+    demand when a provider clicks Start/Join on the external Veradigm
+    appointment page; keyed on the appointment id so clicks/reloads are
+    idempotent (a group visit reuses the one meeting).
+    """
+
+    __tablename__ = "veradigm_meetings"
+
+    openemr_appointment_id = db.Column(db.String(128), primary_key=True, nullable=False)
+    zoom_account_id = db.Column(
+        db.String(128), db.ForeignKey("zoom_accounts.account_id"), nullable=False, index=True
+    )
+    openemr_provider_user_id = db.Column(db.String(128), nullable=True)
+
+    zoom_meeting_id = db.Column(db.String(128), nullable=False)
+    start_url = db.Column(db.String(1024), nullable=True)
+    join_url = db.Column(db.String(1024), nullable=True)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    if TYPE_CHECKING:
+        def __init__(
+            self,
+            *,
+            openemr_appointment_id: str | None = ...,
+            zoom_account_id: str | None = ...,
+            openemr_provider_user_id: str | None = ...,
+            zoom_meeting_id: str | None = ...,
+            start_url: str | None = ...,
+            join_url: str | None = ...,
+        ) -> None: ...
+
+    def __repr__(self):
+        return f"<VeradigmMeeting appt={self.openemr_appointment_id} zoom={self.zoom_meeting_id}>"
 
 
 class AuditLog(db.Model):
