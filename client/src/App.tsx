@@ -6,6 +6,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ConfigPage from "./pages/config/ConfigPage";
 import DatabasePage from "./pages/DatabasePage";
+import VeradigmAppointmentsPage from "./pages/VeradigmAppointmentsPage";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -23,6 +24,12 @@ const App: React.FC = () => {
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      {/* External Veradigm appointment page — outside the admin shell/auth.
+          Authenticated via the veradigm_session cookie set by /veradigm/launch. */}
+      <Route
+        path="/healthcare/veradigm/appointments"
+        element={<VeradigmAppointmentsPage />}
       />
       <Route
         path="/*"

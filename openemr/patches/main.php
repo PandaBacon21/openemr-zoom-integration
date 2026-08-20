@@ -356,6 +356,7 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
     <?php if (!empty($zoomlyEpicCtiStreams)): ?>
     <script src="<?php echo attr($webroot); ?>/interface/epic_cti/cti_subscriber.js?v=<?php echo attr($v_js_includes); ?>&zv=<?php echo filemtime(__DIR__ . '/../../epic_cti/cti_subscriber.js'); ?>"></script>
     <?php endif; ?>
+    <?php require_once(__DIR__ . "/../../veradigm/veradigm_nav_inject.php"); ?>
 
     <?php
     // Below code block is to prepare certain elements for deciding what links to show on the menu
@@ -484,6 +485,7 @@ $twig = (new TwigContainer(null, $GLOBALS['kernel']))->getTwig();
                 </form>
             <?php endif; ?>
             <?php require_once(__DIR__ . "/../../epic_cti/cti_panel.php"); ?>
+            <?php require_once(__DIR__ . "/../../veradigm/veradigm_nav_button.php"); ?>
             <!--Below is the user data section that contains the user information and the attendant data-->
             <span id="userData" data-bind="template: {name: 'user-data-template', data: application_data}"></span>
             <?php

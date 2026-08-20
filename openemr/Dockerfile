@@ -18,12 +18,15 @@ FROM openemr/openemr:8.0.0
 # ownership so the parent dirs match upstream perms before files land in them.
 RUN mkdir -p /var/www/localhost/htdocs/openemr/library/zoomly \
              /var/www/localhost/htdocs/openemr/interface/epic_cti \
+             /var/www/localhost/htdocs/openemr/interface/veradigm \
              /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener \
  && chown apache:apache /var/www/localhost/htdocs/openemr/library/zoomly \
                         /var/www/localhost/htdocs/openemr/interface/epic_cti \
+                        /var/www/localhost/htdocs/openemr/interface/veradigm \
                         /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener \
  && chmod 755 /var/www/localhost/htdocs/openemr/library/zoomly \
               /var/www/localhost/htdocs/openemr/interface/epic_cti \
+              /var/www/localhost/htdocs/openemr/interface/veradigm \
               /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/zoom_appointment_listener
 
 # ─── OAuth2 / SMART patches ──────────────────────────────────────────────────
@@ -77,6 +80,12 @@ COPY --chown=apache:apache --chmod=644 \
      openemr/patches/epic_cti/screenpop_stream.php \
      openemr/patches/epic_cti/cti_phone_inject.js \
      /var/www/localhost/htdocs/openemr/interface/epic_cti/
+
+# ─── Veradigm telehealth nav icon (top-right; provider-gated) ────────────────
+COPY --chown=apache:apache --chmod=644 \
+     openemr/patches/veradigm/veradigm_nav_inject.php \
+     openemr/patches/veradigm/veradigm_nav_button.php \
+     /var/www/localhost/htdocs/openemr/interface/veradigm/
 
 # ─── Patient Dashboard demographics CTI phone links ──────────────────────────
 COPY --chown=apache:apache --chmod=644 \

@@ -326,6 +326,16 @@ SELECT 'users', u.id, u.facility_id, ''
  WHERE u.id BETWEEN 10 AND 37
    AND u.facility_id > 0;
 
+-- Veradigm demo: also grant every staff member access to the Veradigm-style
+-- facility (id 5) so they can log into it and see their Veradigm-typed
+-- appointments (which are re-homed there in 06_appointments.sql). Behavior is
+-- still driven by appointment TYPE, not facility; this is calendar/login access.
+INSERT INTO `users_facility` (tablename, table_id, facility_id, warehouse_id)
+SELECT 'users', u.id, 5, ''
+  FROM users u
+ WHERE u.id BETWEEN 10 AND 37
+   AND u.facility_id > 0;
+
 -- =============================================================================
 -- ACL — providers stay in Physicians only; nurses + MAs in Clinicians only.
 -- Earlier iteration added Front Office to both for "lenient" demo access, but

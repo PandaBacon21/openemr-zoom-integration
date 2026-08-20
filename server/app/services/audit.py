@@ -28,7 +28,8 @@ def write_audit_log(
     Event types for appointment/meeting pipeline:
       appointment.received          — inbound webhook accepted and validated
       appointment.dropped           — filtered out (detail.reason: missing_provider_id,
-                                       provider_unmapped, account_inactive, type_mismatch)
+                                       provider_unmapped, account_inactive, type_mismatch,
+                                       veradigm_excluded)
       appointment.delete_no_record  — delete event received but no MeetingRecord existed
       appointment.patient_arrived   — waiting-room/JBH event marked appt as Arrived
       meeting.created               — Zoom meeting created successfully
@@ -275,6 +276,9 @@ def write_audit_log(
       demo.future_meeting_backfilled — Zoom meeting added to an existing
                                         appointment that lacked one (re-run
                                         scenario)
+      demo.veradigm_appointment_created — Veradigm-typed appointment created by
+                                        hydration for a mapped provider (no Zoom
+                                        meeting; external page mints on demand)
       demo.past_encounter_seeded    — historical locked encounter + sample
                                        note seeded for a provider's patient
                                        (detail.openemr_user_id,

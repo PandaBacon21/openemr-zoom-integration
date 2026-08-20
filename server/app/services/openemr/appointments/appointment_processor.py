@@ -34,10 +34,17 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
     An appointment passes the filter for a given account when ALL of:
       1. provider_id resolves to a known NPI in OpenEMR's users table
       2. That NPI has an active UserMapping for the account
-      3. The appointment's category_id is in the account's AppointmentTypeFilter list
+      3. The appointment's category_id is in the account's *Epic* AppointmentTypeFilter
+         list (rows with integration != 'veradigm')
 
-    If the filter list for an account is empty, ALL appointment types pass
-    for that account. This avoids locking out accounts that haven't
+    Appointment types configured as Veradigm (integration='veradigm') are for the
+    external Veradigm appointment page only. They are hard-dropped here (reason
+    "veradigm_excluded") so they never create a Zoom meeting / MeetingRecord and
+    therefore never enter the clinical-note writeback pipeline — regardless of the
+    Epic allowlist state.
+
+    If the *Epic* filter list for an account is empty, ALL non-Veradigm appointment
+    types pass for that account. This avoids locking out accounts that haven't
     configured filters yet — consistent with an allowlist that defaults open.
 
     Args:
@@ -49,7 +56,8 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
           matches:     List of AppointmentMatch objects (may be empty)
           drop_reason: None when matches is non-empty.
                        Otherwise one of: "missing_provider_id",
-                       "provider_unmapped", "account_inactive", "type_mismatch".
+                       "provider_unmapped", "account_inactive",
+                       "veradigm_excluded", "type_mismatch".
     """
     provider_id = payload.get("provider_id")
     category_id = payload.get("category_id")
@@ -82,6 +90,9 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
     matches: list[AppointmentMatch] = []
     any_account_active = False
     any_type_mismatched = False
+    any_veradigm_excluded = False
+
+    category_id_str = str(category_id) if category_id is not None else None
 
     for mapping in mappings:
         account = ZoomAccount.query.filter_by(
@@ -104,11 +115,32 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
             .all()
         )
 
-        if not type_filters:
-            # No filters configured → all appointment types pass for this account
+        # Split by integration. Veradigm-typed appointments are for the external
+        # Veradigm appointment page only — hard-drop them so they never enter the
+        # Epic Zoom-meeting / note-writeback pipeline. NULL/legacy rows count as
+        # Epic. category_id/filter IDs are compared as strings (openemr_type_id is
+        # varchar; payload category_id is an int).
+        veradigm_type_ids = {
+            f.openemr_type_id for f in type_filters if f.integration == "veradigm"
+        }
+        epic_type_filters = [
+            f for f in type_filters if f.integration != "veradigm"
+        ]
+
+        if category_id_str is not None and category_id_str in veradigm_type_ids:
+            any_veradigm_excluded = True
+            logger.info(
+                f"appointment_processor | eid={eid} account={account.account_id} "
+                f"category_id={category_id} is a Veradigm type, excluded from the "
+                "Epic pipeline"
+            )
+            continue
+
+        if not epic_type_filters:
+            # No Epic filters configured → all non-Veradigm types pass for this account
             logger.debug(
                 f"appointment_processor | eid={eid} account={account.account_id} "
-                "has no type filters configured, passing all types"
+                "has no Epic type filters configured, passing all non-Veradigm types"
             )
             matches.append(AppointmentMatch(
                 zoom_account=account,
@@ -117,13 +149,8 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
             ))
             continue
 
-        # Filters exist — check if this appointment's category is in the list
-        allowed_type_ids = {f.openemr_type_id for f in type_filters}
-
-        # category_id from payload is an int; filter IDs are stored as strings
-        # (openemr_type_id is varchar in AppointmentTypeFilter). Normalize both
-        # to string for comparison.
-        category_id_str = str(category_id) if category_id is not None else None
+        # Epic filters exist — check if this appointment's category is in the list
+        allowed_type_ids = {f.openemr_type_id for f in epic_type_filters}
 
         if category_id_str in allowed_type_ids:
             logger.debug(
@@ -147,6 +174,9 @@ def filter_appointment_event(payload: dict) -> tuple[list[AppointmentMatch], str
 
     if not any_account_active:
         return [], "account_inactive"
+
+    if any_veradigm_excluded:
+        return [], "veradigm_excluded"
 
     if any_type_mismatched:
         return [], "type_mismatch"
