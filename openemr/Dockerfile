@@ -87,6 +87,17 @@ COPY --chown=apache:apache --chmod=644 \
      openemr/patches/veradigm/veradigm_nav_button.php \
      /var/www/localhost/htdocs/openemr/interface/veradigm/
 
+# ─── ZHR Prefs module (per-user skin selection) ──────────────────────────────
+# Recursive COPY rather than the file-by-file style used elsewhere: the
+# public/skins/ tree grows every time a skin is added, so an explicit file list
+# would need editing on every skin addition. The RUN restores the 755/644 split
+# that a blanket --chmod would otherwise flatten.
+COPY --chown=apache:apache \
+     openemr/patches/oe-module-zhr-prefs/ \
+     /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oe-module-zhr-prefs/
+RUN find /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oe-module-zhr-prefs -type d -exec chmod 755 {} + \
+ && find /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oe-module-zhr-prefs -type f -exec chmod 644 {} +
+
 # ─── Patient Dashboard demographics CTI phone links ──────────────────────────
 COPY --chown=apache:apache --chmod=644 \
      openemr/patches/demographics.php \

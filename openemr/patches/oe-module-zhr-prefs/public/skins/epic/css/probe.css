@@ -1,0 +1,29 @@
+/*
+ * Phase 1 injection probe. Deliberately loud and deliberately temporary —
+ * replaced by tokens.css / base.css in Phase 3.
+ *
+ * Every rule is scoped under the skin attribute set by js/shell.js.
+ */
+html[data-zhr-skin="epic"] body {
+    border-top: 6px solid #B3264A;
+}
+
+/*
+ * A body border is a poor probe: a page's own layout, overflow or background
+ * can hide it, which makes "no border" ambiguous between "injection failed"
+ * and "injection worked but you cannot see it". This badge is fixed to the
+ * viewport of whichever document it lands in, so every frame that received
+ * the skin says so plainly.
+ */
+html[data-zhr-skin="epic"] body::before {
+    content: "ZHR skin: epic";
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 2147483647;
+    padding: 2px 8px;
+    background: #B3264A;
+    color: #FFFFFF;
+    font: 700 11px/1.6 "Segoe UI", Arial, sans-serif;
+    pointer-events: none;
+}

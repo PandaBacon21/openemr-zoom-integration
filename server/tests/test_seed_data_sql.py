@@ -96,11 +96,20 @@ def test_contact_center_users_are_fhir_visible_but_not_schedulable():
         assert f"'{npi}'" in contact_center_section
 
 
+def _patches_dir() -> Path:
+    """openemr/patches/ on the host; the container mounts it at /patches."""
+    candidates = [
+        Path(__file__).resolve().parents[2] / "openemr" / "patches",
+        Path("/patches"),
+    ]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    raise AssertionError(f"Could not locate openemr/patches; tried {candidates}")
+
+
 def test_appointment_form_excludes_non_calendar_users():
-    repo_root = Path(__file__).resolve().parents[2]
-    appointment_form = (repo_root / "openemr/patches/add_edit_event.php").read_text(
-        encoding="utf-8"
-    )
+    appointment_form = (_patches_dir() / "add_edit_event.php").read_text(encoding="utf-8")
 
     assert '"authorized != 0 AND active = 1 AND calendar = 1' in appointment_form
 

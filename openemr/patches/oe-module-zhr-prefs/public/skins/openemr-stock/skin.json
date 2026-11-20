@@ -1,0 +1,10 @@
+{
+  "id": "openemr-stock",
+  "name": "Stock OpenEMR",
+  "description": "OpenEMR's default appearance. No skin assets are injected.",
+  "version": "1.0.0",
+  "css": [],
+  "js": [],
+  "preview": null,
+  "templates": {}
+}
