@@ -1,5 +1,6 @@
 -- =============================================================================
--- 03 — STAFF (18 patient-panel providers + 4 nurses + 4 MAs = 26 users)
+-- 03 — STAFF (18 patient-panel providers + 4 nurses + 4 MAs + 6 Front Office
+--      contact-center agents = 32 users)
 -- =============================================================================
 
 -- =============================================================================
@@ -343,3 +344,109 @@ SELECT 'users', u.id, 5, ''
 -- editors) that weren't needed for provider-side demos. Admin user (id=1)
 -- retains its own Administrators group membership for cross-cutting tasks.
 -- =============================================================================
+
+-- =============================================================================
+-- FRONT OFFICE / CONTACT CENTER STAFF (IDs 40-45)
+--   Contact-center users used ONLY to demonstrate ZCC/CTI flows — not telehealth
+--   or clinical notes. They are physician-shaped for the FHIR Practitioner
+--   directory and OpenEMR Address Book (authorized=1, abook_type=physician),
+--   but calendar=0 keeps them out of provider columns and appointment booking.
+--   They have no patient panel and their Contact Center specialty is not mapped
+--   to hydration categories, so hydration never schedules them.
+--   NOTE: "Joe Smith" username is jsmith2 (email joe.smith2@example.org) to avoid
+--   colliding with the existing provider jsmith (id 24, Dr. Joe Smith).
+--   To wire an agent for CTI screen-pop, add an is_zcc_agent UserMapping for the
+--   user in the admin UI — that's a Flask/Postgres step, not seeded here.
+-- =============================================================================
+
+INSERT INTO `users` (
+    `id`, `uuid`, `username`, `password`, `authorized`, `active`,
+    `fname`, `lname`, `title`, `specialty`, `email`, `email_direct`,
+    `facility_id`, `calendar`, `abook_type`, `taxonomy`,
+    `main_menu_role`, `patient_menu_role`, `physician_type`, `npi`, `info`
+) VALUES
+(40, UNHEX(REPLACE(UUID(), '-', '')), 'abennett',  '', 1, 1,
+ 'Alexandra', 'Bennett',  'Front Office', 'Contact Center', 'alexandra.bennett@example.org', 'alexandra.bennett@example.org',
+ 3, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567908', 'Contact Center Admin'),
+(41, UNHEX(REPLACE(UUID(), '-', '')), 'rharris',   '', 1, 1,
+ 'Rich',      'Harris',   'Front Office', 'Contact Center', 'rich.harris@example.org',       'rich.harris@example.org',
+ 2, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567909', 'Contact Center Admin'),
+(42, UNHEX(REPLACE(UUID(), '-', '')), 'akim',      '', 1, 1,
+ 'Angela',    'Kim',      'Front Office', 'Contact Center', 'angela.kim@example.org',        'angela.kim@example.org',
+ 2, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567910', 'Contact Center Admin'),
+(43, UNHEX(REPLACE(UUID(), '-', '')), 'mnilsson',  '', 1, 1,
+ 'Marcus',    'Nilsson',  'Front Office', 'Contact Center', 'marcus.nilsson@example.org',    'marcus.nilsson@example.org',
+ 2, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567911', 'Contact Center Admin'),
+(44, UNHEX(REPLACE(UUID(), '-', '')), 'jsmith2',   '', 1, 1,
+ 'Joe',       'Smith',    'Front Office', 'Contact Center', 'joe.smith2@example.org',        'joe.smith2@example.org',
+ 1, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567912', 'Contact Center Admin'),
+(45, UNHEX(REPLACE(UUID(), '-', '')), 'rsullivan', '', 1, 1,
+ 'Rachel',    'Sullivan', 'Front Office', 'Contact Center', 'rachel.sullivan@example.org',   'rachel.sullivan@example.org',
+ 2, 0, 'physician', '207Q00000X', 'standard', 'standard', 'MD', '1234567913', 'Contact Center Admin');
+
+-- Passwords (all ZoomDem0! — reuses an existing valid bcrypt hash; every demo
+-- password is the same, so hashes are interchangeable per user id).
+INSERT INTO users_secure (id, username, password, last_update_password) VALUES
+(40, 'abennett',  '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(41, 'rharris',   '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(42, 'akim',      '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(43, 'mnilsson',  '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(44, 'jsmith2',   '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW()),
+(45, 'rsullivan', '$2y$12$HeGh8SpI7B2Lv/7yhXhzteJ6xssabt0yZowdRy2346gH1JpWz67p2', NOW());
+
+-- ACL: one ARO per user, mapped to the stock Front Office group (value='front').
+INSERT IGNORE INTO gacl_aro (id, section_value, value, order_value, name, hidden) VALUES
+(40, 'users', 'abennett',  10, 'Alexandra Bennett', 0),
+(41, 'users', 'rharris',   10, 'Rich Harris',       0),
+(42, 'users', 'akim',      10, 'Angela Kim',        0),
+(43, 'users', 'mnilsson',  10, 'Marcus Nilsson',    0),
+(44, 'users', 'jsmith2',   10, 'Joe Smith',         0),
+(45, 'users', 'rsullivan', 10, 'Rachel Sullivan',   0);
+
+SET @front_office_group := (
+  SELECT id FROM gacl_aro_groups WHERE value = 'front' OR name = 'Front Office' LIMIT 1
+);
+INSERT IGNORE INTO gacl_groups_aro_map (group_id, aro_id)
+SELECT @front_office_group, a.id
+  FROM gacl_aro a
+ WHERE a.section_value = 'users'
+   AND a.value IN ('abennett','rharris','akim','mnilsson','jsmith2','rsullivan')
+   AND @front_office_group IS NOT NULL;
+
+INSERT IGNORE INTO groups (name, user) VALUES
+('Front Office', 'abennett'),
+('Front Office', 'rharris'),
+('Front Office', 'akim'),
+('Front Office', 'mnilsson'),
+('Front Office', 'jsmith2'),
+('Front Office', 'rsullivan');
+
+-- Home facilities above drive the user's default/login facility. Grant every
+-- facility separately so these users can view and schedule across all sites.
+INSERT INTO `users_facility` (tablename, table_id, facility_id, warehouse_id)
+SELECT 'users', u.id, f.id, ''
+  FROM users u
+ CROSS JOIN facility f
+ WHERE u.id BETWEEN 40 AND 45;
+
+-- Front Office users need calendar write access to schedule for the real
+-- calendar-enabled providers, plus Practice access for the Address Book.
+SET @front_office_write_acl := (
+  SELECT m.acl_id
+    FROM gacl_aro_groups_map m
+    JOIN gacl_aro_groups g ON g.id = m.group_id
+    JOIN gacl_acl a ON a.id = m.acl_id
+   WHERE g.id = @front_office_group
+     AND a.return_value = 'write'
+     AND a.enabled = 1
+   ORDER BY m.acl_id
+   LIMIT 1
+);
+
+INSERT IGNORE INTO gacl_aco_map (acl_id, section_value, value)
+SELECT @front_office_write_acl, 'groups', 'gcalendar' FROM DUAL
+ WHERE @front_office_write_acl IS NOT NULL;
+
+INSERT IGNORE INTO gacl_aco_map (acl_id, section_value, value)
+SELECT @front_office_write_acl, 'admin', 'practice' FROM DUAL
+ WHERE @front_office_write_acl IS NOT NULL;

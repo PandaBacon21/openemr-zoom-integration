@@ -73,6 +73,38 @@ def test_seed_data_includes_users_secure_rows_for_staff_logins():
         assert f"'{username}'" in text
 
 
+def test_contact_center_users_are_fhir_visible_but_not_schedulable():
+    text = _demo_sql_text()
+
+    contact_center_section = text.split("-- FRONT OFFICE / CONTACT CENTER STAFF", 1)[1]
+    assert "`physician_type`, `npi`" in contact_center_section
+    assert contact_center_section.count(" 'physician',") == 6
+    assert contact_center_section.count("'Contact Center'") == 6
+    assert contact_center_section.count(" 0, 'physician'") == 6
+    assert contact_center_section.count("'Contact Center Admin'") == 6
+    assert " 3, 0, 'physician'" in contact_center_section
+    assert contact_center_section.count(" 2, 0, 'physician'") == 4
+    assert " 1, 0, 'physician'" in contact_center_section
+    for npi in [
+        "1234567908",
+        "1234567909",
+        "1234567910",
+        "1234567911",
+        "1234567912",
+        "1234567913",
+    ]:
+        assert f"'{npi}'" in contact_center_section
+
+
+def test_appointment_form_excludes_non_calendar_users():
+    repo_root = Path(__file__).resolve().parents[2]
+    appointment_form = (repo_root / "openemr/patches/add_edit_event.php").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"authorized != 0 AND active = 1 AND calendar = 1' in appointment_form
+
+
 def test_seed_data_includes_patient_portal_credentials_for_demo_patients():
     text = _demo_sql_text()
 
