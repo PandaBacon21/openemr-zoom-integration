@@ -24,14 +24,15 @@ DELETE FROM openemr_postcalendar_events WHERE CAST(pc_pid AS UNSIGNED) BETWEEN 1
 DELETE FROM patient_data WHERE pid BETWEEN 100 AND 207;
 DELETE FROM openemr_postcalendar_categories
   WHERE pc_catname IN ('zoom-telehealth','new-patient-zoom','new-patient-in-person','phone-consult','in-person');
-DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
-DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
-DELETE FROM gacl_groups_aro_map WHERE aro_id BETWEEN 12 AND 37;
-DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 37;
+DELETE FROM users WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37,40,41,42,43,44,45);
+DELETE FROM users_secure WHERE id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37,40,41,42,43,44,45);
+DELETE FROM gacl_groups_aro_map WHERE aro_id BETWEEN 12 AND 45;
+DELETE FROM gacl_aro WHERE id BETWEEN 12 AND 45;
 DELETE FROM groups WHERE user IN ('moconnor','erodriguez','amiller','mthompson','blee','amartin','bwilliams','hsong',
                                   'jonathan.nelson','priya.patel','michael.chen','marcus.eriksson','yuki.tanaka','ethan.garcia',
                                   'lucas.johnson','dave.anderson','joe.smith','lisa.patel','hiroshi.tanaka','david.thompson',
-                                  'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis','schen');
+                                  'sarah.martinez','ken.watanabe','maria.rodriguez','emma.wilson','cheryl.lewis','schen',
+                                  'abennett','rharris','akim','mnilsson','jsmith2','rsullivan');
 DELETE FROM facility WHERE id IN (1, 2, 3, 4, 5);
 DELETE FROM patient_access_onsite WHERE pid BETWEEN 100 AND 207;
 DELETE FROM openemr_postcalendar_categories WHERE pc_catname IN ('Telehealth Zoom', 'New Patient Zoom');
@@ -42,7 +43,31 @@ DELETE FROM openemr_postcalendar_categories WHERE pc_catname = 'Veradigm Telehea
 DELETE FROM addresses WHERE foreign_id BETWEEN 200 AND 220 OR id BETWEEN 300 AND 303;
 DELETE FROM insurance_companies WHERE id BETWEEN 200 AND 220;
 DELETE FROM pharmacies WHERE id BETWEEN 1 AND 4;
-DELETE FROM users_facility WHERE tablename = 'users' AND table_id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37);
+DELETE FROM users_facility WHERE tablename = 'users' AND table_id IN (10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,30,31,32,33,34,35,36,37,40,41,42,43,44,45);
+
+-- Remove the Front Office calendar/Address Book ACL extensions seeded for the
+-- contact-center demo. Use the group-to-ACL table (gacl_aro_groups_map), not
+-- the user-to-group table (gacl_groups_aro_map).
+DELETE FROM gacl_aco_map
+ WHERE section_value = 'groups' AND value = 'gcalendar'
+   AND acl_id IN (
+     SELECT acl_id FROM (
+       SELECT m.acl_id
+         FROM gacl_aro_groups_map m
+         JOIN gacl_aro_groups g ON g.id = m.group_id
+        WHERE g.value = 'front' OR g.name = 'Front Office'
+     ) x
+   );
+DELETE FROM gacl_aco_map
+ WHERE section_value = 'admin' AND value = 'practice'
+   AND acl_id IN (
+     SELECT acl_id FROM (
+       SELECT m.acl_id
+         FROM gacl_aro_groups_map m
+         JOIN gacl_aro_groups g ON g.id = m.group_id
+        WHERE g.value = 'front' OR g.name = 'Front Office'
+     ) x
+   );
 
 -- Sprint 12 clinical data (must run before patient_data delete; FK_CHECKS=0
 -- means order is for clarity rather than constraint enforcement, but the
