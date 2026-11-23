@@ -179,3 +179,35 @@ html[data-zhr-skin="epic"] #mainBox .appMenu li:hover {
     background-color: var(--zhr-row-selected) !important;
     color: var(--zhr-text) !important;
 }
+
+/* ── Dropdown stacking ────────────────────────────────────────────────── */
+/*
+ * tabs_style_full.css gives .menuSection > .menuEntries z-index 1000, while
+ * Bootstrap's .sticky-top is 1020. With the horizontal patient bar moved
+ * into the storyboard rail, the nav dropdowns now open directly over the tab
+ * strip instead of over that bar — so they render but sit beneath it, and
+ * the pointer never reaches the items: the menu closes as you move onto it.
+ *
+ * 1060 clears sticky (1020) and the modal backdrop (1040) without reaching
+ * tooltip range.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .menuSection > .menuEntries,
+html[data-zhr-skin="epic"] #mainBox #userdropdown {
+    z-index: 1060;
+}
+
+/* ── Dropdown hover gap ───────────────────────────────────────────────── */
+/*
+ * These menus are CSS hover-driven, not click-driven:
+ * ".menuSection:hover > .menuEntries { display: block }". The menu is
+ * positioned at a hardcoded "top: 40px" while .menuSection is only as tall
+ * as its label — and restyling the bar made that label about 30px. That left
+ * a dead ~10px gap between the hover target and the menu, so moving the
+ * pointer down lost :hover and the menu closed before it could be clicked.
+ *
+ * top: 100% pins the menu flush to the bottom of .menuSection, so the hover
+ * region is continuous whatever height the bar ends up.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .menuSection > .menuEntries {
+    top: 100%;
+}
