@@ -15,6 +15,14 @@
     var STATUSES = window.ZHR_STATUSES || {};
 
     /*
+     * Survives the auto-refresh. The Flow Board rebuilds its table on an
+     * interval, discarding both the selected row and anything attached
+     * alongside it, so the selection is remembered here and re-applied after
+     * every rebuild.
+     */
+    var selected = { pid: null, name: null };
+
+    /*
      * Column hiding was removed deliberately. Hiding header cells by text and
      * body cells by the matching index desynchronised the two in practice —
      * the Encounter header disappeared while its data cell stayed, shifting
@@ -191,8 +199,47 @@
                 table.querySelectorAll('tr.zhr-row--selected'),
                 function (other) { other.classList.remove('zhr-row--selected'); }
             );
+            selected = {
+                pid: row.getAttribute('data-pid'),
+                name: row.getAttribute('data-pname')
+            };
             row.classList.add('zhr-row--selected');
+
+            /*
+             * Announce the selection rather than calling the panel directly,
+             * so each file owns one surface and the Flow Board works with or
+             * without the snapshot panel present.
+             */
+            document.dispatchEvent(new CustomEvent('zhr:row-selected', {
+                detail: {
+                    pid: row.getAttribute('data-pid'),
+                    name: row.getAttribute('data-pname')
+                }
+            }));
         });
+    }
+
+    /*
+     * Re-apply the selection after a rebuild and re-announce it so the
+     * snapshot panel, which the rebuild also removed, comes back.
+     *
+     * Matching is by pid because that is the only patient identifier on the
+     * row. A patient with two appointments the same day therefore
+     * re-highlights their first row rather than the one originally clicked —
+     * cosmetic only, since the panel is per patient, not per appointment.
+     */
+    function restoreSelection(table) {
+        if (!selected.pid) {
+            return;
+        }
+
+        var row = table.querySelector('tr[data-pid="' + selected.pid + '"]');
+        if (!row || row.classList.contains('zhr-row--selected')) {
+            return;
+        }
+
+        row.classList.add('zhr-row--selected');
+        document.dispatchEvent(new CustomEvent('zhr:row-selected', { detail: selected }));
     }
 
     function run() {
@@ -212,6 +259,7 @@
 
         Array.prototype.forEach.call(rows, function (row) { decorateRow(row, table); });
         wireSelection(table);
+        restoreSelection(table);
     }
 
     /*

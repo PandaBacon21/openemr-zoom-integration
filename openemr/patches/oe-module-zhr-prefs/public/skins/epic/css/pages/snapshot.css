@@ -1,0 +1,110 @@
+/*
+ * Patient snapshot panel for the Schedule.
+ *
+ * js/snapshot_panel.js turns .divTable — the container holding everything
+ * below the filter panel — into a two-column flex layout, moving its existing
+ * children into .zhr-flow-main and appending the panel alongside. The page's
+ * own markup is preserved; only its nesting changes.
+ */
+html[data-zhr-skin="epic"] .zhr-snapshot-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    /* .divTable ships as a Bootstrap .row; flex-wrap would drop the panel
+     * onto its own line below the table. */
+    flex-wrap: nowrap;
+}
+
+/*
+ * Everything that was in .divTable — loader, table, summary counts and the
+ * toolbar — moved into this column by js/snapshot_panel.js, so the panel
+ * sits beside the whole lot rather than only beside the table.
+ */
+html[data-zhr-skin="epic"] .zhr-flow-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot {
+    flex: 0 0 320px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 12px;
+    background-color: var(--zhr-panel);
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+    font-size: 12px;
+}
+
+/* Panel is empty until a row is selected; it should take no space then. */
+html[data-zhr-skin="epic"] .zhr-snapshot:empty {
+    display: none;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .zhr-snapshot-header {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-meta {
+    color: var(--zhr-text-muted);
+}
+
+/* ── Blocks ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .zhr-snapshot-block {
+    margin-bottom: 10px;
+    padding: 8px;
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-heading {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--zhr-primary);
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 0;
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-dl dt {
+    color: var(--zhr-text-muted);
+    font-weight: 600;
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-dl dd {
+    margin: 0;
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-list {
+    margin: 0;
+    padding-left: 16px;
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-list li {
+    margin-bottom: 2px;
+}
+
+html[data-zhr-skin="epic"] .zhr-snapshot-empty,
+html[data-zhr-skin="epic"] .zhr-snapshot-loading {
+    margin: 0;
+    color: var(--zhr-text-muted);
+    font-style: italic;
+}
