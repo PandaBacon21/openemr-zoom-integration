@@ -1,0 +1,163 @@
+/*
+ * Epic-style shell: system bar, workspace tabs, user menu.
+ *
+ * EVERY rule here is scoped under #mainBox, which exists only in
+ * interface/main/tabs/main.php. The skin's stylesheets are injected into every
+ * page including tab iframes, and several of those pages have their own
+ * <nav class="navbar"> header — the Patient Finder's "Add New Patient" bar is
+ * one. Without the #mainBox anchor those headers also picked up the dark
+ * chrome, leaving black text on dark purple.
+ */
+
+/* ── System bar ───────────────────────────────────────────────────────── */
+/*
+ * !important is required and is logged in the patch log: Bootstrap's
+ * .bg-light sets "background-color: #f8f9fa !important" on this element.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar {
+    background-color: var(--zhr-chrome) !important;
+    min-height: 44px;
+    padding: 0 8px;
+    align-items: center;
+}
+
+/*
+ * The brand asset is a 1024x1024 opaque PNG — a white square with the
+ * wordmark centred, no alpha channel — so it cannot be recoloured by a
+ * filter. Capping its height keeps it from forcing the bar taller than 44px
+ * (the markup hardcodes height="64"), and the radius makes the unavoidable
+ * white block read as a deliberate chip.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .navbar-brand {
+    padding: 0;
+    margin-right: 12px;
+}
+
+html[data-zhr-skin="epic"] #mainBox nav.navbar .navbar-brand img {
+    height: 32px;
+    width: auto;
+    border-radius: var(--zhr-radius);
+}
+
+/*
+ * Only TOP-LEVEL menu labels sit on the chrome, so only they go white.
+ *
+ * Dropdown items are also .menuLabel, nested inside ul.menuEntries, and they
+ * render on a white panel — a blanket "nav .menuLabel { color:#fff }" made
+ * every dropdown's contents invisible. Counter-overriding that was not an
+ * option either: "nav.navbar .menuLabel" outscores ".menuEntries .menuLabel"
+ * on element count, so the blanket rule would still have won. Selecting the
+ * two top-level shapes directly avoids the fight entirely.
+ *
+ * Per menu_template.html.twig each top-level entry is ".appMenu > div",
+ * holding either a plain .menuLabel (action) or .menuSection > .menuLabel
+ * (dropdown header).
+ *
+ * Both shapes must receive IDENTICAL box styling. Applying padding to only
+ * the .menuSection shape left the dropdown headers (Patient, Fees, Admin...)
+ * sitting higher than the plain actions (Calendar, Finder, Flow...), because
+ * only half the items gained vertical padding.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div > .menuLabel,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div > .menuSection > .menuLabel {
+    color: #FFFFFF;
+    border-radius: var(--zhr-radius);
+    padding: 6px 10px;
+}
+
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div > .menuLabel:hover,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div > .menuSection > .menuLabel:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Normalise vertical alignment across both shapes. */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu {
+    align-items: center;
+}
+
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu > div > .menuSection {
+    display: flex;
+    align-items: center;
+}
+
+/*
+ * Icons are whitened only where they sit on the chrome itself. A blanket
+ * "nav .fa { color:#fff }" also hit the glyphs inside the white search and
+ * CTI buttons, rendering them white-on-white and apparently empty.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu .fa,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .appMenu .far,
+html[data-zhr-skin="epic"] #mainBox nav.navbar #username .fa,
+html[data-zhr-skin="epic"] #mainBox nav.navbar #username .far,
+html[data-zhr-skin="epic"] #mainBox nav.navbar #username .text-muted {
+    color: #FFFFFF;
+}
+
+/* Glyphs inside light buttons must stay dark to remain visible. */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .btn .fa,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .btn .far {
+    color: var(--zhr-text);
+}
+
+/*
+ * The search input is .form-control-sm (26px) while its append button is
+ * .btn-sm (26px), but base.css gives .form-control 28px — leaving the pair
+ * mismatched. Pin both to the same height so the group lines up.
+ */
+html[data-zhr-skin="epic"] #mainBox nav.navbar .input-group .form-control,
+html[data-zhr-skin="epic"] #mainBox nav.navbar .input-group .btn {
+    height: 28px;
+    line-height: 26px;
+}
+
+html[data-zhr-skin="epic"] #mainBox nav.navbar .input-group .form-control {
+    border-color: transparent;
+}
+
+/* ── Workspace tabs ───────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] #mainBox #tabs_div.body_title {
+    background-color: var(--zhr-tabstrip);
+    border-bottom: 1px solid var(--zhr-border);
+    padding: 6px 8px 0;
+}
+
+/*
+ * A tab carries .tabsNoHover only while inactive, so :not() selects the
+ * active one. The caret and the flex filler also use .tabsNoHover but are
+ * not .tabSpan, which is why every rule here is anchored on .tabSpan.
+ */
+html[data-zhr-skin="epic"] #mainBox .tabSpan {
+    background-color: var(--zhr-tab-inactive);
+    border: 1px solid var(--zhr-border);
+    border-bottom: 0;
+    border-top-width: 0;
+    border-radius: 4px 4px 0 0;
+    padding: 4px 10px;
+    margin-right: 2px;
+}
+
+html[data-zhr-skin="epic"] #mainBox .tabSpan:not(.tabsNoHover) {
+    background-color: #FFFFFF;
+    border-top: 3px solid var(--zhr-menu);
+    font-weight: 600;
+}
+
+html[data-zhr-skin="epic"] #mainBox .tabSpan .tabTitle {
+    color: var(--zhr-text);
+}
+
+/* ── User menu ────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] #mainBox #userdropdown {
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+}
+
+/*
+ * !important is required and is logged: the theme ships
+ * ".appMenu li:hover { background-color:#e5e7eb!important; color:#111827!important }".
+ */
+html[data-zhr-skin="epic"] #mainBox .appMenu li:hover {
+    background-color: var(--zhr-row-selected) !important;
+    color: var(--zhr-text) !important;
+}

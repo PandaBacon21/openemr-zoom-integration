@@ -2,8 +2,8 @@
   "id": "epic",
   "name": "Epic-style",
   "description": "Dark system bar, workspace tabs, left patient banner.",
-  "version": "0.2.0",
-  "css": ["css/vars.css", "css/base.css"],
+  "version": "0.3.0",
+  "css": ["css/vars.css", "css/base.css", "css/shell.css"],
   "js": ["js/shell.js"],
   "preview": null,
   "templates": {}

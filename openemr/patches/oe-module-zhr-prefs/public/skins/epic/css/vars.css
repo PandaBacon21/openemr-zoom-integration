@@ -29,4 +29,22 @@ html[data-zhr-skin="epic"] {
     --zhr-font: "Segoe UI", "Noto Sans", Arial, sans-serif;
     --zhr-font-size: 13px;
     --zhr-radius: 3px;
+
+    /*
+     * Bridge to OpenEMR's own theme variables.
+     *
+     * Only tabs_style_full.css consumes these at runtime — style_light.css's
+     * var() usages are almost all Font Awesome animation variables, and its
+     * colours are compiled Bootstrap literals. So this recolours the workspace
+     * tab strip and little else; components still need the explicit overrides
+     * in base.css.
+     *
+     * --light, --white and --danger are deliberately left alone: the first two
+     * are already white, and --danger carries status meaning.
+     */
+    --primary: var(--zhr-primary);
+    --gray: var(--zhr-text-muted);
+    --gray300: var(--zhr-border);
+    --dark: var(--zhr-text);
+    --black: var(--zhr-text);
 }
