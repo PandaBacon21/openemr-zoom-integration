@@ -44,7 +44,7 @@ class Bootstrap
             [$injector, 'onScriptFilter']
         );
 
-        $menuListener = new MenuListener($this->getSettingsUrl());
+        $menuListener = new MenuListener($this->getSettingsUrl(), $resolver);
         $this->eventDispatcher->addListener(
             MenuEvent::MENU_UPDATE,
             [$menuListener, 'onMenuUpdate']

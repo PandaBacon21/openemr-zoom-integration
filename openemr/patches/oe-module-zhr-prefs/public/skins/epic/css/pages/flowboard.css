@@ -1,0 +1,66 @@
+/*
+ * Epic-style appointment status pills.
+ *
+ * Colours are fixed by the status table in the handoff spec. Keyed on the
+ * normalised classes applied by js/status_labels.js rather than on
+ * [data-apptstatus], so the calendar can reuse them in Phase 5b.
+ *
+ * Status is never conveyed by colour alone — the text label always remains,
+ * per the spec's accessibility floor.
+ */
+html[data-zhr-skin="epic"] .btn.zhr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--zhr-status-dot);
+    flex: 0 0 auto;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status--scheduled {
+    background-color: #E6E9EF;
+    color: #3A4352;
+    --zhr-status-dot: #7A8496;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status--arrived {
+    background-color: #DCE8F8;
+    color: #1A4A8A;
+    --zhr-status-dot: #2F6FC4;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status--roomed {
+    background-color: #EADFF5;
+    color: #5A2D82;
+    --zhr-status-dot: #7E4BB0;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status--checked-out {
+    background-color: #DCEFE4;
+    color: #1D5E3A;
+    --zhr-status-dot: #2E8A57;
+}
+
+html[data-zhr-skin="epic"] .btn.zhr-status--no-show {
+    background-color: #FBE3D6;
+    color: #8A3A12;
+    --zhr-status-dot: #C2410C;
+}
+
+/* Hover must not reintroduce the .btn-primary blue underneath. */
+html[data-zhr-skin="epic"] .btn.zhr-status:hover {
+    filter: brightness(0.96);
+}
