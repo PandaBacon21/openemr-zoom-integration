@@ -16,11 +16,13 @@ class SkinAssetInjector
 {
     private SkinResolver $resolver;
     private string $assetPath;
+    private string $skinsDir;
 
-    public function __construct(SkinResolver $resolver, string $assetPath)
+    public function __construct(SkinResolver $resolver, string $assetPath, string $skinsDir)
     {
         $this->resolver = $resolver;
         $this->assetPath = rtrim($assetPath, '/') . '/';
+        $this->skinsDir = rtrim($skinsDir, DIRECTORY_SEPARATOR);
     }
 
     public function onStyleFilter(StyleFilterEvent $event): void
@@ -52,14 +54,26 @@ class SkinAssetInjector
     }
 
     /**
-     * Returns an un-versioned URL on purpose.
+     * Stamps the asset with its own last-modified time.
      *
-     * Header::createElement() already appends ?v={$GLOBALS['v_js_includes']}
-     * to every module script and style it renders, so stamping here as well
-     * produces a doubled "?v=81&v=81" query string.
+     * Header::createElement() already appends ?v={$GLOBALS['v_js_includes']},
+     * but that global only changes when OpenEMR itself is upgraded — so every
+     * edit to a skin stylesheet produced a byte-identical URL and browsers
+     * kept serving the cached copy. Editing a skin and seeing no change is the
+     * single most confusing failure mode in this subsystem.
+     *
+     * Using filemtime rather than CacheUtils avoids the doubled "?v=81&v=81"
+     * that stamping with the same global produced. Header sees the existing
+     * "?" and appends "&v=...", which is harmless.
      */
     private function assetUrl(Skin $skin, string $relative): string
     {
-        return $this->assetPath . 'skins/' . $skin->getId() . '/' . ltrim($relative, '/');
+        $relative = ltrim($relative, '/');
+        $url = $this->assetPath . 'skins/' . $skin->getId() . '/' . $relative;
+
+        $file = $this->skinsDir . DIRECTORY_SEPARATOR . $skin->getId() . DIRECTORY_SEPARATOR . $relative;
+        $modified = is_file($file) ? filemtime($file) : false;
+
+        return $modified !== false ? $url . '?m=' . $modified : $url;
     }
 }

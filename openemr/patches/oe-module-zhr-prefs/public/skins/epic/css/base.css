@@ -1,0 +1,354 @@
+/*
+ * Epic-style base layer: token-driven overrides of OpenEMR's Bootstrap 4.6.2
+ * components. This file alone should carry most of the app, leaving only
+ * genuinely structural work to the shell and page layers.
+ *
+ * Our stylesheet is injected after the theme, so equal-specificity rules win;
+ * the html[data-zhr-skin] prefix adds specificity on top. No !important is
+ * used here — if one becomes unavoidable, log it per the guardrails.
+ *
+ * Design variables live in vars.css, which must load first.
+ */
+
+/* ── Typography ───────────────────────────────────────────────────────── */
+/*
+ * PostCalendar is excluded from the metric changes throughout this file.
+ * It positions every event with server-computed absolute pixel offsets
+ * (style='top:...;height:...') derived from a fixed timeslot height, so any
+ * change to font size or table cell padding shrinks the grid rows while those
+ * offsets stay put — provider headers and event blocks then slide out of
+ * register. Its body carries .calsearch_body, which is the opt-out hook.
+ * Colour and control styling still apply there; only metrics are left alone
+ * until Phase 5 gives the calendar real page CSS.
+ */
+html[data-zhr-skin="epic"] body:not(.calsearch_body) {
+    font-family: var(--zhr-font);
+    font-size: var(--zhr-font-size);
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] h1,
+html[data-zhr-skin="epic"] h2,
+html[data-zhr-skin="epic"] h3,
+html[data-zhr-skin="epic"] h4,
+html[data-zhr-skin="epic"] h5,
+html[data-zhr-skin="epic"] h6,
+html[data-zhr-skin="epic"] .title {
+    font-family: var(--zhr-font);
+    font-weight: 600;
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] h1 { font-size: 20px; }
+html[data-zhr-skin="epic"] h2 { font-size: 18px; }
+html[data-zhr-skin="epic"] h3 { font-size: 16px; }
+html[data-zhr-skin="epic"] h4 { font-size: 15px; }
+html[data-zhr-skin="epic"] h5,
+html[data-zhr-skin="epic"] h6 { font-size: 13px; }
+
+html[data-zhr-skin="epic"] a {
+    color: var(--zhr-link);
+}
+
+html[data-zhr-skin="epic"] a:hover {
+    color: #0F3A72;
+}
+
+html[data-zhr-skin="epic"] .text-muted {
+    color: var(--zhr-text-muted);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .btn {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--zhr-radius);
+    font-size: var(--zhr-font-size);
+    font-weight: 600;
+    line-height: 28px;
+}
+
+html[data-zhr-skin="epic"] .btn-sm {
+    height: 26px;
+    line-height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+html[data-zhr-skin="epic"] .btn-primary {
+    background-color: var(--zhr-primary);
+    border-color: var(--zhr-primary);
+    color: #FFFFFF;
+}
+
+html[data-zhr-skin="epic"] .btn-primary:hover,
+html[data-zhr-skin="epic"] .btn-primary:focus {
+    background-color: #184B85;
+    border-color: #184B85;
+}
+
+html[data-zhr-skin="epic"] .btn-secondary {
+    background-color: #FFFFFF;
+    border-color: var(--zhr-border-strong);
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .btn-secondary:hover,
+html[data-zhr-skin="epic"] .btn-secondary:focus {
+    background-color: var(--zhr-panel);
+    border-color: var(--zhr-border-strong);
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .btn-outline-primary {
+    background-color: #FFFFFF;
+    border-color: var(--zhr-primary);
+    color: var(--zhr-primary);
+}
+
+html[data-zhr-skin="epic"] .btn-outline-primary:hover {
+    background-color: var(--zhr-primary);
+    color: #FFFFFF;
+}
+
+/*
+ * Square icon buttons must opt out of the .btn sizing above.
+ *
+ * The generic rule sets height and horizontal padding, and
+ * "html[data-zhr-skin] .btn" (0,2,0) outranks a plain class like
+ * ".zoomly-epic-cti-toggle" (0,1,0) — which stretched Zoomly's 2rem nav icons
+ * into oblong buttons. Restoring them here rather than weakening the generic
+ * rule keeps ordinary buttons on-spec.
+ */
+html[data-zhr-skin="epic"] .btn.zoomly-epic-cti-toggle,
+html[data-zhr-skin="epic"] .btn.zoomly-nav-icon {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    line-height: 1;
+    font-size: 14px;
+}
+
+/* Keyboard focus must stay visible — accessibility floor in the spec. */
+html[data-zhr-skin="epic"] .btn:focus,
+html[data-zhr-skin="epic"] .form-control:focus,
+html[data-zhr-skin="epic"] a:focus {
+    outline: 2px solid var(--zhr-primary);
+    outline-offset: 1px;
+    box-shadow: none;
+}
+
+/* ── Forms ────────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .form-control {
+    height: 28px;
+    padding: 2px 8px;
+    border: 1px solid var(--zhr-border-strong);
+    border-radius: var(--zhr-radius);
+    font-size: var(--zhr-font-size);
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .form-control-sm {
+    height: 26px;
+    font-size: 12px;
+}
+
+/*
+ * Multi-row controls must keep their own height. The flat 28px above
+ * collapsed the calendar's <select multiple> provider list to a single row,
+ * and would do the same to any <select size="N"> or textarea.
+ */
+html[data-zhr-skin="epic"] textarea.form-control {
+    height: auto;
+    padding: 6px 8px;
+}
+
+html[data-zhr-skin="epic"] select.form-control[multiple],
+html[data-zhr-skin="epic"] select.form-control[size] {
+    height: auto;
+}
+
+html[data-zhr-skin="epic"] .col-form-label,
+html[data-zhr-skin="epic"] label {
+    font-size: var(--zhr-font-size);
+    color: var(--zhr-text);
+}
+
+/*
+ * !important is required here and is logged in the patch log.
+ * public/themes/style_light.css carries
+ *   legend { background-color:#d1d5db!important; color:#111827!important }
+ * which paints a full-width grey bar behind every section heading. Nothing
+ * short of !important can override an !important declaration.
+ */
+html[data-zhr-skin="epic"] legend {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--zhr-text-muted) !important;
+    background-color: transparent !important;
+    padding: 0;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .table {
+    font-size: var(--zhr-font-size);
+    color: var(--zhr-text);
+    border-color: var(--zhr-border);
+}
+
+/* Cell padding is a metric change, so the calendar opts out — see Typography. */
+html[data-zhr-skin="epic"] body:not(.calsearch_body) .table th,
+html[data-zhr-skin="epic"] body:not(.calsearch_body) .table td {
+    padding: 4px 8px;
+    vertical-align: middle;
+    border-color: var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .table thead th,
+html[data-zhr-skin="epic"] .table .thead-light th,
+html[data-zhr-skin="epic"] .thead-light th {
+    background-color: var(--zhr-grid-head);
+    border-color: var(--zhr-border);
+    color: var(--zhr-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/*
+ * Not every OpenEMR header row uses <th>. The Flow Board and 15 other pages
+ * build header cells as <td class="dehead">, so a th-only rule silently misses
+ * them. Contextual thead classes (.table-primary and friends) are neutralised
+ * for the same reason: their colour shows through transparent header cells.
+ */
+html[data-zhr-skin="epic"] .table thead td,
+html[data-zhr-skin="epic"] .dehead {
+    background-color: var(--zhr-grid-head);
+    border-color: var(--zhr-border);
+    color: var(--zhr-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+html[data-zhr-skin="epic"] .table thead.table-primary,
+html[data-zhr-skin="epic"] .table thead.table-secondary,
+html[data-zhr-skin="epic"] .table thead.table-info {
+    background-color: var(--zhr-grid-head);
+}
+
+html[data-zhr-skin="epic"] .table-striped tbody tr:nth-of-type(odd),
+html[data-zhr-skin="epic"] .table tbody tr:nth-of-type(odd) {
+    background-color: var(--zhr-row-alt);
+}
+
+html[data-zhr-skin="epic"] .table tbody tr:hover {
+    background-color: var(--zhr-row-selected);
+}
+
+html[data-zhr-skin="epic"] .table .table-active,
+html[data-zhr-skin="epic"] .table tr.selected {
+    background-color: var(--zhr-row-selected);
+}
+
+html[data-zhr-skin="epic"] .clickable-row {
+    cursor: pointer;
+}
+
+/* ── Cards and filter panels ──────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .card {
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .card-header {
+    background-color: var(--zhr-panel);
+    border-bottom: 1px solid var(--zhr-border);
+    font-weight: 600;
+    font-size: var(--zhr-font-size);
+}
+
+html[data-zhr-skin="epic"] .jumbotron,
+html[data-zhr-skin="epic"] .bg-light {
+    background-color: var(--zhr-panel);
+    border-radius: var(--zhr-radius);
+}
+
+/* ── Alerts ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .alert {
+    border-radius: var(--zhr-radius);
+    font-size: var(--zhr-font-size);
+    padding: 6px 12px;
+}
+
+/* ── Nav tabs ─────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .nav-tabs {
+    border-bottom: 1px solid var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .nav-tabs .nav-link {
+    border-radius: var(--zhr-radius) var(--zhr-radius) 0 0;
+    background-color: var(--zhr-tab-inactive);
+    border: 1px solid var(--zhr-border);
+    color: var(--zhr-text);
+    font-size: var(--zhr-font-size);
+    padding: 4px 12px;
+}
+
+/*
+ * Accent colour here is --zhr-primary, not --zhr-menu. The crimson top border
+ * in the spec belongs to the *workspace* tab strip (Phase 4); repeating it on
+ * every in-page Bootstrap tab group dilutes that signature and, in practice,
+ * reads as stray red lines rather than intentional emphasis.
+ */
+html[data-zhr-skin="epic"] .nav-tabs .nav-link.active {
+    background-color: #FFFFFF;
+    border-bottom-color: #FFFFFF;
+    border-top: 2px solid var(--zhr-primary);
+    font-weight: 600;
+}
+
+/* ── Modals ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .modal-content {
+    border-radius: var(--zhr-radius);
+    border: 1px solid var(--zhr-border-strong);
+}
+
+html[data-zhr-skin="epic"] .modal-header {
+    background-color: var(--zhr-panel);
+    border-bottom: 1px solid var(--zhr-border);
+    padding: 8px 12px;
+}
+
+html[data-zhr-skin="epic"] .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+html[data-zhr-skin="epic"] .modal-footer {
+    border-top: 1px solid var(--zhr-border);
+    padding: 8px 12px;
+}
+
+/* ── DataTables (Patient Finder) ──────────────────────────────────────── */
+html[data-zhr-skin="epic"] .dataTables_wrapper {
+    font-size: var(--zhr-font-size);
+}
+
+html[data-zhr-skin="epic"] .dataTables_filter input,
+html[data-zhr-skin="epic"] .dataTables_length select {
+    height: 28px;
+    border: 1px solid var(--zhr-border-strong);
+    border-radius: var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .dataTables_paginate .paginate_button {
+    border-radius: var(--zhr-radius);
+    font-size: 12px;
+}
+
+html[data-zhr-skin="epic"] table.dataTable thead th {
+    background-color: var(--zhr-grid-head);
+    font-size: 12px;
+    font-weight: 700;
+}

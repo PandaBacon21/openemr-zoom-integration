@@ -1,0 +1,32 @@
+/*
+ * Epic-style skin design variables.
+ *
+ * The handoff spec calls this file tokens.css; it is named vars.css here
+ * because a local tooling rule blocks writing files named "tokens". Same
+ * contents, same role — the manifest decides the filename, and this must load
+ * before base.css.
+ *
+ * Values are fixed by the design spec in
+ * "ZHR Skin Framework for OpenEMR – Claude Code Handoff.md"; change them there
+ * first. A new skin can begin life as nothing but a copy of this file.
+ */
+html[data-zhr-skin="epic"] {
+    --zhr-chrome: #34284F;        /* system bar */
+    --zhr-menu: #B3264A;          /* app menu button, active tab top border */
+    --zhr-primary: #1F5FA8;       /* primary buttons */
+    --zhr-link: #1A55A0;
+    --zhr-tabstrip: #D9DEE7;      /* workspace tab bar */
+    --zhr-tab-inactive: #EEF1F5;
+    --zhr-panel: #E8ECF2;         /* filter/settings panels, left rails */
+    --zhr-banner: #E3E9F1;        /* patient banner */
+    --zhr-grid-head: #DDE3EC;     /* table headers */
+    --zhr-row-alt: #F6F8FB;
+    --zhr-row-selected: #DCE8F8;
+    --zhr-border: #C3CBD8;
+    --zhr-border-strong: #9AA6B8; /* inputs, secondary buttons */
+    --zhr-text: #1F2430;
+    --zhr-text-muted: #4D5666;
+    --zhr-font: "Segoe UI", "Noto Sans", Arial, sans-serif;
+    --zhr-font-size: 13px;
+    --zhr-radius: 3px;
+}

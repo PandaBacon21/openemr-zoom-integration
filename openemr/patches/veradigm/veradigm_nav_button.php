@@ -38,7 +38,7 @@ if (!empty($_SESSION['zoomly_is_provider']) && $veradigmPrefValue !== '0'):
         ?>
         <a href="<?php echo attr($veradigmLaunchUrl); ?>"
            target="_blank" rel="noopener noreferrer"
-           class="btn btn-secondary"
+           class="btn btn-secondary zoomly-nav-icon"
            style="width:2rem;height:2rem;padding:0;margin-left:0.5rem;display:inline-flex;align-items:center;justify-content:center;font-weight:700;line-height:1;"
            title="<?php echo xla('Veradigm Appointments'); ?>"
            aria-label="<?php echo xla('Veradigm Appointments'); ?>">

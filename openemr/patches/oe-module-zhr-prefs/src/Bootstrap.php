@@ -28,11 +28,12 @@ class Bootstrap
 
     public function setup(): void
     {
-        $registry = new SkinRegistry($this->moduleRoot . '/public/skins');
+        $skinsDir = $this->moduleRoot . '/public/skins';
+        $registry = new SkinRegistry($skinsDir);
         $catalog = new PreferenceCatalog($registry);
         $preferences = new PreferenceService($catalog);
         $resolver = new SkinResolver($registry, $preferences);
-        $injector = new SkinAssetInjector($resolver, $this->getAssetPath());
+        $injector = new SkinAssetInjector($resolver, $this->getAssetPath(), $skinsDir);
 
         $this->eventDispatcher->addListener(
             StyleFilterEvent::EVENT_NAME,

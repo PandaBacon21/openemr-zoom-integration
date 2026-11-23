@@ -136,6 +136,36 @@ def test_skin_css_is_scoped_under_the_skin_attribute():
                 )
 
 
+def test_skin_css_variables_are_all_defined():
+    """A typo'd var() name resolves to nothing and fails silently in the
+    browser, so cross-check every reference against its definitions."""
+    import re
+
+    for skin_dir in _skin_dirs():
+        css_files = sorted(skin_dir.rglob("*.css"))
+        if not css_files:
+            continue
+
+        combined = "\n".join(p.read_text(encoding="utf-8") for p in css_files)
+        defined = set(re.findall(r"(--zhr-[a-z-]+)\s*:", combined))
+        used = set(re.findall(r"var\((--zhr-[a-z-]+)\)", combined))
+
+        undefined = used - defined
+        assert not undefined, (
+            f"{skin_dir.name}: CSS variables used but never defined: {sorted(undefined)}"
+        )
+
+
+def test_assets_are_cache_busted_per_file():
+    """OpenEMR stamps module assets with v_js_includes, which only changes on
+    an OpenEMR upgrade — so editing a skin file produced an identical URL and
+    browsers served the stale copy. Stamp with the file's own mtime instead."""
+    text = (_module_root() / "src" / "SkinAssetInjector.php").read_text(encoding="utf-8")
+
+    assert "filemtime" in text
+    assert "'?m='" in text
+
+
 def _settings_page() -> str:
     path = _module_root() / "public" / "settings.php"
     assert path.is_file(), f"Missing settings page: {path}"
