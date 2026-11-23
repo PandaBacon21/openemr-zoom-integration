@@ -4,6 +4,7 @@ namespace Zoomly\ZhrPrefs;
 
 use OpenEMR\Events\Core\ScriptFilterEvent;
 use OpenEMR\Events\Core\StyleFilterEvent;
+use OpenEMR\Menu\MenuEvent;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -28,7 +29,9 @@ class Bootstrap
     public function setup(): void
     {
         $registry = new SkinRegistry($this->moduleRoot . '/public/skins');
-        $resolver = new SkinResolver($registry);
+        $catalog = new PreferenceCatalog($registry);
+        $preferences = new PreferenceService($catalog);
+        $resolver = new SkinResolver($registry, $preferences);
         $injector = new SkinAssetInjector($resolver, $this->getAssetPath());
 
         $this->eventDispatcher->addListener(
@@ -39,6 +42,20 @@ class Bootstrap
             ScriptFilterEvent::EVENT_NAME,
             [$injector, 'onScriptFilter']
         );
+
+        $menuListener = new MenuListener($this->getSettingsUrl());
+        $this->eventDispatcher->addListener(
+            MenuEvent::MENU_UPDATE,
+            [$menuListener, 'onMenuUpdate']
+        );
+    }
+
+    /** Browser-facing URL of the Demo Preferences page. */
+    private function getSettingsUrl(): string
+    {
+        return self::MODULE_INSTALLATION_PATH
+            . self::MODULE_DIRECTORY_NAME
+            . '/public/settings.php';
     }
 
     /**

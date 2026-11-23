@@ -12,7 +12,18 @@
  * appointment page in the new tab.
  */
 
-if (!empty($_SESSION['zoomly_is_provider'])):
+// zhr_show_veradigm is the per-user toggle on the Demo Preferences page
+// (Zoomly\ZhrPrefs\PreferenceCatalog::SHOW_VERADIGM). The literal key is used
+// rather than the class constant so this patch keeps working if the ZHR Prefs
+// module is ever disabled; a test asserts the two strings stay in sync.
+// An absent row means "show", so only an explicit '0' hides the icon.
+$veradigmPrefValue = \OpenEMR\Services\Globals\UserSettingsService::getUserSetting(
+    'zhr_show_veradigm',
+    (int)($_SESSION['authUserID'] ?? 0),
+    0
+);
+
+if (!empty($_SESSION['zoomly_is_provider']) && $veradigmPrefValue !== '0'):
     $veradigmBridgeBase = rtrim(getenv('ZOOMLY_BRIDGE_PUBLIC_URL') ?: '', '/');
     $veradigmUserId = isset($_SESSION['authUserID']) ? (string)$_SESSION['authUserID'] : '';
     $veradigmSecret = getenv('OPENEMR_FLASK_SECRET') ?: '';
