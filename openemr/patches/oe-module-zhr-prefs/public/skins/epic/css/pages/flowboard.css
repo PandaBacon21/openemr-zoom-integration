@@ -1,10 +1,19 @@
 /*
- * Epic-style appointment status pills.
+ * Epic-style Flow Board ("Schedule").
  *
- * Colours are fixed by the status table in the handoff spec. Keyed on the
- * normalised classes applied by js/status_labels.js rather than on
- * [data-apptstatus], so the calendar can reuse them in Phase 5b.
+ * Colours come from css/status.css via the --zhr-status-* custom properties;
+ * this file owns shape and layout only.
  *
+ * Row visuals key off [data-apptstatus], which is present in the server-
+ * rendered HTML, NOT off the .zhr-row class that js/flowboard.js adds. The
+ * Flow Board auto-refreshes and rewrites its rows, and anything depending on
+ * the class showed OpenEMR's inline red row fill until the observer caught
+ * up — a visible flash on every poll. Only genuinely interactive state
+ * (selection) uses a JS-applied class.
+ */
+
+/* ── Status pills ─────────────────────────────────────────────────────── */
+/*
  * Status is never conveyed by colour alone — the text label always remains,
  * per the spec's accessibility floor.
  */
@@ -19,6 +28,8 @@ html[data-zhr-skin="epic"] .btn.zhr-status {
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
+    background-color: var(--zhr-status-bg);
+    color: var(--zhr-status-fg);
 }
 
 html[data-zhr-skin="epic"] .btn.zhr-status::before {
@@ -30,37 +41,271 @@ html[data-zhr-skin="epic"] .btn.zhr-status::before {
     flex: 0 0 auto;
 }
 
-html[data-zhr-skin="epic"] .btn.zhr-status--scheduled {
-    background-color: #E6E9EF;
-    color: #3A4352;
-    --zhr-status-dot: #7A8496;
-}
-
-html[data-zhr-skin="epic"] .btn.zhr-status--arrived {
-    background-color: #DCE8F8;
-    color: #1A4A8A;
-    --zhr-status-dot: #2F6FC4;
-}
-
-html[data-zhr-skin="epic"] .btn.zhr-status--roomed {
-    background-color: #EADFF5;
-    color: #5A2D82;
-    --zhr-status-dot: #7E4BB0;
-}
-
-html[data-zhr-skin="epic"] .btn.zhr-status--checked-out {
-    background-color: #DCEFE4;
-    color: #1D5E3A;
-    --zhr-status-dot: #2E8A57;
-}
-
-html[data-zhr-skin="epic"] .btn.zhr-status--no-show {
-    background-color: #FBE3D6;
-    color: #8A3A12;
-    --zhr-status-dot: #C2410C;
-}
-
 /* Hover must not reintroduce the .btn-primary blue underneath. */
 html[data-zhr-skin="epic"] .btn.zhr-status:hover {
     filter: brightness(0.96);
+    background-color: var(--zhr-status-bg);
+    color: var(--zhr-status-fg);
+}
+
+/* ── Rows ─────────────────────────────────────────────────────────────── */
+/*
+ * !important is required and is logged in the patch log: patient_tracker.php
+ * emits the per-status colour as an inline background-color on the <tr>.
+ * A stylesheet !important does outrank a plain inline declaration, so this
+ * suppresses the full-row fill immediately on render.
+ */
+html[data-zhr-skin="epic"] tr[data-apptstatus] {
+    background-color: #FFFFFF !important;
+}
+
+html[data-zhr-skin="epic"] tr[data-apptstatus]:nth-of-type(even) {
+    background-color: var(--zhr-row-alt) !important;
+}
+
+/*
+ * The status colour survives as a left edge accent instead of flooding the
+ * row, which is what made patient names hard to read.
+ */
+html[data-zhr-skin="epic"] tr[data-apptstatus] > td:first-child {
+    border-left: 4px solid var(--zhr-status-dot);
+}
+
+html[data-zhr-skin="epic"] tr[data-apptstatus]:hover {
+    background-color: var(--zhr-row-alt) !important;
+    cursor: pointer;
+}
+
+/* Selection is real interactive state, so it stays a JS-applied class. */
+html[data-zhr-skin="epic"] tr.zhr-row--selected,
+html[data-zhr-skin="epic"] tr.zhr-row--selected:hover {
+    background-color: var(--zhr-row-selected) !important;
+}
+
+/* ── Zoom button: icon only ───────────────────────────────────────────── */
+/*
+ * Stock renders "<i class='fa fa-video'></i>Start Zoom" as a filled blue
+ * button. Under this skin it becomes a bare camera icon.
+ *
+ * The label is a raw text node with no element around it, so it cannot be
+ * selected directly. font-size: 0 on the button collapses it, and the icon
+ * gets its size back explicitly — which avoids removing nodes from a control
+ * that carries a click handler.
+ *
+ * !important is required and is logged in the patch log: patient_tracker.php
+ * sets style="background-color:#0B5CFF; border-color:#0B5CFF" inline on this
+ * button, and a plain declaration cannot outrank an inline one.
+ */
+html[data-zhr-skin="epic"] tr[data-apptstatus] .btn:has(.fa-video) {
+    background-color: transparent !important;
+    border: 0 !important;
+    padding: 0;
+    height: auto;
+    font-size: 0;
+    line-height: 1;
+}
+
+html[data-zhr-skin="epic"] tr[data-apptstatus] .btn:has(.fa-video):hover {
+    background-color: transparent !important;
+    filter: brightness(0.85);
+}
+
+html[data-zhr-skin="epic"] tr[data-apptstatus] .btn .fa-video {
+    font-size: 17px;
+    margin: 0;
+}
+
+/* ── Video icon colour ────────────────────────────────────────────────── */
+/*
+ * Neutral until the patient reaches the Zoom waiting room, then green. The
+ * Arrived status is set by the meeting.participant_jbh_waiting webhook,
+ * which fires on exactly that event. Driven by the attribute so it is
+ * correct on first paint after a refresh.
+ */
+html[data-zhr-skin="epic"] tr[data-apptstatus] .fa-video {
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] tr[data-apptstatus="@"] .fa-video,
+html[data-zhr-skin="epic"] tr[data-apptstatus="~"] .fa-video {
+    color: #2E8A57;
+}
+
+/* ── Heading ──────────────────────────────────────────────────────────── */
+/*
+ * Stock centres the page heading. The mockup left-aligns it with a context
+ * line beneath (provider, date, facility), built by js/flowboard.js.
+ */
+html[data-zhr-skin="epic"] .body_top h2.text-center {
+    text-align: left;
+    margin-bottom: 2px;
+}
+
+html[data-zhr-skin="epic"] .zhr-subtitle {
+    margin-bottom: 12px;
+    color: var(--zhr-text-muted);
+    font-size: 13px;
+}
+
+/* ── Filter panel ─────────────────────────────────────────────────────── */
+/*
+ * Field labels are created by js/flowboard.js — OpenEMR ships this form with
+ * none. 11px bold uppercase above the control, per the spec's filter-panel
+ * description.
+ */
+html[data-zhr-skin="epic"] .zhr-field-label {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--zhr-text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.4;
+}
+
+/*
+ * Flatten the filter form into one wrapping row.
+ *
+ * The markup is form#flb > div.row > THREE col-4 groups, each stacking its
+ * own fields vertically. Styling the inner cells achieves nothing because the
+ * stacking happens two levels up. display: contents removes the group boxes
+ * from layout so all eight fields become direct flex items of the single row,
+ * which is what makes the panel slim instead of three tall columns.
+ */
+html[data-zhr-skin="epic"] #flb > .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 12px;
+}
+
+html[data-zhr-skin="epic"] #flb > .row > div {
+    display: contents;
+}
+
+html[data-zhr-skin="epic"] #flb .col-sm,
+html[data-zhr-skin="epic"] #flb [class*="col-sm-"] {
+    flex: 0 0 auto;
+    width: 170px;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+}
+
+/* The submit cell sizes to its button rather than taking a field slot. */
+html[data-zhr-skin="epic"] #flb .col-sm-12:has(#filter_submit) {
+    width: auto;
+}
+
+/* Labels are left-aligned even though the groups carry .text-center. */
+html[data-zhr-skin="epic"] #flb .text-center {
+    text-align: left;
+}
+
+/* Apply is the only filled action in the panel. */
+html[data-zhr-skin="epic"] .zhr-apply {
+    background-color: var(--zhr-primary);
+    border-color: var(--zhr-primary);
+    color: #FFFFFF;
+    align-self: flex-end;
+}
+
+/* ── Page toolbar ─────────────────────────────────────────────────────── */
+/*
+ * Refresh, Print, Kiosk and Setting all ship as filled .btn-primary, leaving
+ * no primary action on the page. They are demoted so Apply stands alone.
+ */
+html[data-zhr-skin="epic"] .body_top .btn-primary:not(.zhr-apply):not(.zhr-status) {
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border-strong);
+    color: var(--zhr-text);
+}
+
+html[data-zhr-skin="epic"] .body_top .btn-primary:not(.zhr-apply):not(.zhr-status):hover {
+    background-color: var(--zhr-panel);
+    color: var(--zhr-text);
+}
+
+/* ── Summary counts ───────────────────────────────────────────────────── */
+/*
+ * Rendered as "Total patients: 3 | Arrived: 1 | None: 2" using .badge-light.
+ * Shaped into pills here.
+ *
+ * They are deliberately NOT colour-coded by status. patient_tracker.php emits
+ * only the human label via xl_list_label(); the status code is the array key
+ * and never reaches the DOM, so matching a pill to its colour family would
+ * mean reverse-mapping OpenEMR's label text — and its wording differs from
+ * ours ("None" vs "Scheduled"). Colour-coding needs the code emitted as a
+ * data attribute, which is a template change.
+ */
+html[data-zhr-skin="epic"] .body_top .badge-light {
+    background-color: var(--zhr-panel);
+    border: 1px solid var(--zhr-border);
+    border-radius: 11px;
+    padding: 3px 10px;
+    color: var(--zhr-text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+html[data-zhr-skin="epic"] .body_top .badge-light em {
+    font-style: normal;
+    color: var(--zhr-text-muted);
+    font-weight: 600;
+}
+
+/*
+ * OpenEMR's own inline "From:" / "To:" labels are redundant once
+ * js/flowboard.js adds a label above each field, and they consumed two field
+ * slots, forcing the panel onto a second row. (Their for="flow_from" points
+ * at an id that does not exist, so nothing is lost by hiding them.)
+ */
+html[data-zhr-skin="epic"] #flb label.col-form-label {
+    display: none;
+}
+
+/*
+ * Per-field widths sized to content so all eight fit on one row. The date
+ * inputs in particular were carrying a 170px slot for a 10-character value.
+ */
+html[data-zhr-skin="epic"] #flb .col-sm:has(#form_apptcat),
+html[data-zhr-skin="epic"] #flb .col-sm:has(#form_apptstatus),
+html[data-zhr-skin="epic"] #flb .col-sm:has(#form_facility),
+html[data-zhr-skin="epic"] #flb .col-sm:has(#form_provider) {
+    width: 150px;
+}
+
+html[data-zhr-skin="epic"] #flb .col-sm-9:has(#form_from_date),
+html[data-zhr-skin="epic"] #flb .col-sm-9:has(#form_to_date) {
+    width: 110px;
+}
+
+html[data-zhr-skin="epic"] #flb .col-sm-12:has(#form_patient_name) {
+    width: 150px;
+}
+
+html[data-zhr-skin="epic"] #flb .col-sm-12:has(#form_patient_id) {
+    width: 90px;
+}
+
+/* Dates read left-aligned like every other field rather than centred. */
+html[data-zhr-skin="epic"] #flb #form_from_date,
+html[data-zhr-skin="epic"] #flb #form_to_date {
+    text-align: left;
+}
+
+/*
+ * Apply sits last on the row and hard right.
+ *
+ * In DOM order the submit cell comes between the date fields and the patient
+ * fields. flex `order` moves it visually without touching the markup — the
+ * button keeps its form position and handler — and margin-left:auto pushes
+ * it to the far edge. Both rely on the groups being display: contents, which
+ * makes every field a direct flex child.
+ */
+html[data-zhr-skin="epic"] #flb .col-sm-12:has(#filter_submit) {
+    order: 99;
+    margin-left: auto;
 }

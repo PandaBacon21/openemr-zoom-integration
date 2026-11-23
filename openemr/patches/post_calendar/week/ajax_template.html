@@ -152,7 +152,7 @@ $chevron_icon_right = $_SESSION['language_direction'] == 'ltr' ? 'fa-chevron-cir
  //==================================
 
 [-/php-]
-<div id="wrapper">
+<div id="wrapper" data-calview="week">
 <!-- stuff form element here to avoid the margin padding it introduces into the page in some browsers -->
 <form name='theform' id='theform' action='index.php?module=PostCalendar&func=view&tplview=default&pc_category=&pc_topic=' method='post' onsubmit='return top.restoreSession()'>
 <div class="container-fluid sticky-top">
@@ -842,7 +842,7 @@ foreach ($providers as $provider) {
                 if ($event['catid']!="6" && $event['catid']!="4" )
                 {
                 // output the DIV
-                echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+                echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
 						"; background-color:".$color.
 						"; $divWidth".
 						"; $divLeft".
@@ -853,7 +853,7 @@ foreach ($providers as $provider) {
                 else
                 {
                 // output the DIV
-                echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " hiddenevent' style='top:".$evtTop."; height:".$evtHeight.
+                echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " hiddenevent' style='top:".$evtTop."; height:".$evtHeight.
 						"; background-color:".$color.
 						"; $divWidth".
 						"; $divLeft".
@@ -866,7 +866,7 @@ foreach ($providers as $provider) {
 				echo "</div>\n";
 			}
 			elseif($_SESSION['pc_facility'] == $row['id']){
-				echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+				echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
 						"; background-color:".$event["catcolor"].
 						"; $divWidth".
 						"; $divLeft".
@@ -878,7 +878,7 @@ foreach ($providers as $provider) {
 				echo "</div>\n";
 			}
 			else{
-				echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+				echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
 						"; background-color: var(--gray300)".
 						"; $divWidth".
 						"; $divLeft".

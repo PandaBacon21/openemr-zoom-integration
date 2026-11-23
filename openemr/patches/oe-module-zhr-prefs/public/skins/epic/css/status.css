@@ -1,0 +1,66 @@
+/*
+ * Appointment status colours — the single source of truth.
+ *
+ * Keyed two ways so every surface shares one definition: .zhr-status--* for
+ * elements tagged by js/flowboard.js (status pills), and
+ * [data-apptstatus="<code>"] for OpenEMR markup that carries the raw code
+ * (calendar event blocks). Consumers read the three custom properties rather
+ * than repeating hex values.
+ *
+ * All eighteen apptstat codes are grouped into the five families from the
+ * handoff spec; the code lists here must stay in step with the `key` values
+ * in js/statuses.js.
+ */
+
+/* Pre-visit: scheduled, reminder done, chart pulled, pending, confirmations */
+html[data-zhr-skin="epic"] .zhr-status--scheduled,
+html[data-zhr-skin="epic"] [data-apptstatus="-"],
+html[data-zhr-skin="epic"] [data-apptstatus="*"],
+html[data-zhr-skin="epic"] [data-apptstatus="+"],
+html[data-zhr-skin="epic"] [data-apptstatus="^"],
+html[data-zhr-skin="epic"] [data-apptstatus="AVM"],
+html[data-zhr-skin="epic"] [data-apptstatus="SMS"],
+html[data-zhr-skin="epic"] [data-apptstatus="EMAIL"],
+html[data-zhr-skin="epic"] [data-apptstatus="CALL"] {
+    --zhr-status-bg: #E6E9EF;
+    --zhr-status-fg: #3A4352;
+    --zhr-status-dot: #7A8496;
+}
+
+/* Arrived — including arrived late */
+html[data-zhr-skin="epic"] .zhr-status--arrived,
+html[data-zhr-skin="epic"] [data-apptstatus="@"],
+html[data-zhr-skin="epic"] [data-apptstatus="~"] {
+    --zhr-status-bg: #DCE8F8;
+    --zhr-status-fg: #1A4A8A;
+    --zhr-status-dot: #2F6FC4;
+}
+
+/* In exam room */
+html[data-zhr-skin="epic"] .zhr-status--roomed,
+html[data-zhr-skin="epic"] [data-apptstatus="<"] {
+    --zhr-status-bg: #EADFF5;
+    --zhr-status-fg: #5A2D82;
+    --zhr-status-dot: #7E4BB0;
+}
+
+/* Completed: checked out, coding done */
+html[data-zhr-skin="epic"] .zhr-status--checked-out,
+html[data-zhr-skin="epic"] [data-apptstatus=">"],
+html[data-zhr-skin="epic"] [data-apptstatus="$"] {
+    --zhr-status-bg: #DCEFE4;
+    --zhr-status-fg: #1D5E3A;
+    --zhr-status-dot: #2E8A57;
+}
+
+/* Did not happen, or needs attention */
+html[data-zhr-skin="epic"] .zhr-status--no-show,
+html[data-zhr-skin="epic"] [data-apptstatus="?"],
+html[data-zhr-skin="epic"] [data-apptstatus="x"],
+html[data-zhr-skin="epic"] [data-apptstatus="%"],
+html[data-zhr-skin="epic"] [data-apptstatus="!"],
+html[data-zhr-skin="epic"] [data-apptstatus="#"] {
+    --zhr-status-bg: #FBE3D6;
+    --zhr-status-fg: #8A3A12;
+    --zhr-status-dot: #C2410C;
+}

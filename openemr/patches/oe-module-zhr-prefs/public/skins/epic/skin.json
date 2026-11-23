@@ -2,9 +2,22 @@
   "id": "epic",
   "name": "Epic-style",
   "description": "Dark system bar, workspace tabs, left patient banner.",
-  "version": "0.4.0",
-  "css": ["css/vars.css", "css/base.css", "css/shell.css", "css/pages/flowboard.css"],
-  "js": ["js/shell.js", "js/status_labels.js", "js/terminology.js"],
+  "version": "0.7.0",
+  "css": [
+    "css/vars.css",
+    "css/base.css",
+    "css/shell.css",
+    "css/status.css",
+    "css/pages/flowboard.css",
+    "css/pages/calendar.css"
+  ],
+  "js": [
+    "js/shell.js",
+    "js/statuses.js",
+    "js/flowboard.js",
+    "js/calendar_blocks.js",
+    "js/terminology.js"
+  ],
   "preview": null,
   "templates": {}
 }

@@ -1,0 +1,294 @@
+/*
+ * Epic-style calendar event blocks (day / week / month).
+ *
+ * The appointment category colour moves off the block background and onto the
+ * visit-type chip, which is what makes patient names readable again — dark
+ * categories previously rendered dark text on a dark fill.
+ *
+ * No metric is changed here. Bootstrap sets box-sizing: border-box globally,
+ * so borders are drawn inside the block's inline height and the
+ * server-computed top/height offsets stay valid. That pixel maths is what
+ * broke this view in Phase 3.
+ *
+ * Styling keys off .zhr-event, applied by js/calendar_blocks.js, so a block
+ * the script could not process keeps OpenEMR's original appearance instead of
+ * being left half-converted. Colours come from css/status.css.
+ */
+html[data-zhr-skin="epic"] .calsearch_body .event.zhr-event {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /*
+     * !important is required and is logged in the patch log: the template
+     * emits the category colour as an inline background-color. The script
+     * removes it where it can, but this guarantees the neutral fill even if a
+     * block is re-rendered by the calendar's own AJAX.
+     */
+    background-color: var(--zhr-row-alt) !important;
+    border: 1px solid var(--zhr-border);
+    border-left: 4px solid var(--zhr-status-dot, #7A8496);
+    border-radius: var(--zhr-radius);
+    padding: 0 8px;
+    overflow: hidden;
+}
+
+/* Checked-out appointments get a tinted row, as in the mockup. */
+html[data-zhr-skin="epic"] .calsearch_body .event.zhr-event[data-apptstatus=">"] {
+    background-color: #F3FAF6 !important;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .event.zhr-event .appointment {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .event.zhr-event a {
+    color: var(--zhr-link);
+    font-weight: 600;
+}
+
+/* ── Meta line: PID · visit type · duration ───────────────────────────── */
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--zhr-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-pid::after,
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-type::after {
+    content: "\00b7";
+    margin-left: 6px;
+    color: var(--zhr-border-strong);
+}
+
+/*
+ * The one place the category colour still appears. Its text colour is set
+ * inline by the script from the colour's luminance, so a dark category gets
+ * light text rather than reproducing the original contrast problem.
+ */
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-type {
+    padding: 1px 6px;
+    border-radius: var(--zhr-radius);
+    font-weight: 600;
+}
+
+/* ── Status pill, pushed to the right edge ────────────────────────────── */
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    padding: 0 8px;
+    height: 18px;
+    border-radius: 9px;
+    background-color: var(--zhr-status-bg);
+    color: var(--zhr-status-fg);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .zhr-event-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--zhr-status-dot);
+    flex: 0 0 auto;
+}
+
+/* ── Page chrome: rail vs grid ────────────────────────────────────────── */
+/*
+ * Stock renders the filter rail and the grid on the same white, so the two
+ * halves of the page run together. Tinting the rail and keeping the grid
+ * white gives the separation the mockup shows.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft.sidebar-wrapper {
+    background-color: var(--zhr-panel);
+    border-right: 1px solid var(--zhr-border);
+    /* Without this the rail is only as tall as its content, so the tint
+     * stopped below the provider list and the rest of the column stayed
+     * white. */
+    min-height: 100vh;
+}
+
+/*
+ * base.css stripes table rows, which inside the rail paints near-white over
+ * the tint — that is why the mini-calendar area looked white while the
+ * provider block looked grey.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft .table,
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft .table tbody tr:nth-of-type(odd) {
+    background-color: transparent;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .page-content-wrapper {
+    background-color: #FFFFFF;
+}
+
+/* ── Toolbar hierarchy ────────────────────────────────────────────────── */
+/*
+ * Every calendar toolbar control ships as .btn-primary, so nothing reads as
+ * the primary action. Secondary controls are demoted here; New Appointment
+ * stays primary, and the active view is filled using the data-calview
+ * attribute added to #wrapper in each template.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #printview,
+html[data-zhr-skin="epic"] .calsearch_body [name="bnsubmit"],
+html[data-zhr-skin="epic"] .calsearch_body #dayview,
+html[data-zhr-skin="epic"] .calsearch_body #weekview,
+html[data-zhr-skin="epic"] .calsearch_body #monthview {
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border-strong);
+    color: var(--zhr-text);
+}
+
+/* Icon-only Refresh and Search alongside them. */
+html[data-zhr-skin="epic"] .calsearch_body .btn:has(.fa-sync),
+html[data-zhr-skin="epic"] .calsearch_body .btn:has(.fa-search) {
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border-strong);
+    color: var(--zhr-text);
+}
+
+/* The one primary action on the page. */
+html[data-zhr-skin="epic"] .calsearch_body .btn:has(.fa-plus) {
+    background-color: var(--zhr-primary);
+    border-color: var(--zhr-primary);
+    color: #FFFFFF;
+}
+
+/*
+ * Segmented view switcher.
+ *
+ * The three anchors ship with literal whitespace between them, so negative
+ * margins alone still left gaps. js/calendar_blocks.js wraps them in
+ * .zhr-viewswitch; flex removes the whitespace and lets the borders meet.
+ */
+html[data-zhr-skin="epic"] .calsearch_body .zhr-viewswitch {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .zhr-viewswitch .btn + .btn {
+    margin-left: -1px;
+}
+html[data-zhr-skin="epic"] .calsearch_body #dayview {
+    border-radius: var(--zhr-radius) 0 0 var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .calsearch_body #weekview {
+    border-radius: 0;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body #monthview {
+    border-radius: 0 var(--zhr-radius) var(--zhr-radius) 0;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body [data-calview="day"] #dayview,
+html[data-zhr-skin="epic"] .calsearch_body [data-calview="week"] #weekview,
+html[data-zhr-skin="epic"] .calsearch_body [data-calview="month"] #monthview {
+    background-color: var(--zhr-chrome);
+    border-color: var(--zhr-chrome);
+    color: #FFFFFF;
+}
+
+/* ── Palette consistency ──────────────────────────────────────────────── */
+/*
+ * Several calendar chrome elements ship in Bootstrap's default #007bff,
+ * which clashes with the skin. They are remapped to the skin palette: the
+ * provider header is a banner like the system bar, so it takes --zhr-chrome;
+ * interactive accents take --zhr-primary.
+ */
+html[data-zhr-skin="epic"] .calsearch_body .providerheader {
+    background-color: var(--zhr-chrome);
+    border-bottom: 1px solid var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .calsearch_body .chevron_color {
+    color: var(--zhr-primary);
+}
+
+/* ── Left rail layout ─────────────────────────────────────────────────── */
+/*
+ * The rail needs breathing room so the tint reads as a panel around the
+ * mini-calendar rather than stopping at its edges.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft.sidebar-wrapper {
+    padding: 12px 12px 0;
+}
+
+/*
+ * The mini-calendar and provider picker are white cards sitting on the tinted
+ * rail, as in the mockup — not transparent panels. Making the tables
+ * transparent (below) without this left the whole rail flat grey.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft #datePicker,
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft #providerPicker {
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+    padding: 8px;
+    margin: 0 auto 12px;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft #datePicker {
+    max-width: 260px;
+}
+
+/*
+ * Table cells carry their own background in places, which painted white over
+ * the rail tint around the mini-calendar.
+ */
+/*
+ * Only the row striping is cancelled. An earlier blanket rule set every th
+ * and td transparent, which also removed the mini-calendar's today-highlight
+ * background and left its white text invisible on the white card.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #bottomLeft .table tbody tr:nth-of-type(odd) > td:not(.currentDate):not([class*="tdDatePickerHighlight"]) {
+    background-color: transparent;
+}
+
+/*
+ * Mini-calendar cell states, remapped from Bootstrap blues to the skin
+ * palette. All must be excluded from the striping reset above, which scores
+ * (1,4,4) against their (1,1,0) and would otherwise strip their background
+ * and leave white text invisible on the white card.
+ *
+ * .currentDate is the today marker. tdDatePickerHighlightCurrent is NOT a
+ * today marker despite the name — the day template toggles it on mouseover
+ * and off on mouseout, so it is purely the hover state.
+ */
+html[data-zhr-skin="epic"] .calsearch_body #datePicker .currentDate {
+    background-color: var(--zhr-primary);
+    color: #FFFFFF;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body #datePicker .tdDatePickerHighlightCurrent {
+    background-color: var(--zhr-primary);
+    color: #FFFFFF;
+}
+
+html[data-zhr-skin="epic"] .calsearch_body #datePicker .tdDatePickerHighlight {
+    background-color: var(--zhr-row-selected);
+    color: var(--zhr-text);
+}
+
+/* ── New Appointment ──────────────────────────────────────────────────── */
+/*
+ * Stock renders this as a bare "+" icon. js/calendar_blocks.js appends the
+ * label so the primary action is legible; stock keeps the bare icon.
+ */
+html[data-zhr-skin="epic"] .calsearch_body .btn .zhr-btn-label {
+    margin-left: 6px;
+    font-weight: 600;
+}

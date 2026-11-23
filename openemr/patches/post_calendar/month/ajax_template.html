@@ -145,7 +145,7 @@ $chevron_icon_left = $_SESSION['language_direction'] == 'ltr' ? 'fa-chevron-circ
 $chevron_icon_right = $_SESSION['language_direction'] == 'ltr' ? 'fa-chevron-circle-right' : 'fa-chevron-circle-left';
 
 [-/php-]
-<div id="wrapper">
+<div id="wrapper" data-calview="month">
 <!-- stuff form element here to avoid the margin padding it introduces into the page in some browsers -->
 <form name='theform' id='theform' action='index.php?module=PostCalendar&func=view&tplview=default&pc_category=&pc_topic=' method='post' onsubmit='return top.restoreSession()'>
 <div class="container-fluid sticky-top">
@@ -621,12 +621,12 @@ foreach ($providers as $provider) {
                      $divTitle .= "\n(" . xl('double click to edit') . ")";
                 }
             if($_SESSION['pc_facility'] == 0){
-                    echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " month_event' style='background-color:" . $color. "' title='" . attr($divTitle) . "'" . " id='" . attr($eventdate) . "-" . attr($eventid) . "-" . attr($pccattype) . "'" . ">";
+                    echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " month_event' style='background-color:" . $color. "' title='" . attr($divTitle) . "'" . " id='" . attr($eventdate) . "-" . attr($eventid) . "-" . attr($pccattype) . "'" . ">";
                     echo $content;
                     echo "</div>\n";
             }
             elseif($_SESSION['pc_facility'] == $row['id']){
-                    echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " month_event' style='background-color:".$event["catcolor"].
+                    echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " month_event' style='background-color:".$event["catcolor"].
                         "' title='" . attr($divTitle) . "'".
                         " id='" . attr($eventdate) . "-" . attr($eventid) . "-" . attr($pccattype) . "'".
                         ">";
@@ -634,7 +634,7 @@ foreach ($providers as $provider) {
                     echo "</div>\n";
             }
             else{
-                    echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " month_event' style='background-color: var(--gray300)' title='" . attr($divTitle) . "'" . " id='" . attr($eventdate) . "-" . attr($eventid) . "-" . attr($pccattype) . "'>";
+                    echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " month_event' style='background-color: var(--gray300)' title='" . attr($divTitle) . "'" . " id='" . attr($eventdate) . "-" . attr($eventid) . "-" . attr($pccattype) . "'>";
                     echo "<span class='text-center text-danger'>" . text($displayTime) . " " . text($row['name'])."</span>";
                     echo "</div>\n";
             }

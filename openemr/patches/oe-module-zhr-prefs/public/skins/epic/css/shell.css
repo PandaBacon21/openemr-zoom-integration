@@ -129,12 +129,30 @@ html[data-zhr-skin="epic"] #mainBox #tabs_div.body_title {
  */
 html[data-zhr-skin="epic"] #mainBox .tabSpan {
     background-color: var(--zhr-tab-inactive);
-    border: 1px solid var(--zhr-border);
+    border: 1px solid var(--zhr-border-strong);
     border-bottom: 0;
-    border-top-width: 0;
+    /*
+     * Inactive tabs keep a top border so they read as tabs rather than as
+     * bare labels, and it matches the active tab's 3px so both sit at the
+     * same height. The theme's ".tabsNoHover { border-top: 4px solid
+     * transparent }" is overridden here by specificity.
+     */
+    border-top: 3px solid var(--zhr-border-strong);
     border-radius: 4px 4px 0 0;
     padding: 4px 10px;
     margin-right: 2px;
+}
+
+/*
+ * !important is required and is logged in the patch log.
+ * tabs_style_full.css ships ".tabsNoHover { background: 0 0 !important }" —
+ * the background shorthand reset, which forces transparent. Inactive tabs
+ * carry that class, so they had no background at all and the strip showed
+ * through: the tabs and the strip were not merely similar greys, they were
+ * the same pixels.
+ */
+html[data-zhr-skin="epic"] #mainBox .tabSpan.tabsNoHover {
+    background-color: var(--zhr-tab-inactive) !important;
 }
 
 html[data-zhr-skin="epic"] #mainBox .tabSpan:not(.tabsNoHover) {

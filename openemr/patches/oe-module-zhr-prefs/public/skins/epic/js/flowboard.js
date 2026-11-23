@@ -1,0 +1,243 @@
+/*
+ * Epic-style Flow Board ("Schedule").
+ *
+ * Turns OpenEMR's status buttons into pills, replaces the full-row status
+ * fill with a left edge accent, greens the video icon when the patient is in
+ * the Zoom waiting room, and makes rows selectable.
+ *
+ * Columns are located by HEADER TEXT, never by index: the PID column is
+ * conditional on $GLOBALS['ptkr_show_pid'], so an index-based lookup silently
+ * targets the wrong column when that setting differs.
+ *
+ * Only runs under the Epic skin, so stock keeps OpenEMR's own appearance.
+ */
+(function () {
+    var STATUSES = window.ZHR_STATUSES || {};
+
+    /*
+     * Column hiding was removed deliberately. Hiding header cells by text and
+     * body cells by the matching index desynchronised the two in practice —
+     * the Encounter header disappeared while its data cell stayed, shifting
+     * every value one column left and making the Arrive Time lookup read the
+     * Telehealth cell instead ("Start Zoom" appeared as the status
+     * timestamp). Three hidden columns are not worth a whole table of
+     * mislabelled data; revisit only with a mechanism that cannot desync.
+     */
+    var STATUS_COLUMN = 'appt status';
+
+    /*
+     * Filter field labels. OpenEMR ships this form with no <label> elements
+     * at all, so they are created here. Keyed on the control ids, which are
+     * stable — unlike column positions, which is what broke the column work.
+     */
+    var FILTER_LABELS = {
+        form_apptcat: 'Visit Category',
+        form_apptstatus: 'Status',
+        form_facility: 'Facility',
+        form_provider: 'Provider',
+        form_from_date: 'From',
+        form_to_date: 'To',
+        form_patient_name: 'Patient Name',
+        form_patient_id: 'PID'
+    };
+
+    function headerCells(table) {
+        var head = table.querySelector('thead tr');
+        return head ? Array.prototype.slice.call(head.children) : [];
+    }
+
+    function columnIndex(table, label) {
+        var cells = headerCells(table);
+        for (var i = 0; i < cells.length; i++) {
+            if (cells[i].textContent.trim().toLowerCase() === label) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function decorateRow(row, table) {
+        if (row.classList.contains('zhr-row')) {
+            return;
+        }
+        row.classList.add('zhr-row');
+
+        var code = row.getAttribute('data-apptstatus');
+        var status = STATUSES[code];
+        var key = status ? status.key : 'scheduled';
+
+        /*
+         * No row-state class is applied and the inline background is left
+         * alone: css/pages/flowboard.css suppresses the full-row fill and
+         * draws the accent straight from [data-apptstatus], so the row is
+         * correct on first paint rather than after this script runs.
+         */
+
+        /*
+         * The status button must be found in the Appt Status column.
+         * querySelector('td .btn') returns the FIRST button in the row, which
+         * on telehealth rows is "Start Zoom" — so those rows had the Zoom
+         * button restyled as a pill while the status stayed a blue button.
+         */
+        var statusIndex = columnIndex(table, STATUS_COLUMN);
+        var statusCell = statusIndex >= 0 ? row.children[statusIndex] : null;
+        var button = statusCell ? statusCell.querySelector('.btn') : null;
+
+        if (button) {
+            button.classList.add('zhr-status', 'zhr-status--' + key);
+
+            // The same cell shows a room name instead of the status when a
+            // room is assigned, so only replace actual status titles — all of
+            // which begin with the status code.
+            if (status && button.textContent.trim().indexOf(code) === 0) {
+                button.textContent = status.label;
+            }
+
+            /*
+             * The Epic mockup shows the arrival/checkout time beneath the
+             * status pill. That was implemented by reading the Arrive Time or
+             * Check Out Time cell via its header index, and it consistently
+             * read one column early — picking up the Telehealth cell, so
+             * "Start Zoom" (or "—") appeared as the timestamp. The header and
+             * body cell sequences evidently do not align the way the template
+             * source suggests, and the Flow Board cannot be rendered outside a
+             * browser session to diagnose it. Dropped rather than guessed at
+             * again; reinstating it needs the time as a data attribute on the
+             * row, which is a template change.
+             */
+        }
+    }
+
+    /* ── Filter panel ────────────────────────────────────────────────── */
+    function labelFilters() {
+        Object.keys(FILTER_LABELS).forEach(function (id) {
+            var control = document.getElementById(id);
+            if (!control || control.parentNode.querySelector('.zhr-field-label')) {
+                return;
+            }
+
+            var label = document.createElement('label');
+            label.className = 'zhr-field-label';
+            label.setAttribute('for', id);
+            label.textContent = FILTER_LABELS[id];
+            control.parentNode.insertBefore(label, control);
+        });
+    }
+
+    function selectedText(id) {
+        var el = document.getElementById(id);
+        if (!el || !el.options) {
+            return '';
+        }
+        var option = el.options[el.selectedIndex];
+        return option ? option.textContent.trim() : '';
+    }
+
+    /*
+     * Subtitle beneath the heading: provider, date, facility. Everything is
+     * read from the filter controls, so no server round-trip is needed.
+     */
+    function buildSubtitle() {
+        var heading = document.querySelector('h2');
+        if (!heading || heading.parentNode.querySelector('.zhr-subtitle')) {
+            return;
+        }
+
+        var from = document.getElementById('form_from_date');
+        var parts = [selectedText('form_provider'), '', selectedText('form_facility')];
+
+        if (from && from.value) {
+            var parsed = new Date(from.value + 'T00:00:00');
+            if (!isNaN(parsed)) {
+                parts[1] = parsed.toLocaleDateString(undefined, {
+                    weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+                });
+            }
+        }
+
+        parts = parts.filter(function (part) { return part; });
+        if (!parts.length) {
+            return;
+        }
+
+        var subtitle = document.createElement('div');
+        subtitle.className = 'zhr-subtitle';
+        subtitle.textContent = parts.join(' \u00b7 ');
+        heading.parentNode.insertBefore(subtitle, heading.nextSibling);
+    }
+
+    /* The filter action is "Filter"; the mockup calls it Apply. */
+    function relabelApply() {
+        var apply = document.querySelector('button[type="submit"], input[type="submit"]');
+        if (apply && apply.textContent.trim() === 'Filter') {
+            apply.classList.add('zhr-apply');
+            apply.textContent = 'Apply';
+        }
+    }
+
+    function wireSelection(table) {
+        if (table.classList.contains('zhr-selectable')) {
+            return;
+        }
+        table.classList.add('zhr-selectable');
+
+        table.addEventListener('click', function (event) {
+            var row = event.target.closest('tr[data-apptstatus]');
+            if (!row) {
+                return;
+            }
+
+            Array.prototype.forEach.call(
+                table.querySelectorAll('tr.zhr-row--selected'),
+                function (other) { other.classList.remove('zhr-row--selected'); }
+            );
+            row.classList.add('zhr-row--selected');
+        });
+    }
+
+    function run() {
+        labelFilters();
+        buildSubtitle();
+        relabelApply();
+
+        var rows = document.querySelectorAll('tr[data-apptstatus]');
+        if (!rows.length) {
+            return;
+        }
+
+        var table = rows[0].closest('table');
+        if (!table) {
+            return;
+        }
+
+        Array.prototype.forEach.call(rows, function (row) { decorateRow(row, table); });
+        wireSelection(table);
+    }
+
+    /*
+     * The Flow Board rewrites its table when Filter is used and on its
+     * auto-refresh, so a single pass at DOMContentLoaded is not enough.
+     */
+    function observe() {
+        if (!window.MutationObserver || !document.body) {
+            return;
+        }
+
+        var pending = null;
+        new MutationObserver(function () {
+            window.clearTimeout(pending);
+            pending = window.setTimeout(run, 50);
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    function start() {
+        run();
+        observe();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+    } else {
+        start();
+    }
+})();

@@ -152,7 +152,7 @@ if ( $_SESSION['pc_facility'] ) {
 $chevron_icon_left = $_SESSION['language_direction'] == 'ltr' ? 'fa-chevron-circle-left' : 'fa-chevron-circle-right';
 $chevron_icon_right = $_SESSION['language_direction'] == 'ltr' ? 'fa-chevron-circle-right' : 'fa-chevron-circle-left';
 [-/php-]
-<div id="wrapper">
+<div id="wrapper" data-calview="day">
     <form name='theform' id='theform' action='index.php?module=PostCalendar&func=view&tplview=default&pc_category=&pc_topic=' method='post' onsubmit='return top.restoreSession()'>
       <div class="container-fluid sticky-top">
         <div id="topToolbarRight" class="bgcolor2">
@@ -821,7 +821,7 @@ foreach ($providers as $provider) {
           // the normal DIV so it doesn't overlap another event DIV and include the time
           if ($event['catid'] == 2) {
               $inTop = 20+($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-              echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event in_start' style='top:".$inTop.
+              echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event in_start' style='top:".$inTop.
                   "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                   "; $divWidth".
                   "; $divLeft".
@@ -839,7 +839,7 @@ foreach ($providers as $provider) {
 
             if ($event['catid'] != "6") {
               $background_string = "; background-color:" . attr($color);
-              echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+              echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
               $background_string.
               "; $divWidth".
               "; $divLeft".
@@ -848,7 +848,7 @@ foreach ($providers as $provider) {
               ">";
             } else {
               $background_string= "; background-color:" . attr($color);
-              echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " hiddenevent' style='top:".$evtTop."; height:".$evtHeight.
+              echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " hiddenevent' style='top:".$evtTop."; height:".$evtHeight.
               $background_string.
               "; $divWidth".
               "; $divLeft".
@@ -863,7 +863,7 @@ foreach ($providers as $provider) {
        elseif($_SESSION['pc_facility'] == $row['id']){
            if ($event['catid'] == 2) {
                $inTop = 20+($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-               echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event in_start' style='top:".$inTop.
+               echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event in_start' style='top:".$inTop.
                    "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                    "; $divWidth".
                    "; $divLeft".
@@ -879,7 +879,7 @@ foreach ($providers as $provider) {
            // output the DIV and content
            // For "OUT" events, applying the background color in CSS.
           $background_string= "; background-color:".$event["catcolor"];
-          echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+          echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
                $background_string.
                "; $divWidth".
                "; $divLeft".
@@ -894,7 +894,7 @@ foreach ($providers as $provider) {
 
            if ($event['catid'] == 2) {
                $inTop = 20+($eStartPos - $timeslotHeightVal).$timeslotHeightUnit;
-               echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) ." event in_start' style='top:".$inTop.
+               echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) ." event in_start' style='top:".$inTop.
                    "; height:".$timeslotHeightVal.$timeslotHeightUnit.
                    "; $divWidth".
                    "; $divLeft".
@@ -909,7 +909,7 @@ foreach ($providers as $provider) {
            }
 
            // output the DIV and content
-           echo "<div data-eid='" . attr($eventid) . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
+           echo "<div data-eid='" . attr($eventid) . "' data-apptstatus='" . attr($event['apptstatus'] ?? '') . "' data-pid='" . attr($patientid ?? '') . "' data-visittype='" . attr($catname ?? '') . "' data-duration='" . attr($event['duration'] ?? '') . "' data-cat-color='" . attr($color ?? '') . "' class='" . attr($evtClass) . " event' style='top:".$evtTop."; height:".$evtHeight.
                "; background-color: var(--gray300)".
                "; $divWidth".
                "; $divLeft".
