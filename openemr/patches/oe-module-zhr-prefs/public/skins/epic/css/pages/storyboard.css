@@ -1,0 +1,226 @@
+/*
+ * Epic-style patient storyboard rail.
+ *
+ * Injected into #mainFrames_div by js/storyboard.js, which already sits in
+ * the shell as d-flex flex-row — so the rail becomes the first flex item and
+ * the tab content flows to its right with no template change.
+ *
+ * Shell-only: the script guards on #mainFrames_div so this never renders
+ * inside a tab iframe.
+ */
+html[data-zhr-skin="epic"] .zhr-storyboard {
+    flex: 0 0 290px;
+    align-self: stretch;
+    /*
+     * Deliberately NOT a scroll container. overflow-y: auto would clip the
+     * Select Encounter dropdown, which is absolutely positioned inside the
+     * card — the menu would open and be cut off at the rail edge.
+     */
+    overflow: visible;
+    padding: 12px;
+    background-color: var(--zhr-banner);
+    border-right: 1px solid var(--zhr-border);
+    font-size: 12px;
+    color: var(--zhr-text);
+}
+
+/* No patient open: take no space at all. */
+html[data-zhr-skin="epic"] .zhr-storyboard:not(.zhr-storyboard--open) {
+    display: none;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .zhr-storyboard-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-avatar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background-color: var(--zhr-chrome);
+    color: #FFFFFF;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-identity {
+    min-width: 0;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-name {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-meta {
+    color: var(--zhr-text-muted);
+}
+
+/* ── Allergy box ──────────────────────────────────────────────────────── */
+/* Leads the rail and uses the spec's warm tone — the one block a clinician
+   must not miss. */
+html[data-zhr-skin="epic"] .zhr-storyboard-allergies {
+    padding: 8px;
+    margin-bottom: 10px;
+    background-color: #FBE3D6;
+    border: 1px solid #E8C4AE;
+    border-radius: var(--zhr-radius);
+    color: #8A3A12;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-allergies .zhr-storyboard-heading {
+    color: #8A3A12;
+}
+
+/* ── Blocks ───────────────────────────────────────────────────────────── */
+html[data-zhr-skin="epic"] .zhr-storyboard-block {
+    padding: 8px;
+    margin-bottom: 10px;
+    background-color: #FFFFFF;
+    border: 1px solid var(--zhr-border);
+    border-radius: var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-heading {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--zhr-primary);
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 8px;
+    margin: 0;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-dl dt {
+    color: var(--zhr-text-muted);
+    font-weight: 600;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-dl dd {
+    margin: 0;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-list {
+    margin: 0;
+    padding-left: 16px;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-none,
+html[data-zhr-skin="epic"] .zhr-storyboard-loading {
+    color: var(--zhr-text-muted);
+    font-style: italic;
+}
+
+/* ── Adopted patient card ─────────────────────────────────────────────── */
+/*
+ * js/storyboard.js moves #attendantData out of the shell's top row and into
+ * the rail, so the horizontal patient bar disappears entirely and its
+ * contents — picture, encounter selector, new-encounter actions — live in
+ * the sidebar instead. The element is moved, not rebuilt, so its Knockout
+ * bindings and handlers survive.
+ */
+html[data-zhr-skin="epic"] .zhr-storyboard-card {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--zhr-border);
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card #attendantData {
+    background-color: transparent;
+    padding: 0;
+}
+
+/*
+ * The card is built as a horizontal bar. Inside a 260px rail its rows need
+ * to stack and wrap rather than run off the edge.
+ */
+html[data-zhr-skin="epic"] .zhr-storyboard-card .d-lg-inline-flex,
+html[data-zhr-skin="epic"] .zhr-storyboard-card .float-left {
+    display: block;
+    float: none;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .form-group {
+    margin-bottom: 4px;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .patientPicture img {
+    max-width: 72px;
+    height: auto;
+    border-radius: var(--zhr-radius);
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .ptName {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--zhr-text);
+}
+
+/*
+ * The shell's own slot for the card is now empty; collapse it so no gap is
+ * left where the horizontal bar used to sit.
+ */
+html[data-zhr-skin="epic"] #mainBox > #attendantData {
+    display: none;
+}
+
+/*
+ * Encounter controls.
+ *
+ * The card lays these out as one horizontal .btn-group — history, Select
+ * Encounter, New Encounter — which runs off the side of a narrow rail. They
+ * wrap here instead, and the padding base.css adds to every .btn is trimmed
+ * so three controls fit on one line where possible.
+ */
+html[data-zhr-skin="epic"] .zhr-storyboard-card .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: 100%;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .btn-group .btn-group {
+    width: auto;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .btn-group > .btn,
+html[data-zhr-skin="epic"] .zhr-storyboard-card .dropdown-toggle {
+    flex: 0 1 auto;
+    padding: 0 8px;
+    border-radius: var(--zhr-radius);
+    white-space: nowrap;
+}
+
+/* The menu must escape the rail's width, not inherit it. */
+html[data-zhr-skin="epic"] .zhr-storyboard-card .dropdown-menu {
+    min-width: 240px;
+    z-index: 1050;
+}
+
+html[data-zhr-skin="epic"] .zhr-storyboard-card .patientCurrentEncounter {
+    margin-top: 6px;
+    color: var(--zhr-text-muted);
+}
+
+/* Label appended to the card's icon-only encounter actions. */
+html[data-zhr-skin="epic"] .zhr-storyboard-card .zhr-btn-label {
+    margin-left: 5px;
+    font-weight: 600;
+}

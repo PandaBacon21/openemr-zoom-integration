@@ -22,21 +22,41 @@
      */
     var selected = { pid: null, name: null };
 
-    /*
-     * Column hiding was removed deliberately. Hiding header cells by text and
-     * body cells by the matching index desynchronised the two in practice —
-     * the Encounter header disappeared while its data cell stayed, shifting
-     * every value one column left and making the Arrive Time lookup read the
-     * Telehealth cell instead ("Start Zoom" appeared as the status
-     * timestamp). Three hidden columns are not worth a whole table of
-     * mislabelled data; revisit only with a mechanism that cannot desync.
-     */
     var STATUS_COLUMN = 'appt status';
+
+    /*
+     * Header wording. "Current Status" holds minutes elapsed in the current
+     * status, which reads as a duplicate of Appt Status until it is named
+     * for what it is. Matched on exact header text — no index involved, so
+     * this cannot misalign the table the way hiding a column did.
+     */
+    var HEADER_LABELS = {
+        'Current Status': 'Time in Status',
+        'Current': 'Time in Status'
+    };
+
+    /*
+     * Summary-count wording, aligned with the status pills.
+     *
+     * The counts come from xl_list_label(), which emits OpenEMR's own
+     * phrasing — "None" for what the pills call "Scheduled", and so on. The
+     * status code never reaches the DOM (it is the array key server-side),
+     * so these are matched on exact label text, scoped to #status_summary.
+     * Only labels that differ from our wording are listed.
+     */
+    var SUMMARY_LABELS = {
+        'None': 'Scheduled',
+        'In exam room': 'Roomed',
+        'Checked out': 'Checked Out',
+        'No show': 'No Show',
+        'Arrived late': 'Arrived Late',
+        'Left w/o visit': 'Left w/o Visit'
+    };
 
     /*
      * Filter field labels. OpenEMR ships this form with no <label> elements
      * at all, so they are created here. Keyed on the control ids, which are
-     * stable — unlike column positions, which is what broke the column work.
+     * stable.
      */
     var FILTER_LABELS = {
         form_apptcat: 'Visit Category',
@@ -54,6 +74,18 @@
         return head ? Array.prototype.slice.call(head.children) : [];
     }
 
+    /*
+     * DOM index, matched on header text. This is what the status pill has
+     * always used and it works in practice.
+     *
+     * Do NOT reuse it to hide a column. Hiding needs the header and body
+     * sequences to correspond, and they do not: the header carries
+     * responsive duplicate cells (d-sm-none) the body lacks, and cells on
+     * both sides sit inside $GLOBALS conditionals, so the rendered shapes
+     * cannot be predicted. Two attempts at column hiding — one by DOM index,
+     * one in visible-column space — both put data under the wrong headings.
+     * Removing a column needs a template change, not a DOM lookup.
+     */
     function columnIndex(table, label) {
         var cells = headerCells(table);
         for (var i = 0; i < cells.length; i++) {
@@ -62,6 +94,15 @@
             }
         }
         return -1;
+    }
+
+    function relabelHeaders(table) {
+        headerCells(table).forEach(function (cell) {
+            var next = HEADER_LABELS[cell.textContent.trim()];
+            if (next) {
+                cell.textContent = next;
+            }
+        });
     }
 
     function decorateRow(row, table) {
@@ -183,6 +224,24 @@
         }
     }
 
+    function relabelSummary() {
+        var summary = document.getElementById('status_summary');
+        if (!summary) {
+            return;
+        }
+
+        Array.prototype.forEach.call(summary.querySelectorAll('em'), function (label) {
+            // Labels render as "None:" including the colon.
+            var text = label.textContent.trim();
+            var trailing = text.endsWith(':');
+            var key = trailing ? text.slice(0, -1) : text;
+
+            if (SUMMARY_LABELS[key]) {
+                label.textContent = SUMMARY_LABELS[key] + (trailing ? ':' : '');
+            }
+        });
+    }
+
     function wireSelection(table) {
         if (table.classList.contains('zhr-selectable')) {
             return;
@@ -244,6 +303,7 @@
 
     function run() {
         labelFilters();
+        relabelSummary();
         buildSubtitle();
         relabelApply();
 
@@ -257,6 +317,7 @@
             return;
         }
 
+        relabelHeaders(table);
         Array.prototype.forEach.call(rows, function (row) { decorateRow(row, table); });
         wireSelection(table);
         restoreSelection(table);

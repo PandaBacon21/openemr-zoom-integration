@@ -254,3 +254,32 @@ def test_dev_override_template_mounts_the_module_directory():
 
     assert f"./openemr/patches/{MODULE_DIR_NAME}:" in text
     assert f"custom_modules/{MODULE_DIR_NAME}" in text
+
+
+def test_skin_scripts_declare_every_constant_they_use():
+    """A ReferenceError at load kills the whole script and every feature in
+    it, and `node --check` cannot catch it because the syntax is valid. This
+    caught a real breakage where an edit deleted a const that was still used.
+    """
+    import re
+
+    known_globals = {"ZHR_STATUSES"}
+
+    for skin_dir in _skin_dirs():
+        for js_path in sorted((skin_dir / "js").glob("*.js")):
+            text = js_path.read_text(encoding="utf-8")
+            # Strip comments and string literals first: prose about a
+            # constant, a hex colour like '#FFFFFF' and a label like 'PID '
+            # all otherwise read as identifier use.
+            code = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+            code = re.sub(r"//[^\n]*", "", code)
+            code = re.sub(r"'(?:\\.|[^'\\])*'", "''", code)
+            code = re.sub(r'"(?:\\.|[^"\\])*"', '""', code)
+
+            declared = set(re.findall(r"var\s+([A-Z][A-Z0-9_]{2,})\b", code))
+            used = set(re.findall(r"\b([A-Z][A-Z0-9_]{2,})\b", code))
+
+            undefined = used - declared - known_globals
+            assert not undefined, (
+                f"{js_path.name}: uses undeclared constant(s) {sorted(undefined)}"
+            )

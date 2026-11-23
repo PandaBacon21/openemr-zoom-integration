@@ -163,7 +163,12 @@
      * so the stock skin keeps OpenEMR's own toolbar.
      */
     function labelNewAppointment() {
-        var icon = document.querySelector('.btn > .fa-plus');
+        /*
+         * Scoped to the calendar body. Unscoped, this matched the patient
+         * card's New Encounter button in the shell — which also uses
+         * fa-plus — and relabelled it "New Appointment".
+         */
+        var icon = document.querySelector('.calsearch_body .btn > .fa-plus');
         if (!icon || icon.parentNode.querySelector('.zhr-btn-label')) {
             return;
         }
